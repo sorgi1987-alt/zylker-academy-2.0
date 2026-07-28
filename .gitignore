@@ -1,0 +1,27 @@
+# Dependencies — restored by CI with `npm ci` / `npm install`
+node_modules/
+**/node_modules/
+
+# Build output — produced by CI, never committed.
+# catalyst.json points at client/dist as the client source, so this is built
+# during the workflow rather than checked in.
+client/dist/
+client/dist_*/
+**/*.timestamp-*.mjs
+
+# Catalyst local state and anything secret.
+# .catalyst/ holds machine-local project state; the deploy token lives in a
+# GitHub secret, never in the repository.
+.catalyst/
+.catalystcache/
+**/.output/
+.env
+*.env
+*.pem
+
+# Logs / OS / editors
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/

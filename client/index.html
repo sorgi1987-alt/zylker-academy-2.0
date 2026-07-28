@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zylker Academy — Education Management</title>
+    <!--
+      Catalyst Web SDK. Provides the embedded sign-in form and the browser-side
+      session check (catalyst.auth.*). Both scripts are required, in this order:
+      the CDN bundle defines the SDK, and /__catalyst/sdk/init.js is generated
+      per project and supplies the project configuration.
+
+      Neither script carries an OAuth client secret or an API token. The session
+      they establish is a cookie the browser holds; every Zoho API call still
+      happens server-side inside the Catalyst function.
+    -->
+    <script src="https://static.zohocdn.com/catalyst/sdk/js/4.6.2/catalystWebSDK.js"></script>
+    <script src="/__catalyst/sdk/init.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

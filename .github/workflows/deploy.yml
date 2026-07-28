@@ -1,0 +1,122 @@
+name: Deploy Zylker Academy to Catalyst
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+# Two jobs on purpose. `verify` runs on pull requests as well as pushes, so a
+# change is checked before it can be merged. `deploy` runs only on main and
+# only if verify passed — a failing test suite cannot reach the live CRM org.
+jobs:
+  verify:
+    name: Tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install function dependencies
+        run: cd functions/zylker_api && npm install
+
+      # 32 offline tests: permission matrix, stage transitions, idempotent
+      # enrolment, capacity, duplicate prevention, date validation, optimistic
+      # concurrency and payload allow-listing. No Catalyst session needed.
+      - name: Run backend tests
+        run: cd functions/zylker_api && npm test
+
+      - name: Build client
+        run: |
+          cd client
+          npm ci
+          npm run build
+
+      # A credential in the client bundle would be a serious defect, so it is
+      # checked mechanically rather than left to review. Fails the build.
+      - name: Assert no credentials in the client bundle
+        run: |
+          if grep -raiE 'client_secret|refresh_token|access_token|1000\.[a-f0-9]{32}|jwtSecret' client/dist/; then
+            echo "::error::Credential-shaped string found in the client bundle."
+            exit 1
+          fi
+          echo "Client bundle is clean."
+
+  deploy:
+    name: Deploy to Catalyst
+    runs-on: ubuntu-latest
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # Point this at a GitHub Environment if you want a manual approval gate
+    # before anything reaches the live org.
+    environment: development
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+
+      - name: Install Catalyst CLI
+        run: npm install -g zcatalyst-cli
+
+      # Catalyst rejects a client version it has already seen, so each run gets
+      # a unique one derived from the run number. This project's build script
+      # copies client/client-package.json into dist/, so that is the file to
+      # edit — not client/public/.
+      - name: Set unique client version
+        run: |
+          node -e "
+            const fs = require('fs');
+            const f = 'client/client-package.json';
+            const p = JSON.parse(fs.readFileSync(f, 'utf8'));
+            p.version = '1.' + process.env.GITHUB_RUN_NUMBER + '.0';
+            fs.writeFileSync(f, JSON.stringify(p, null, 2));
+            console.log('client version ->', p.version);
+          "
+
+      - name: Build client
+        run: |
+          cd client
+          npm ci
+          npm run build
+
+      - name: Install function dependencies
+        run: cd functions/zylker_api && npm install
+
+      - name: Deploy functions and client
+        env:
+          CATALYST_TOKEN: ${{ secrets.CATALYST_TOKEN }}
+        run: |
+          catalyst deploy \
+            --only functions,client \
+            --project 11922000000014048 \
+            --org 20117369913 \
+            --dc eu \
+            --token "$CATALYST_TOKEN"
+
+      # Deploying is not the same as working. This proves the deployed function
+      # is actually answering before the run is called a success.
+      - name: Smoke-test the deployment
+        run: |
+          URL="https://zylker-academy-20117369913.development.catalystserverless.eu/server/zylker_api"
+
+          echo "Health check:"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/health")
+          [ "$code" = "200" ] || { echo "::error::/api/health returned $code, expected 200"; exit 1; }
+          echo "  200 OK"
+
+          # An unauthenticated caller must be refused. If this ever returns 200
+          # the authentication layer has regressed and the deploy should fail.
+          echo "Authentication guard:"
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/students")
+          [ "$code" = "401" ] || { echo "::error::/api/students returned $code for an anonymous caller, expected 401"; exit 1; }
+          echo "  401 as expected"

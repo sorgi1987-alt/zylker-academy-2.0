@@ -1,0 +1,12 @@
+{
+  "project_name": "Zylker-Academy",
+  "project_id": 11922000000014048,
+  "functions": {
+    "source": "functions",
+    "targets": ["zylker_api"]
+  },
+  "client": {
+    "source": "client/dist",
+    "targets": ["zylker-academy-client"]
+  }
+}
