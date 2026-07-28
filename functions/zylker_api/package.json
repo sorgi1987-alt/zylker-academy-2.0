@@ -9,6 +9,6 @@
     "axios": "^1.7.2"
   },
   "scripts": {
-    "test": "node --test \"test/*.test.js\""
+    "test": "node --test test/*.test.js"
   }
 }

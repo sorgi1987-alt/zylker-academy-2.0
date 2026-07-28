@@ -29,8 +29,27 @@ jobs:
       # 32 offline tests: permission matrix, stage transitions, idempotent
       # enrolment, capacity, duplicate prevention, date validation, optimistic
       # concurrency and payload allow-listing. No Catalyst session needed.
+      #
+      # The npm script deliberately uses an UNQUOTED glob so the shell expands
+      # it. `node --test "test/*.test.js"` only works from Node 22, and this
+      # runner is on 20 — a quoted pattern is passed through literally and the
+      # run fails with "Could not find test/*.test.js" even though the files
+      # are present.
       - name: Run backend tests
         run: cd functions/zylker_api && npm test
+
+      # A glob that matches nothing exits 0 and looks like a pass, so the count
+      # is asserted rather than assumed. If the suite ever silently stops
+      # running, this fails instead of quietly waving a deploy through.
+      - name: Assert the test suite actually ran
+        run: |
+          cd functions/zylker_api
+          count=$(node --test test/*.test.js 2>&1 | grep -c '^ok ' || true)
+          echo "Tests executed: $count"
+          if [ "$count" -lt 25 ]; then
+            echo "::error::Only $count tests ran; expected at least 25. The suite may not be discovering its files."
+            exit 1
+          fi
 
       - name: Build client
         run: |
