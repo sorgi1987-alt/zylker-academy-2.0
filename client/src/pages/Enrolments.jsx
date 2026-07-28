@@ -66,7 +66,7 @@ export default function Enrolments() {
                       <th scope="col">Status</th>
                       <th scope="col">Enrolled</th>
                       <th scope="col">Progress</th>
-                      <th scope="col">Learn sync</th>
+                      <th scope="col">LMS sync</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -93,8 +93,9 @@ export default function Enrolments() {
               </div>
 
               <p className="note">
-                Progress and Learn sync status are maintained manually in CRM. This
-                application does not write to Zoho Learn.
+                Progress and sync status are the values the external LMS connector last
+                wrote onto each CRM enrolment. Open the Learning Hub to see the current
+                position held by the connector, which may be newer.
               </p>
 
               <Pagination

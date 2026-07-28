@@ -187,8 +187,9 @@ export default function Login() {
 
         <footer className="login-foot">
           <p className="muted">
-            Student, application and finance data is read live from Zoho CRM, Zoho Learn
-            and Zoho Books. Access is restricted to authorised staff.
+            Student, application and finance data is read live from Zoho CRM and Zoho
+            Books, and learning data from the Catalyst LMS connector. Access is
+            restricted to authorised staff.
           </p>
         </footer>
       </main>

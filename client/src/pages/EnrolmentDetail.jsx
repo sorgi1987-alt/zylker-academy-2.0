@@ -4,7 +4,8 @@ import { useApi, useAction } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
-  Async, Card, Pill, SourceBadge, ReadOnlyBadge, ConfirmDialog, Modal, useToast, fmtDate, fmtMoney
+  Async, Card, Pill, Progress, SourceBadge, ReadOnlyBadge, DemoDataBadge, ConfirmDialog,
+  Modal, useToast, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
 import ActivityLog from '../components/ActivityLog.jsx';
@@ -49,8 +50,9 @@ function EditDialog({ enrolment, onClose, onDone }) {
           Certificate issued
         </label>
         <p className="note">
-          Progress percentage and Zoho Learn identifiers are maintained in CRM and are
-          not editable here, because this application never writes to Zoho Learn.
+          Progress and the LMS identifiers are not editable here. They are written onto
+          this record by the external LMS connector, and a value typed in by hand would
+          be overwritten by the next synchronisation.
         </p>
         <FormError error={action.error ? friendlyError(action.error) : null} />
         <FormActions busy={action.busy} submitLabel="Save changes" onCancel={onClose} />
@@ -301,28 +303,81 @@ export default function EnrolmentDetail() {
             </div>
 
             <Card
-              title="Zoho Learn"
-              action={<div className="head-actions"><SourceBadge source="learn" /><ReadOnlyBadge system="Zoho Learn" /></div>}
+              title="External LMS"
+              action={(
+                <div className="head-actions">
+                  <SourceBadge source="lms" />
+                  <DemoDataBadge />
+                  <Link className="btn" to="/learning/enrolments">Learning Hub</Link>
+                </div>
+              )}
             >
               <dl className="dl">
-                <dt>Course</dt>
+                <dt>Mapped course</dt>
                 <dd>
-                  {d.learnCourse
-                    ? <a href={d.learnCourse.url} target="_blank" rel="noreferrer noopener">{d.learnCourse.name}</a>
+                  {d.lmsCourse
+                    ? <Link to={`/learning/courses/${d.lmsCourse.id}`}>
+                        {d.lmsCourse.name} <span className="muted">({d.lmsCourse.provider})</span>
+                      </Link>
                     : <span className="muted">
-                        {d.learn.status === 'connected' ? 'No course mapped' : `Unavailable (${d.learn.label})`}
+                        No LMS course is mapped to {d.programme ? 'this programme' : 'a programme for this enrolment'}
                       </span>}
-                  {d.learnMatch.inferred && <span className="pill warn">Inferred match</span>}
                 </dd>
-                <dt>Learn enrolment id</dt><dd className="mono">{e.lms.enrolmentId || '—'}</dd>
+              </dl>
+
+              {d.learning.length ? (
+                <div className="t-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">External enrolment</th>
+                        <th scope="col">Course</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Progress</th>
+                        <th scope="col">Certificate</th>
+                        <th scope="col">Sync</th>
+                        <th scope="col">Last sync</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {d.learning.map((l) => (
+                        <tr key={l.id}>
+                          <td><Link to={`/learning/enrolments/${l.id}`}>{l.externalEnrolmentId}</Link></td>
+                          <td>{l.course ? l.course.name : <span className="muted">—</span>}</td>
+                          <td><Pill value={l.lmsStatus} /></td>
+                          <td><Progress value={l.progressPercentage} /></td>
+                          <td><Pill value={l.certificateStatus} /></td>
+                          <td><Pill value={l.syncStatus} /></td>
+                          <td>{l.lastSyncTime ? fmtDate(l.lastSyncTime) : <span className="muted">Never</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">
+                  No external learning record is linked to this enrolment. Link one from the
+                  Learning Hub, where the record can also be mapped to the student first.
+                </p>
+              )}
+
+              <h3 style={{ fontSize: 14, margin: '18px 0 8px' }}>Values held on this CRM record</h3>
+              <dl className="dl">
+                <dt>LMS enrolment id</dt>
+                <dd className="mono">{e.lms.enrolmentId || <span className="muted">—</span>}</dd>
                 <dt>Progress</dt>
-                <dd className="mono">{e.lms.progressPercentage === null ? '—' : `${e.lms.progressPercentage}%`}</dd>
+                <dd className="mono">
+                  {e.lms.progressPercentage === null ? <span className="muted">—</span> : `${e.lms.progressPercentage}%`}
+                </dd>
                 <dt>Sync status</dt><dd><Pill value={e.lms.syncStatus} /></dd>
-                <dt>Last sync</dt><dd>{e.lms.lastSync ? fmtDate(e.lms.lastSync) : '—'}</dd>
+                <dt>Last sync</dt>
+                <dd>{e.lms.lastSync ? fmtDate(e.lms.lastSync) : <span className="muted">—</span>}</dd>
               </dl>
               <p className="note">
-                These values are maintained manually in CRM. This application does not create
-                learners, enrol them, or write progress back to Zoho Learn.
+                The CRM fields above are what the connector last wrote here. If they differ
+                from the table, this enrolment has not been synchronised since the LMS record
+                changed — the two are shown separately rather than merged so that the drift
+                is visible.
               </p>
             </Card>
 

@@ -65,7 +65,15 @@ const P = {
   ENROLMENT_READ: 'enrolment:read',
   ENROLMENT_WRITE: 'enrolment:write',
   ENROLMENT_DELETE: 'enrolment:delete',
-  COURSE_READ: 'course:read',
+  // COURSE_READ ('course:read') was the Zoho Learn catalogue and is gone with it.
+  // Learning data is now behind LMS_READ.
+  // External LMS Connector (Catalyst demonstration dataset)
+  LMS_READ: 'lms:read',
+  LMS_WRITE: 'lms:write',
+  LMS_MAP: 'lms:map',
+  LMS_SYNC: 'lms:sync',
+  LMS_BULK_SYNC: 'lms:bulk-sync',
+  LMS_CREATE_CRM_ENROLMENT: 'lms:create-crm-enrolment',
   INVOICE_READ: 'invoice:read',
   DASHBOARD_READ: 'dashboard:read',
   INTEGRATION_READ: 'integration:read',
@@ -76,7 +84,7 @@ const P = {
 
 /** Everything any authenticated user may read. Keeps the matrix below short. */
 const COMMON_READ = [
-  P.DASHBOARD_READ, P.INTEGRATION_READ, P.COURSE_READ, P.ACTIVITY_READ,
+  P.DASHBOARD_READ, P.INTEGRATION_READ, P.ACTIVITY_READ, P.LMS_READ,
   P.STUDENT_READ, P.APPLICATION_READ, P.PROGRAMME_READ, P.INTAKE_READ, P.ENROLMENT_READ
 ];
 
@@ -96,13 +104,19 @@ const MATRIX = {
     // Transitioning an application to Enrolled provisions an enrolment, so
     // admissions must be able to write one. It may not delete one.
     P.ENROLMENT_WRITE
+    // Admissions reads LMS data through COMMON_READ but does not manage the
+    // connector: creating, mapping and syncing LMS records is academic work.
   ],
 
   // Academic owns the delivery structure: programmes, intakes, enrolments.
   [ROLES.ACADEMIC]: [
     ...COMMON_READ,
     P.PROGRAMME_WRITE, P.INTAKE_WRITE,
-    P.ENROLMENT_WRITE
+    P.ENROLMENT_WRITE,
+    // Owns the External LMS Connector: create, edit, map and sync individual
+    // records. Bulk synchronisation and creating CRM Enrolments from LMS data
+    // stay with administrators, because both act on many records at once.
+    P.LMS_WRITE, P.LMS_MAP, P.LMS_SYNC
   ],
 
   // Finance reads students and invoices. Invoices are read-only for everyone in

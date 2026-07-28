@@ -4,7 +4,7 @@ import { useApi } from '../useApi.js';
 import { api } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
 import {
-  Async, Card, Kpi, BarList, Pill, ConnDot, SourceBadge, fmtDate, fmtMoney
+  Async, Card, Kpi, BarList, Pill, ConnDot, SourceBadge, DemoDataBadge, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 
 /**
@@ -28,7 +28,7 @@ export default function Dashboard() {
         <h1>Dashboard</h1>
         <p>
           Live figures for {user.name}. Each card names its source: Zoho CRM for
-          admissions, Zoho Learn for courses, Zoho Books for finance.
+          admissions, the external LMS connector for learning, Zoho Books for finance.
         </p>
       </div>
 
@@ -41,7 +41,22 @@ export default function Dashboard() {
               <Kpi label="Active programmes" {...d.kpis.activeProgrammes} to="/programmes?active=true" />
               <Kpi label="Upcoming intakes" {...d.kpis.upcomingIntakes} to="/intakes" />
               <Kpi label="Active enrolments" {...d.kpis.activeEnrolments} to="/enrolments?status=Active" />
-              <Kpi label="Published courses" {...d.kpis.publishedCourses} to="/courses?published=true" />
+              <Kpi label="LMS courses" {...d.kpis.lmsCourses} to="/learning/courses" />
+              <Kpi
+                label="Average progress"
+                {...d.kpis.averageProgress}
+                to="/learning/enrolments"
+                format={(v) => (v === null || v === undefined ? '—' : `${v}%`)}
+              />
+              {/* Counts learner completions, not distinct courses — labelled as such. */}
+              <Kpi label="Course completions" {...d.kpis.completedCourses} to="/learning/enrolments?lmsStatus=Completed" />
+              <Kpi label="Certificates issued" {...d.kpis.certificatesIssued} to="/learning/enrolments" />
+              <Kpi
+                label="Unmapped LMS records"
+                {...d.kpis.unmappedLmsRecords}
+                to="/learning/enrolments?mappingStatus=Unmapped"
+              />
+              <Kpi label="Failed syncs" {...d.kpis.failedSyncs} to="/learning/sync-log?result=error" />
               <Kpi label="Outstanding invoices" {...d.kpis.outstandingInvoices} to="/invoices?status=sent" />
               <Kpi label="Overdue invoices" {...d.kpis.overdueInvoices} to="/invoices?status=overdue" />
               <Kpi
@@ -58,6 +73,25 @@ export default function Dashboard() {
               </Card>
               <Card title="Enrolments by status" action={<SourceBadge source="crm" />}>
                 <BarList data={d.enrolmentsByStatus} emptyText="No enrolments recorded." />
+              </Card>
+            </div>
+
+            <div className="grid g-2">
+              <Card
+                title="LMS courses by provider"
+                action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
+              >
+                {d.lmsCoursesByProvider
+                  ? <BarList data={d.lmsCoursesByProvider} emptyText="No courses recorded." />
+                  : <p className="muted">The LMS connector could not be reached, so this is not available.</p>}
+              </Card>
+              <Card
+                title="Learners by LMS status"
+                action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
+              >
+                {d.learnersByLmsStatus
+                  ? <BarList data={d.learnersByLmsStatus} emptyText="No learner records yet." />
+                  : <p className="muted">The LMS connector could not be reached, so this is not available.</p>}
               </Card>
             </div>
 
@@ -108,7 +142,11 @@ export default function Dashboard() {
 
               <Card title="Integration status" action={<Link className="btn" to="/integration">Details</Link>}>
                 <ConnDot label="Zoho CRM" status={d.connections.crm.status} detail={d.connections.crm.detail} />
-                <ConnDot label="Zoho Learn" status={d.connections.learn.status} detail={d.connections.learn.detail} />
+                <ConnDot
+                  label="External LMS (Catalyst)"
+                  status={d.connections.lms.status}
+                  detail={d.connections.lms.detail}
+                />
                 <ConnDot label="Zoho Books" status={d.connections.books.status} detail={d.connections.books.detail} />
               </Card>
             </div>

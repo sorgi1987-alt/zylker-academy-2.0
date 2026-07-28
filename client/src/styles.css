@@ -25,6 +25,9 @@ a{color:var(--brand-2)}
 .toast{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-radius:8px;font-size:14px;
   box-shadow:0 6px 24px rgba(16,24,40,.16);background:#0f3f2d;color:#eafaf3;border:1px solid #17543c}
 .toast.err{background:#5c1d18;color:#ffeceb;border-color:#7a2b24}
+/* A partial result must not be dressed as a success: a bulk sync that failed
+   half its records is not green. */
+.toast.warn{background:#5a3d10;color:#fff3dc;border-color:#7a5518}
 .toast button{background:none;border:0;color:inherit;font-size:18px;line-height:1;cursor:pointer;padding:0 2px}
 
 /* --- modal --- */
@@ -97,6 +100,18 @@ tbody tr:hover{background:#fafcfe}
 .bar{flex:1;height:8px;background:var(--line-soft);border-radius:99px;overflow:hidden}
 .bar span{display:block;height:100%;background:var(--brand-2);border-radius:99px}
 .bar-row .ct{width:34px;text-align:right;font-weight:650;font-size:13px}
+
+.prog{display:inline-flex;align-items:center;gap:8px;min-width:110px}
+.prog-track{flex:1;height:7px;min-width:56px;background:var(--line-soft);border-radius:99px;overflow:hidden}
+.prog-fill{display:block;height:100%;background:var(--brand-2);border-radius:99px}
+.prog-num{font-size:12px;font-weight:650;color:var(--ink-2)}
+
+/* Sub-navigation inside a section that has several views. */
+.subnav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+.subnav a{padding:7px 13px;border-radius:8px;font-size:14px;font-weight:600;
+  color:var(--ink-2);text-decoration:none;border:1px solid transparent}
+.subnav a:hover{background:var(--brand-soft)}
+.subnav a.active{background:var(--brand-soft);color:var(--brand);border-color:var(--line)}
 
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 input[type=search],select{padding:9px 11px;border:1px solid var(--line);border-radius:8px;

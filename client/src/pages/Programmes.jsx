@@ -78,12 +78,12 @@ function NewProgrammeDialog({ onClose, onDone }) {
           </Field>
           <Field
             id="lmsCourseId"
-            label="Zoho Learn course id"
-            hint="Stored in CRM so the course can be matched by identifier rather than by name."
+            label="LMS course id"
+            hint="Normally written by the LMS connector when a course is synced. Set it here only to record a course this connector does not hold."
           >
             <input value={form.lmsCourseId} onChange={set('lmsCourseId')} />
           </Field>
-          <Field id="lmsCourseUrl" label="Zoho Learn course URL">
+          <Field id="lmsCourseUrl" label="LMS course URL">
             <input value={form.lmsCourseUrl} onChange={set('lmsCourseUrl')} />
           </Field>
         </div>
@@ -154,7 +154,7 @@ export default function Programmes() {
                       <th scope="col">Fee</th>
                       <th scope="col">Intakes</th>
                       <th scope="col">Enrolments</th>
-                      <th scope="col">Learn course</th>
+                      <th scope="col">LMS course</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -171,8 +171,8 @@ export default function Programmes() {
                         <td className="mono">{p.counts.intakes}</td>
                         <td className="mono">{p.counts.enrolments}</td>
                         <td>
-                          {p.learnCourse
-                            ? <span className="pill ok">Mapped{p.learnMatch.inferred ? ' (inferred)' : ''}</span>
+                          {p.lmsCourse
+                            ? <Link to={`/learning/courses/${p.lmsCourse.id}`}>{p.lmsCourse.name}</Link>
                             : <span className="muted">Not mapped</span>}
                         </td>
                       </tr>
@@ -181,10 +181,11 @@ export default function Programmes() {
                 </table>
               </div>
 
-              {meta.learn && meta.learn.status !== 'connected' && (
+              {meta.lmsDemonstrationDataset && (
                 <p className="note">
-                  Zoho Learn is unavailable ({meta.learn.label}), so course mapping could not be
-                  checked. Programme data above is from CRM and is unaffected.
+                  The LMS course column comes from the external LMS connector, a
+                  demonstration dataset in Catalyst. Programme data is from Zoho CRM and is
+                  unaffected if the connector is unavailable.
                 </p>
               )}
 

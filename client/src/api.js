@@ -157,9 +157,33 @@ export const api = {
   completeEnrolment: (id, payload) => send('POST', `/api/enrolments/${encodeURIComponent(id)}/complete`, payload),
   deleteEnrolment: (id) => send('DELETE', `/api/enrolments/${encodeURIComponent(id)}`),
 
-  /* Zoho Learn — read only */
-  courses: (params, o) => get(`/api/courses${qs(params)}`, o),
-  course: (id, o) => get(`/api/courses/${encodeURIComponent(id)}`, o),
+  /*
+   * External LMS connector — a normalised dataset held in the Catalyst Data
+   * Store. The provider names are source labels: no request leaves Catalyst for
+   * Moodle, Canvas, TrainerCentral or any SCORM host, and every response says so
+   * via `demonstrationDataset`. The mapping and the push to CRM are real.
+   */
+  lmsCourses: (params, o) => get(`/api/lms/courses${qs(params)}`, o),
+  lmsCourse: (id, o) => get(`/api/lms/courses/${encodeURIComponent(id)}`, o),
+  lmsEnrolments: (params, o) => get(`/api/lms/enrolments${qs(params)}`, o),
+  lmsEnrolment: (id, o) => get(`/api/lms/enrolments/${encodeURIComponent(id)}`, o),
+  lmsSyncLog: (params, o) => get(`/api/lms/sync-log${qs(params)}`, o),
+  studentLearning: (id, o) => get(`/api/students/${encodeURIComponent(id)}/learning`, o),
+  enrolmentLearning: (id, o) => get(`/api/enrolments/${encodeURIComponent(id)}/learning`, o),
+
+  createLmsCourse: (payload, opts) => send('POST', '/api/lms/courses', payload, opts),
+  updateLmsCourse: (id, payload) => send('PATCH', `/api/lms/courses/${encodeURIComponent(id)}`, payload),
+  archiveLmsCourse: (id) => send('POST', `/api/lms/courses/${encodeURIComponent(id)}/archive`, {}),
+  mapLmsCourse: (id, payload) => send('POST', `/api/lms/courses/${encodeURIComponent(id)}/map`, payload),
+  syncLmsCourse: (id, opts) => send('POST', `/api/lms/courses/${encodeURIComponent(id)}/sync`, {}, opts),
+  bulkSyncLmsCourses: (opts) => send('POST', '/api/lms/courses/bulk-sync', {}, opts),
+
+  createLmsEnrolment: (payload, opts) => send('POST', '/api/lms/enrolments', payload, opts),
+  updateLmsEnrolment: (id, payload) => send('PATCH', `/api/lms/enrolments/${encodeURIComponent(id)}`, payload),
+  mapLmsEnrolment: (id, payload) => send('POST', `/api/lms/enrolments/${encodeURIComponent(id)}/map`, payload),
+  syncLmsEnrolment: (id, opts) => send('POST', `/api/lms/enrolments/${encodeURIComponent(id)}/sync`, {}, opts),
+  createCrmEnrolmentForLms: (id, payload, opts) =>
+    send('POST', `/api/lms/enrolments/${encodeURIComponent(id)}/create-crm-enrolment`, payload, opts),
 
   /* Zoho Books — read only */
   invoices: (params, o) => get(`/api/invoices${qs(params)}`, o),

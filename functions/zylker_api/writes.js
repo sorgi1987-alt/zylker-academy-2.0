@@ -20,9 +20,9 @@
  *     with dependants is not deleted.
  *   - Idempotency: provisioning an enrolment finds before it creates, so a
  *     repeated Enrolled transition cannot produce a second enrolment.
- *   - Zoho Learn is never written to. Enrolment provisioning sets the existing
- *     'Not Synced' picklist value and reports "Manual action required"; no
- *     learner is created, enrolled or progress-synced.
+ *   - No external LMS is contacted from here. Enrolment provisioning sets the
+ *     existing 'Not Synced' picklist value and reports "Manual action
+ *     required"; learning data is owned by the Catalyst LMS connector.
  *
  * The previous build restricted writes to records whose reference began with
  * DEMO-, because it had no authentication and needed *some* boundary. That
@@ -381,7 +381,7 @@ async function applicationTransition(deps, req) {
     const prov = await provisionEnrolment(deps, req, current, b);
     out.enrolment = prov.enrolment;
     out.studentId = prov.studentId;
-    out.learnAccess = MANUAL_ACTION;
+    out.lmsProvisioning = MANUAL_ACTION;
     out.enrolmentCreated = prov.created;
   }
 
@@ -394,7 +394,7 @@ async function applicationTransition(deps, req) {
 
 /**
  * Idempotently ensures a single Enrolment exists for an application.
- * Learn is untouched: sync status is the existing 'Not Synced' value and the
+ * No external LMS is contacted: sync status is the existing 'Not Synced' value and the
  * caller surfaces "Manual action required".
  */
 async function provisionEnrolment(deps, req, deal, body) {
@@ -611,7 +611,7 @@ async function enrolmentCreate(deps, req) {
   await activateStudent(deps, req, studentId);
   return {
     data,
-    meta: { learnAccess: MANUAL_ACTION, capacity },
+    meta: { lmsProvisioning: MANUAL_ACTION, capacity },
     audit: { action: 'enrolment:create', entityType: 'enrolment', recordId: String(details.id), changedFields: Object.keys(payload), result: 'success' }
   };
 }
@@ -685,7 +685,7 @@ async function programmeCreate(deps, req) {
   if (b.durationValue != null && b.durationValue !== '') payload.Duration_Value = Number(b.durationValue);
   if (trimOrNull(b.durationUnit)) payload.Duration_Unit = trimOrNull(b.durationUnit);
   if (b.tuitionFee != null && b.tuitionFee !== '') payload.Unit_Price = Number(b.tuitionFee);
-  // Learn mapping fields are preserved as editable, never written to Learn itself.
+  // LMS mapping fields stay editable here; the connector also writes them on sync.
   if (trimOrNull(b.lmsCourseId)) payload.LMS_Course_ID = trimOrNull(b.lmsCourseId);
   if (trimOrNull(b.lmsCourseUrl)) payload.LMS_Course_URL = trimOrNull(b.lmsCourseUrl);
   if (trimOrNull(b.lmsProvider)) payload.LMS_Provider = trimOrNull(b.lmsProvider);

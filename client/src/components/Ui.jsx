@@ -82,7 +82,9 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger
 export const SourceBadge = ({ source, title }) => {
   const map = {
     crm: ['Zoho CRM', 'ok'],
-    learn: ['Zoho Learn', 'info'],
+    lms: ['External LMS', 'info'],
+    'catalyst-lms': ['External LMS', 'info'],
+    catalyst: ['Zoho Catalyst', 'info'],
     books: ['Zoho Books', 'warn']
   };
   const [label, tone] = map[source] || ['Unknown source', 'mute'];
@@ -90,13 +92,30 @@ export const SourceBadge = ({ source, title }) => {
 };
 
 /**
- * Marks a section this application cannot change. Learn and Books are read-only
- * in this phase, and saying so up front is kinder than letting someone hunt for
- * an edit button that does not exist.
+ * Marks a section this application cannot change. Books is read-only in this
+ * phase, and saying so up front is kinder than letting someone hunt for an edit
+ * button that does not exist.
  */
 export const ReadOnlyBadge = ({ system }) => (
   <span className="pill mute" title={`${system} is read-only in this application`}>
     Read-only
+  </span>
+);
+
+/**
+ * States that the learning data is a demonstration dataset held in Catalyst.
+ *
+ * This appears on every screen that shows it, because the provider names read
+ * like live connections and they are not: nothing in this application contacts
+ * Moodle, Canvas, TrainerCentral or any SCORM host. The mapping to CRM and the
+ * push into it are real, and the wording separates the two deliberately.
+ */
+export const DemoDataBadge = () => (
+  <span
+    className="pill warn"
+    title="Provider names are source labels on rows in the Catalyst Data Store. No request is made to any LMS product."
+  >
+    Demonstration dataset
   </span>
 );
 
@@ -145,7 +164,13 @@ const TONE = {
   'Open for Applications': 'ok', Running: 'ok', Paid: 'ok',
   Pending: 'warn', 'On Hold': 'warn', Deferred: 'warn', 'Not Synced': 'warn',
   Draft: 'mute', Planning: 'mute', Applicant: 'info', 'In Progress': 'info',
-  Withdrawn: 'stop', Cancelled: 'stop', Rejected: 'stop', Suspended: 'stop', Error: 'stop'
+  Withdrawn: 'stop', Cancelled: 'stop', Rejected: 'stop', Suspended: 'stop', Error: 'stop',
+  // External LMS vocabulary
+  Mapped: 'ok', Published: 'ok', Issued: 'ok',
+  Unmapped: 'warn',
+  Invited: 'info',
+  'Not Started': 'mute', 'Not Available': 'mute', Retired: 'mute',
+  Failed: 'stop'
 };
 export const Pill = ({ value, tone }) => {
   if (!value) return <span className="muted">—</span>;
@@ -235,7 +260,7 @@ export const FilterSelect = ({ id, label, value, onChange, options, allLabel = '
 
 /**
  * Explains that one integration is unavailable without implying the page failed.
- * Used wherever a Learn or Books section sits beside CRM data that loaded fine.
+ * Used wherever an LMS or Books section sits beside CRM data that loaded fine.
  */
 export const SectionUnavailable = ({ system, detail, onRetry }) => (
   <div className="state" role="status">
@@ -270,10 +295,25 @@ export const ConnDot = ({ label, status, detail }) => (
   </div>
 );
 
-export const InferredBadge = ({ match }) =>
-  match && match.inferred
-    ? <span className="pill warn" title="Matched on course name because no identifier was available">Inferred match</span>
-    : null;
+/**
+ * Learning progress.
+ *
+ * A null percentage is rendered as "Not recorded", never as a 0% bar: the LMS
+ * not having reported progress and a learner having made none are different
+ * facts, and an empty bar reads as the second.
+ */
+export const Progress = ({ value }) => {
+  if (value === null || value === undefined) {
+    return <span className="muted">Not recorded</span>;
+  }
+  const pct = Math.max(0, Math.min(100, Number(value) || 0));
+  return (
+    <span className="prog" role="img" aria-label={`${pct} per cent complete`}>
+      <span className="prog-track"><span className="prog-fill" style={{ width: `${pct}%` }} /></span>
+      <span className="mono prog-num">{pct}%</span>
+    </span>
+  );
+};
 
 export const fmtDate = (d) => {
   if (!d) return '—';

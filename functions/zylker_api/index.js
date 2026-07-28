@@ -18,6 +18,7 @@ const perms = require('./permissions');
 const identity = require('./identity');
 const writes = require('./writes');
 const books = require('./books');
+const lms = require('./lms');
 
 const app = express();
 app.disable('x-powered-by');
@@ -98,6 +99,7 @@ const tag = (p, service) => p.catch((e) => { e.__service = service; throw e; });
 const wrap = (fn) => (req, res) =>
   fn(req, res).catch((err) => {
     if (err instanceof writes.AppError) return fail(res, err.status, err.code, err.message);
+    if (err instanceof lms.LmsError) return fail(res, err.status, err.code, err.message, 'lms');
     if (err instanceof books.BooksNotConfigured) return fail(res, 503, err.code, err.message, 'books');
     const s = z.safeError(err, err.__service || 'zoho');
     // Never surface the upstream body — it can echo tokens or CRM metadata.
@@ -170,35 +172,6 @@ const matches = (row, term, fields) => {
     return v != null && String(v).toLowerCase().includes(t);
   });
 };
-
-/**
- * Learn is optional: the app stays usable when Learn is unreachable.
- * Returns { courses (normalised), view, state, error }.
- */
-async function learnListing(req) {
-  try {
-    const r = await z.learnCourses(req);
-    return { ...r, courses: (r.courses || []).map(n.course) };
-  } catch (err) {
-    return { courses: [], view: null, apiStatus: null, state: 'unavailable', error: z.safeError(err, 'learn') };
-  }
-}
-
-const LEARN_STATE_LABEL = {
-  connected_with_courses: 'Connected — courses retrieved',
-  connected_no_courses: 'Connected — no courses visible',
-  auth_error: 'Authentication error',
-  unavailable: 'Learn API unavailable'
-};
-
-const learnConnStatus = (l) => ({
-  status: l.state === 'connected_with_courses' || l.state === 'connected_no_courses' ? 'connected' : 'unavailable',
-  state: l.state,
-  label: LEARN_STATE_LABEL[l.state] || l.state,
-  view: l.view,
-  detail: l.error ? l.error.detail : null,
-  readOnly: true
-});
 
 /* ---------------------- student to Books matching ---------------------- */
 
@@ -307,7 +280,7 @@ R('/api/me', null, async (req, res) => {
 /* ------------------------------- dashboard ----------------------------- */
 
 R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
-  // CRM first and on its own: a Learn or Books failure must not stop these.
+  // CRM first and on its own: an LMS or Books failure must not stop these.
   const [students, applications, programmes, intakes, enrolments] = await Promise.all([
     listStudents(req), listApplications(req), listProgrammes(req), listIntakes(req), listEnrolments(req)
   ]);
@@ -321,10 +294,10 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
 
   const closedStages = new Set([writes.STAGE.ENROLLED, writes.STAGE.REJECTED, writes.STAGE.WITHDRAWN]);
 
-  // Learn and Books are settled independently and never rejected, so a failure
-  // in either degrades one card instead of the whole dashboard.
-  const [learn, booksTotals, booksHealth] = await Promise.all([
-    learnListing(req),
+  // The LMS connector and Books are settled independently and never rejected,
+  // so a failure in either degrades one card instead of the whole dashboard.
+  const [lmsStatus, booksTotals, booksHealth] = await Promise.all([
+    lms.status(req),
     cfg.books.organizationId
       ? books.invoiceTotals(z, req).catch((err) => ({ error: z.safeError(err, 'books') }))
       : Promise.resolve(null),
@@ -332,6 +305,7 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
   ]);
 
   const booksOk = booksTotals && !booksTotals.error;
+  const lmsOk = lmsStatus && lmsStatus.status === 'connected' && lmsStatus.counts;
 
   ok(res, {
     // Each KPI declares where it came from, so the UI can badge it and a null
@@ -342,10 +316,29 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
       activeProgrammes: { value: P.filter((p) => p.active && p.status !== 'Archived').length, source: 'crm' },
       upcomingIntakes: { value: I.filter((i) => (i.startDate || '') >= today).length, source: 'crm' },
       activeEnrolments: { value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE).length, source: 'crm' },
-      publishedCourses: {
-        value: learn.state === 'connected_with_courses' ? learn.courses.filter((c) => c.published).length : null,
-        source: 'learn',
-        unavailable: learn.state !== 'connected_with_courses'
+      lmsCourses: {
+        value: lmsOk ? lmsStatus.counts.activeCourses : null,
+        source: 'lms', unavailable: !lmsOk
+      },
+      averageProgress: {
+        value: lmsOk ? lmsStatus.averageProgress : null,
+        source: 'lms', unavailable: !lmsOk, suffix: '%'
+      },
+      completedCourses: {
+        value: lmsOk ? lmsStatus.counts.completed : null,
+        source: 'lms', unavailable: !lmsOk
+      },
+      certificatesIssued: {
+        value: lmsOk ? lmsStatus.counts.certificatesIssued : null,
+        source: 'lms', unavailable: !lmsOk
+      },
+      unmappedLmsRecords: {
+        value: lmsOk ? lmsStatus.counts.coursesUnmapped + lmsStatus.counts.enrolmentsUnmapped : null,
+        source: 'lms', unavailable: !lmsOk
+      },
+      failedSyncs: {
+        value: lmsOk ? lmsStatus.counts.failedSyncs : null,
+        source: 'lms', unavailable: !lmsOk
       },
       outstandingInvoices: {
         value: booksOk ? booksTotals.outstandingCount : null,
@@ -364,6 +357,8 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     },
     applicationsByStage: groupBy(A, (a) => a.stage),
     enrolmentsByStatus: groupBy(E, (e) => e.status),
+    lmsCoursesByProvider: lmsOk ? lmsStatus.coursesByProvider : null,
+    learnersByLmsStatus: lmsOk ? lmsStatus.learnersByStatus : null,
     recentApplications: [...A]
       .sort((x, y) => String(y.applicationDate || '').localeCompare(String(x.applicationDate || '')))
       .slice(0, 6),
@@ -371,7 +366,7 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     recentStudents: S.slice(0, 6),
     connections: {
       crm: { status: 'connected', label: 'Connected' },
-      learn: learnConnStatus(learn),
+      lms: { status: lmsStatus.status, label: lmsStatus.label, detail: lmsStatus.detail || null, demonstrationDataset: true },
       books: booksHealth
     }
   });
@@ -410,7 +405,7 @@ R('/api/students', perms.P.STUDENT_READ, async (req, res) => {
 /**
  * Student 360. Every integration section is resolved independently and is
  * allowed to fail on its own — the CRM half of the page renders whether or not
- * Learn and Books answer.
+ * the LMS connector and Books answer.
  */
 R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
@@ -433,18 +428,23 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
   const intakeIds = [...new Set(enrolments.concat(applications)
     .map((r) => r.intake && r.intake.id).filter(Boolean))];
 
-  const [progRows, intakeRows, learn, invoices, activity] = await Promise.all([
+  const [progRows, intakeRows, lmsLearning, invoices, activity] = await Promise.all([
     programmeIds.length ? listProgrammes(req, `id in (${programmeIds.join(',')})`) : Promise.resolve([]),
     intakeIds.length ? listIntakes(req, `id in (${intakeIds.join(',')})`) : Promise.resolve([]),
-    learnListing(req),
+    lms.enrolmentsForStudent(req, id).catch(() => []),
     studentInvoices(req, raw, student),
     auth.readActivity(req, { entityType: 'student', recordId: id, limit: 15 }).catch(() => [])
   ]);
 
-  const programmes = progRows.map(n.programme).map((p) => {
-    const m = n.matchCourse(p, learn.courses);
-    return { ...p, learnCourse: m.course, learnMatch: { inferred: m.inferred, matchedOn: m.matchedOn } };
-  });
+  const programmes = progRows.map(n.programme);
+
+  // Attach each LMS record's course so the Learning section can name it without
+  // a second round trip. Courses are few, so one list is cheaper than N reads.
+  const lmsCourses = await lms.listCourses(req).catch(() => []);
+  const learning = lmsLearning.map((e) => ({
+    ...e,
+    course: lmsCourses.find((c) => c.provider === e.provider && c.externalCourseId === e.externalCourseId) || null
+  }));
 
   ok(res, {
     student,
@@ -454,7 +454,8 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
     intakes: intakeRows.map(n.intake),
     invoices,
     activity,
-    learn: learnConnStatus(learn)
+    learning,
+    lmsDemonstrationDataset: true
   });
 });
 
@@ -497,8 +498,6 @@ R('/api/applications/:id', perms.P.APPLICATION_READ, async (req, res) => {
   ]);
 
   const programme = progRows.length ? n.programme(progRows[0]) : null;
-  const learn = await learnListing(req);
-  const m = programme ? n.matchCourse(programme, learn.courses) : { course: null, inferred: false, matchedOn: null };
 
   ok(res, {
     application,
@@ -506,13 +505,10 @@ R('/api/applications/:id', perms.P.APPLICATION_READ, async (req, res) => {
     enrolment: enrolRows.length ? n.enrolment(enrolRows[0]) : null,
     programme,
     intake: intakeRows.length ? n.intake(intakeRows[0]) : null,
-    learnCourse: m.course,
-    learnMatch: { inferred: m.inferred, matchedOn: m.matchedOn },
     // Only the transitions the backend will actually accept, so the UI cannot
     // offer a button that is guaranteed to 422.
     allowedTransitions: writes.TRANSITIONS[application.stage] || [],
-    activity,
-    learn: learnConnStatus(learn)
+    activity
   });
 });
 
@@ -525,14 +521,15 @@ R('/api/programmes', perms.P.PROGRAMME_READ, async (req, res) => {
   const E = enrols.map(n.enrolment);
   const A = apps.map(n.application);
   const I = intakes.map(n.intake);
-  const learn = await learnListing(req);
+  // Courses come from the Catalyst connector and are matched by CRM id, so the
+  // name-based guessing the previous integration needed is gone entirely.
+  const lmsCourses = await lms.listCourses(req).catch(() => []);
 
   let data = rows.map(n.programme).map((p) => {
-    const m = n.matchCourse(p, learn.courses);
+    const lmsCourse = lmsCourses.find((c) => String(c.crmProgrammeId) === String(p.id)) || null;
     return {
       ...p,
-      learnCourse: m.course,
-      learnMatch: { inferred: m.inferred, matchedOn: m.matchedOn },
+      lmsCourse,
       counts: {
         intakes: I.filter((i) => i.programme && i.programme.id === p.id).length,
         applications: A.filter((a) => a.programme && a.programme.id === p.id).length,
@@ -545,7 +542,7 @@ R('/api/programmes', perms.P.PROGRAMME_READ, async (req, res) => {
   if (req.query.active === 'false') data = data.filter((p) => !p.active);
   data = data.filter((p) => matches(p, req.query.search, ['name', 'code', 'department', 'academicLevel']));
 
-  const { items, meta } = paginate(data, req, { learn: learnConnStatus(learn), source: 'crm' });
+  const { items, meta } = paginate(data, req, { source: 'crm', lmsDemonstrationDataset: true });
   ok(res, items, meta);
 });
 
@@ -564,20 +561,19 @@ R('/api/programmes/:id', perms.P.PROGRAMME_READ, async (req, res) => {
   ]);
   const intakes = ints.map(n.intake);
   const enrolments = enrols.map(n.enrolment);
-  const learn = await learnListing(req);
-  const m = n.matchCourse(programme, learn.courses);
+  const lmsCourses = await lms.listCourses(req).catch(() => []);
+  const lmsCourse = lmsCourses.find((c) => String(c.crmProgrammeId) === String(programme.id)) || null;
 
   ok(res, {
     programme,
-    learnCourse: m.course,
-    learnMatch: { inferred: m.inferred, matchedOn: m.matchedOn },
+    lmsCourse,
     intakes: intakes.map((i) => ({
       ...i,
       enrolledStudents: enrolments.filter((e) => e.intake && e.intake.id === i.id && e.status === writes.ENROLMENT_STATUS.ACTIVE).length
     })),
     applications: apps.map(n.application),
     enrolments,
-    learn: learnConnStatus(learn)
+    lmsDemonstrationDataset: true
   });
 });
 
@@ -684,8 +680,17 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
   ]);
 
   const programme = progRows.length ? n.programme(progRows[0]) : null;
-  const learn = await learnListing(req);
-  const m = programme ? n.matchCourse(programme, learn.courses) : { course: null, inferred: false, matchedOn: null };
+
+  // The External LMS panel: records linked to THIS CRM enrolment, each with its
+  // course. Never rejected — an LMS outage must not break the CRM page.
+  const [lmsLinked, lmsCourses] = await Promise.all([
+    lms.enrolmentsForCrmEnrolment(req, id).catch(() => []),
+    lms.listCourses(req).catch(() => [])
+  ]);
+  const learning = lmsLinked.map((e) => ({
+    ...e,
+    course: lmsCourses.find((c) => c.provider === e.provider && c.externalCourseId === e.externalCourseId) || null
+  }));
 
   /*
    * Finance_Status on the enrolment is a CRM picklist that a person sets by
@@ -706,9 +711,11 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
     programme,
     intake: intakeRows.length ? n.intake(intakeRows[0]) : null,
     application: appRows.length ? n.application(appRows[0]) : null,
-    learnCourse: m.course,
-    learnMatch: { inferred: m.inferred, matchedOn: m.matchedOn },
-    learn: learnConnStatus(learn),
+    learning,
+    lmsCourse: programme
+      ? lmsCourses.find((c) => String(c.crmProgrammeId) === String(programme.id)) || null
+      : null,
+    lmsDemonstrationDataset: true,
     invoices,
     // States plainly whether the manual CRM field agrees with Books, so the
     // drift is visible instead of being something the reader has to notice.
@@ -717,93 +724,156 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
   });
 });
 
-/* ---------------------------- Zoho Learn (read) ------------------------ */
+/* ------------------ External LMS Connector (Catalyst) ------------------ */
+/*
+ * The dataset lives in the Catalyst Data Store. Provider names are simulated
+ * source labels; there is no outbound call to Moodle, Canvas, TrainerCentral or
+ * any SCORM host, and every response says so via `demonstrationDataset`.
+ */
 
-R('/api/courses', perms.P.COURSE_READ, async (req, res) => {
-  const [progRows, enrolRows] = await Promise.all([listProgrammes(req), listEnrolments(req)]);
-  const P = progRows.map(n.programme);
-  const E = enrolRows.map(n.enrolment);
-  const learn = await learnListing(req);
+R('/api/lms/courses', perms.P.LMS_READ, async (req, res) => {
+  const [courses, progRows] = await Promise.all([
+    lms.listCourses(req, { includeArchived: req.query.includeArchived === 'true' }),
+    listProgrammes(req).catch(() => [])
+  ]);
+  const P_ = progRows.map(n.programme);
 
-  const enrolCount = (p) => E.filter((e) => e.programme && e.programme.id === p.id).length;
-  const matchedLearnIds = new Set();
-
-  // Every CRM programme is represented, enriched with its Learn record where
-  // matched, so the catalogue is complete even when Learn is unavailable.
-  const rows = P.map((p) => {
-    const m = n.matchCourse(p, learn.courses);
-    if (m.course) matchedLearnIds.add(m.course.id);
-    const c = m.course;
-    return {
-      id: (c && c.id) || p.lms.courseId || null,
-      name: c ? c.name : (p.code ? `[${p.code}] ${p.name}` : p.name),
-      description: c ? c.description : null,
-      status: c ? c.status : null,
-      published: c ? c.published : null,
-      durationText: c ? c.durationText : null,
-      lessonCount: c ? c.lessonCount : null,
-      enrollmentType: c ? c.enrollmentType : null,
-      bannerUrl: c ? c.bannerUrl : null,
-      url: (c && c.url) || p.lms.courseUrl || null,
-      source: c ? 'learn' : 'crm',
-      readOnly: true,
-      match: { inferred: m.inferred, matchedOn: m.matchedOn },
-      programme: {
-        id: p.id, name: p.name, code: p.code, academicLevel: p.academicLevel,
-        department: p.department, award: p.award,
-        durationValue: p.durationValue, durationUnit: p.durationUnit
-      },
-      crmEnrolments: enrolCount(p)
-    };
-  });
-
-  // Learn courses with no CRM programme are surfaced too, rather than hidden.
-  const unmatched = learn.courses.filter((c) => !matchedLearnIds.has(c.id)).map((c) => ({
-    id: c.id, name: c.name, description: c.description, status: c.status, published: c.published,
-    durationText: c.durationText, lessonCount: c.lessonCount, enrollmentType: c.enrollmentType,
-    bannerUrl: c.bannerUrl, url: c.url, source: 'learn', readOnly: true,
-    match: { inferred: false, matchedOn: null }, programme: null, crmEnrolments: 0
+  let data = courses.map((c) => ({
+    ...c,
+    crmProgramme: c.crmProgrammeId
+      ? P_.find((p) => String(p.id) === String(c.crmProgrammeId)) || null
+      : null
   }));
 
-  let data = rows.concat(unmatched);
-  if (req.query.published === 'true') data = data.filter((c) => c.published === true);
-  data = data.filter((c) => matches(c, req.query.search, ['name', 'description', 'programme.code', 'programme.name']));
+  if (req.query.provider) data = data.filter((c) => c.provider === req.query.provider);
+  if (req.query.mappingStatus) data = data.filter((c) => c.mappingStatus === req.query.mappingStatus);
+  if (req.query.syncStatus) data = data.filter((c) => c.syncStatus === req.query.syncStatus);
+  data = data.filter((c) => matches(c, req.query.search, ['name', 'externalCourseId', 'provider', 'instructor', 'category']));
 
   const { items, meta } = paginate(data, req, {
-    learn: learnConnStatus(learn),
-    learnCoursesReturned: learn.courses.length,
-    learnCoursesMatched: matchedLearnIds.size,
-    inferredMatches: rows.filter((r) => r.match.inferred).length,
-    learnNote: learn.state === 'connected_with_courses' ? null
-      : learn.state === 'connected_no_courses'
-        ? 'Zoho Learn responded but returned no courses for this account. Programme details are shown from the CRM.'
-        : learn.state === 'auth_error'
-          ? 'Zoho Learn rejected the request. Check the Learn connection scopes.'
-          : 'Zoho Learn could not be reached. Programme details are shown from the CRM.'
+    source: 'catalyst-lms',
+    demonstrationDataset: true,
+    providers: lms.PROVIDERS,
+    deliveryTypes: lms.DELIVERY_TYPES,
+    publicationStatuses: lms.PUBLICATION_STATUSES,
+    mappingStatuses: lms.MAPPING_STATUSES,
+    syncStatuses: lms.SYNC_STATUSES
   });
   ok(res, items, meta);
 });
 
-R('/api/courses/:id', perms.P.COURSE_READ, async (req, res) => {
-  const id = String(req.params.id);
-  const [progRows, learn] = await Promise.all([listProgrammes(req), learnListing(req)]);
-  const P = progRows.map(n.programme);
+R('/api/lms/courses/:id', perms.P.LMS_READ, async (req, res) => {
+  const course = await lms.getCourse(req, req.params.id);
+  if (!course) return fail(res, 404, 'NOT_FOUND', 'No LMS course matches that id.');
 
-  const course = learn.courses.find((c) => String(c.id) === id) || null;
-  // A course id may also be a CRM programme id when Learn has no record for it.
-  const programme = P.find((p) => {
-    const m = n.matchCourse(p, learn.courses);
-    return (m.course && String(m.course.id) === id) || String(p.lms.courseId || '') === id || String(p.id) === id;
-  }) || null;
-
-  if (!course && !programme) return fail(res, 404, 'NOT_FOUND', 'No course or programme matches that id.');
+  const [progRows, enrolments, log] = await Promise.all([
+    course.crmProgrammeId ? listProgrammes(req, `id = ${String(course.crmProgrammeId).replace(/[^0-9]/g, '')}`).catch(() => []) : Promise.resolve([]),
+    lms.listEnrolments(req).catch(() => []),
+    lms.listSyncLog(req, { limit: 15, entityType: 'Course' }).catch(() => [])
+  ]);
 
   ok(res, {
     course,
-    programme,
-    learn: learnConnStatus(learn),
-    unavailableFields: course ? [] : ['status', 'published', 'description', 'lessonCount', 'durationText']
+    crmProgramme: progRows.length ? n.programme(progRows[0]) : null,
+    enrolments: enrolments.filter((e) => e.provider === course.provider && e.externalCourseId === course.externalCourseId),
+    syncLog: log.filter((l) => l.externalRecordId === course.externalCourseId),
+    crmFieldsWritten: Object.keys(lms.PROGRAMME_SYNC_FIELDS),
+    demonstrationDataset: true
   });
+});
+
+R('/api/lms/enrolments', perms.P.LMS_READ, async (req, res) => {
+  const [enrolments, courses, studRows] = await Promise.all([
+    lms.listEnrolments(req),
+    lms.listCourses(req, { includeArchived: true }).catch(() => []),
+    listStudents(req).catch(() => [])
+  ]);
+  const S = studRows.map(n.student);
+
+  let data = enrolments.map((e) => ({
+    ...e,
+    course: courses.find((c) => c.provider === e.provider && c.externalCourseId === e.externalCourseId) || null,
+    crmStudent: e.crmStudentId ? S.find((st) => String(st.id) === String(e.crmStudentId)) || null : null
+  }));
+
+  if (req.query.provider) data = data.filter((e) => e.provider === req.query.provider);
+  if (req.query.lmsStatus) data = data.filter((e) => e.lmsStatus === req.query.lmsStatus);
+  if (req.query.mappingStatus) data = data.filter((e) => e.mappingStatus === req.query.mappingStatus);
+  if (req.query.syncStatus) data = data.filter((e) => e.syncStatus === req.query.syncStatus);
+  data = data.filter((e) => matches(e, req.query.search,
+    ['externalEnrolmentId', 'externalLearnerId', 'provider', 'crmStudentReference', 'crmStudent.fullName', 'course.name']));
+
+  const { items, meta } = paginate(data, req, {
+    source: 'catalyst-lms',
+    demonstrationDataset: true,
+    providers: lms.PROVIDERS,
+    lmsStatuses: lms.LMS_STATUSES,
+    certificateStatuses: lms.CERTIFICATE_STATUSES,
+    mappingStatuses: lms.MAPPING_STATUSES,
+    syncStatuses: lms.SYNC_STATUSES
+  });
+  ok(res, items, meta);
+});
+
+R('/api/lms/enrolments/:id', perms.P.LMS_READ, async (req, res) => {
+  const record = await lms.getEnrolment(req, req.params.id);
+  if (!record) return fail(res, 404, 'NOT_FOUND', 'No LMS enrolment matches that id.');
+
+  const numericId = (v) => String(v || '').replace(/[^0-9]/g, '');
+  const [course, studRows, crmEnrolRows, log] = await Promise.all([
+    record.externalCourseId
+      ? lms.findCourseByExternalId(req, record.provider, record.externalCourseId).catch(() => null)
+      : Promise.resolve(null),
+    record.crmStudentId ? listStudents(req, `id = ${numericId(record.crmStudentId)}`).catch(() => []) : Promise.resolve([]),
+    record.crmEnrolmentId ? listEnrolments(req, `id = ${numericId(record.crmEnrolmentId)}`).catch(() => []) : Promise.resolve([]),
+    lms.listSyncLog(req, { limit: 15, entityType: 'Enrolment' }).catch(() => [])
+  ]);
+
+  ok(res, {
+    enrolment: record,
+    course,
+    crmStudent: studRows.length ? n.student(studRows[0]) : null,
+    crmEnrolment: crmEnrolRows.length ? n.enrolment(crmEnrolRows[0]) : null,
+    syncLog: log.filter((l) => l.externalRecordId === record.externalEnrolmentId),
+    crmFieldsWritten: Object.keys(lms.ENROLMENT_SYNC_FIELDS),
+    fieldsHeldInCatalyst: lms.RECOMMENDED_CRM_FIELDS,
+    demonstrationDataset: true
+  });
+});
+
+R('/api/lms/sync-log', perms.P.LMS_READ, async (req, res) => {
+  const rows = await lms.listSyncLog(req, {
+    limit: req.query.limit, entityType: req.query.entityType, result: req.query.result
+  });
+  ok(res, rows, { count: rows.length, source: 'catalyst-lms' });
+});
+
+/** Learning records for one student, for the Student 360 Learning section. */
+R('/api/students/:id/learning', perms.P.LMS_READ, async (req, res) => {
+  const id = String(req.params.id).replace(/[^0-9]/g, '');
+  if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
+  const [records, courses] = await Promise.all([
+    lms.enrolmentsForStudent(req, id),
+    lms.listCourses(req, { includeArchived: true }).catch(() => [])
+  ]);
+  ok(res, records.map((e) => ({
+    ...e,
+    course: courses.find((c) => c.provider === e.provider && c.externalCourseId === e.externalCourseId) || null
+  })), { source: 'catalyst-lms', demonstrationDataset: true });
+});
+
+/** Learning records linked to one CRM enrolment. */
+R('/api/enrolments/:id/learning', perms.P.LMS_READ, async (req, res) => {
+  const id = String(req.params.id).replace(/[^0-9]/g, '');
+  if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
+  const [records, courses] = await Promise.all([
+    lms.enrolmentsForCrmEnrolment(req, id),
+    lms.listCourses(req, { includeArchived: true }).catch(() => [])
+  ]);
+  ok(res, records.map((e) => ({
+    ...e,
+    course: courses.find((c) => c.provider === e.provider && c.externalCourseId === e.externalCourseId) || null
+  })), { source: 'catalyst-lms', demonstrationDataset: true });
 });
 
 /* --------------------------- Zoho Books (read) ------------------------- */
@@ -856,8 +926,8 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
     crmStatus = { status: 'unavailable', detail: z.safeError(err, 'crm').detail };
   }
 
-  const [learn, booksHealth] = await Promise.all([
-    learnListing(req),
+  const [lmsStatus, booksHealth] = await Promise.all([
+    lms.status(req),
     books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
   ]);
 
@@ -870,55 +940,63 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
     ]);
   }
 
-  const matchOf = (p) => n.matchCourse(p, learn.courses);
+  const lmsCourses = lmsStatus.status === 'connected' ? await lms.listCourses(req).catch(() => []) : [];
+  const mappedProgrammeIds = new Set(lmsCourses.map((c) => String(c.crmProgrammeId)).filter(Boolean));
 
   ok(res, {
     auth: {
       ...identity.authConfig(),
-      // Reports how THIS request's identity was resolved. Useful while the
-      // supported Catalyst call is still being confirmed with Zoho support.
       resolvedBy: req.user.resolvedBy,
       role: req.principal.role,
       roleSource: 'ZYLKER_ROLE_MAP / Catalyst role'
     },
     connections: {
       crm: { ...crmStatus, label: crmStatus.status === 'connected' ? 'Connected' : 'Unavailable', writable: true },
-      learn: learnConnStatus(learn),
+      lms: {
+        status: lmsStatus.status,
+        label: cfg.lms.label,
+        detail: lmsStatus.detail || null,
+        // Stated explicitly so nobody reads this as a live Moodle or Canvas
+        // connection. The providers are source labels on Catalyst rows.
+        demonstrationDataset: true,
+        tables: lmsStatus.tables || cfg.lms
+      },
       books: { ...booksHealth, readOnly: true }
     },
-    learnNetwork: {
-      hubUrl: cfg.learn.hubUrl,
-      hubId: cfg.learn.hubId,
-      portalUrl: cfg.learn.portalUrl
-    },
+    lms: lmsStatus,
     booksConfig: {
-      // The organisation id identifies which ledger is being read; it is not a
-      // secret. No token, client id or secret is ever included here.
       organizationId: cfg.books.organizationId,
       baseUrl: cfg.books.baseUrl,
       configured: Boolean(cfg.books.organizationId)
     },
     counts: {
       programmes: programmes.length,
-      courses: learn.state === 'unavailable' || learn.state === 'auth_error' ? null : learn.courses.length,
-      coursesMatched: programmes.filter((p) => matchOf(p).course).length,
-      inferredMatches: programmes.filter((p) => matchOf(p).inferred).length,
       students: students.length,
-      enrolments: enrolments.length
+      enrolments: enrolments.length,
+      lmsCourses: lmsStatus.counts ? lmsStatus.counts.courses : null,
+      lmsEnrolments: lmsStatus.counts ? lmsStatus.counts.enrolments : null
     },
-    unmappedProgrammes: programmes.filter((p) => !matchOf(p).course)
-      .map((p) => ({ id: p.id, code: p.code, name: p.name,
-        reason: p.lms.courseId ? 'Learn Course ID stored but no matching course returned' : 'No Learn Course ID stored' })),
-    inferredMatchProgrammes: programmes.filter((p) => matchOf(p).inferred)
-      .map((p) => ({ id: p.id, code: p.code, name: p.name, reason: 'Matched on course name, not on an identifier' })),
-    studentsMissingLmsUser: students.filter((s) => !s.lms.userId)
-      .map((s) => ({ id: s.id, name: s.fullName, reference: s.externalReference })),
-    enrolmentsNotSynced: enrolments.filter((e) => e.lms.syncStatus !== 'Synced')
-      .map((e) => ({ id: e.id, reference: e.externalReference, syncStatus: e.lms.syncStatus })),
+    unmappedProgrammes: programmes
+      .filter((p) => !mappedProgrammeIds.has(String(p.id)))
+      .map((p) => ({ id: p.id, code: p.code, name: p.name, reason: 'No LMS course is mapped to this programme' })),
+    recommendedCrmFields: lms.RECOMMENDED_CRM_FIELDS,
+    legacyCrmFields: [
+      { module: 'Products', apiName: 'LMS_Provider', note: 'Provider-neutral name; now written by the LMS connector' },
+      { module: 'Products', apiName: 'LMS_Course_ID', note: 'Now holds the external course id from the connector' },
+      { module: 'Products', apiName: 'LMS_Course_URL', note: 'Now holds the simulated provider course URL' },
+      { module: 'Enrolments', apiName: 'LMS_Provider' },
+      { module: 'Enrolments', apiName: 'LMS_Enrolment_ID' },
+      { module: 'Enrolments', apiName: 'Progress_Percentage' },
+      { module: 'Enrolments', apiName: 'Last_LMS_Sync' },
+      { module: 'Enrolments', apiName: 'External_Sync_Status' },
+      { module: 'Contacts', apiName: 'LMS_Provider' },
+      { module: 'Contacts', apiName: 'LMS_User_ID' },
+      { module: 'Contacts', apiName: 'Last_LMS_Sync' }
+    ],
     notes: [
-      'Zoho Learn is read-only in this phase: no learner is created, enrolled, or progress-synced.',
+      'External LMS information is a normalized demonstration dataset stored in Zoho Catalyst. No connection is made to any LMS product.',
       'Zoho Books is read-only in this phase: invoices cannot be created, edited, paid or deleted from this application.',
-      'LMS sync status, progress percentage and Learn identifiers on Enrolments are maintained manually in CRM.'
+      'Six LMS fields have no equivalent on the CRM Enrolments module, so their values are held in Catalyst and shown from there. See recommendedCrmFields.'
     ]
   });
 });
@@ -957,7 +1035,7 @@ R('/api/diag', perms.P.INTEGRATION_READ, async (req, res) => {
       attempts: req.__zylkerAuthAttempts || [],
       principal: { id: req.principal.id, email: req.principal.email, role: req.principal.role }
     },
-    connections: null, crmProbe: null, learnProbe: null, booksProbe: null
+    connections: null, crmProbe: null, lmsProbe: null, booksProbe: null
   };
   try { out.connections = await z.probe(req); }
   catch (err) { out.connections = { error: z.redact(err && err.message) }; }
@@ -968,18 +1046,25 @@ R('/api/diag', perms.P.INTEGRATION_READ, async (req, res) => {
   } catch (err) { out.crmProbe = { ok: false, ...z.safeError(err, 'crm') }; }
 
   try {
-    const r = await z.learnCourses(req);
-    out.learnProbe = { ok: r.state !== 'unavailable' && r.state !== 'auth_error', state: r.state, view: r.view, coursesReturned: r.courses.length, error: r.error || null };
-  } catch (err) { out.learnProbe = { ok: false, ...z.safeError(err, 'learn') }; }
+    const st = await lms.status(req);
+    out.lmsProbe = {
+      ok: st.status === 'connected',
+      tables: st.tables || null,
+      courses: st.counts ? st.counts.courses : null,
+      enrolments: st.counts ? st.counts.enrolments : null,
+      demonstrationDataset: true,
+      detail: st.detail || null
+    };
+  } catch (err) { out.lmsProbe = { ok: false, detail: z.redact(err && err.message) }; }
 
   out.booksProbe = await books.health(z, req).catch((err) => ({ status: 'unavailable', detail: z.redact(err && err.message) }));
 
   out.config = {
     crmBaseUrl: cfg.crm.baseUrl,
-    learnBaseUrl: cfg.learn.baseUrl,
     booksBaseUrl: cfg.books.baseUrl,
     booksOrgConfigured: Boolean(cfg.books.organizationId),
-    connections: { crm: cfg.crm.connection, learn: cfg.learn.connection, books: cfg.books.connection }
+    connections: { crm: cfg.crm.connection, books: cfg.books.connection },
+    lmsTables: cfg.lms
   };
   return ok(res, out);
 });
@@ -1021,6 +1106,35 @@ const WRITE_ROUTES = [
   ['delete', '/api/enrolments/:id', P.ENROLMENT_DELETE, writes.enrolmentDelete]
 ];
 
+/**
+ * External LMS Connector writes.
+ *
+ * Separate from WRITE_ROUTES because these handlers take (deps, req) and return
+ * the record directly rather than the { data, meta, audit } envelope the CRM
+ * handlers use. Same middleware chain, same permission enforcement.
+ */
+const LMS_WRITE_ROUTES = [
+  ['post', '/api/lms/courses', P.LMS_WRITE, (d, req) => lms.createCourse(req, req.body)],
+  ['patch', '/api/lms/courses/:id', P.LMS_WRITE, (d, req) => lms.updateCourse(req, req.params.id, req.body)],
+  ['post', '/api/lms/courses/:id/archive', P.LMS_WRITE, (d, req) => lms.archiveCourse(req, req.params.id)],
+  ['post', '/api/lms/courses/:id/map', P.LMS_MAP, (d, req) => lms.mapCourse(d, req, req.params.id, (req.body || {}).programmeId)],
+  ['post', '/api/lms/courses/:id/sync', P.LMS_SYNC, (d, req) => lms.syncCourseToCrm(d, req, req.params.id)],
+  ['post', '/api/lms/courses/bulk-sync', P.LMS_BULK_SYNC, (d, req) => lms.bulkSyncCourses(d, req)],
+
+  ['post', '/api/lms/enrolments', P.LMS_WRITE, (d, req) => lms.createEnrolment(d, req, req.body)],
+  ['patch', '/api/lms/enrolments/:id', P.LMS_WRITE, (d, req) => lms.updateEnrolment(req, req.params.id, req.body)],
+  ['post', '/api/lms/enrolments/:id/map', P.LMS_MAP, (d, req) => {
+    const b = req.body || {};
+    // One endpoint, two mappings: student and CRM enrolment. Which one runs is
+    // decided by what the caller supplied, so the UI needs only one action.
+    if (b.crmEnrolmentId !== undefined) return lms.mapEnrolmentToCrmEnrolment(d, req, req.params.id, b.crmEnrolmentId);
+    return lms.mapEnrolmentStudent(d, req, req.params.id, b);
+  }],
+  ['post', '/api/lms/enrolments/:id/sync', P.LMS_SYNC, (d, req) => lms.syncEnrolmentToCrm(d, req, req.params.id)],
+  ['post', '/api/lms/enrolments/:id/create-crm-enrolment', P.LMS_CREATE_CRM_ENROLMENT,
+    (d, req) => lms.createCrmEnrolmentFor(d, req, req.params.id, req.body)]
+];
+
 // `deps` is injected so the same handlers can be unit-tested against a mocked
 // Zoho layer without a live Catalyst session.
 const deps = { zoho: z };
@@ -1042,6 +1156,14 @@ const wrapWrite = (handler) => async (req, res) => {
     auth.idempotencyStore(req, body);
     return res.status(200).json(body);
   } catch (err) {
+    if (err instanceof lms.LmsError) {
+      await auth.audit(req, {
+        action: `${req.method} ${req.path}`, entityType: 'lms',
+        recordId: req.params && req.params.id ? String(req.params.id) : null,
+        changedFields: [], result: `error:${err.code}`
+      });
+      return fail(res, err.status, err.code, err.message, 'lms');
+    }
     if (err instanceof writes.AppError) {
       await auth.audit(req, {
         action: `${req.method} ${req.path}`, entityType: null,
@@ -1079,6 +1201,36 @@ WRITE_ROUTES.forEach(([method, path, permission, handler]) => {
     auth.requireAuth, auth.checkOrigin, auth.rateLimit, auth.requireJson,
     auth.requirePermission(permission),
     wrapWrite(handler));
+});
+
+/**
+ * LMS writes use the same middleware chain, so authentication, origin, rate
+ * limiting, JSON and permission checks are identical. Only the response shaping
+ * differs: these handlers return the record itself.
+ */
+const wrapLmsWrite = (handler) => async (req, res) => {
+  try {
+    const replayed = auth.idempotencyLookup(req);
+    if (replayed) return res.status(200).json({ ...replayed, meta: { ...(replayed.meta || {}), idempotentReplay: true } });
+
+    const data = await handler(deps, req);
+    const body = { data, meta: { retrievedAt: new Date().toISOString(), source: 'catalyst-lms', demonstrationDataset: true } };
+    auth.idempotencyStore(req, body);
+    return res.status(200).json(body);
+  } catch (err) {
+    if (err instanceof lms.LmsError) return fail(res, err.status, err.code, err.message, 'lms');
+    if (err instanceof writes.AppError) return fail(res, err.status, err.code, err.message);
+    const s2 = z.safeError(err, err.__service || 'zoho');
+    return fail(res, s2.status >= 400 && s2.status < 600 ? s2.status : 502,
+      err.__crmCode || 'UPSTREAM_ERROR', s2.detail, s2.service);
+  }
+};
+
+LMS_WRITE_ROUTES.forEach(([method, path, permission, handler]) => {
+  app[method](path,
+    auth.requireAuth, auth.checkOrigin, auth.rateLimit, auth.requireJson,
+    auth.requirePermission(permission),
+    wrapLmsWrite(handler));
 });
 
 app.use((req, res) => fail(res, 404, 'NO_ROUTE', 'Unknown endpoint.'));

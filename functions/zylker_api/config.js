@@ -4,8 +4,8 @@
  * environment so that nothing sensitive is ever compiled into the client.
  *
  * Zoho EU data centre is the default because the Zylker Academy CRM org, the
- * Learn portal (learn.zoho.eu), the Books org and the Catalyst project
- * (catalystserverless.eu) all live in the EU DC.
+ * Books org and the Catalyst project (catalystserverless.eu) all live in the
+ * EU DC.
  *
  * No OAuth client id, client secret, refresh token or access token appears in
  * this file or anywhere else in the repository. Upstream calls are authorised
@@ -37,20 +37,15 @@ module.exports = {
     connector: process.env.CRM_CONNECTOR || 'zylker_zoho',
     connection: process.env.CRM_CONNECTION || 'zylker_zoho'
   },
-  learn: {
-    // Listing endpoint: GET {base}/portal/{hub}/course?view=author&limit=99
-    baseUrl: process.env.ZOHO_LEARN_BASE_URL || 'https://learn.zoho.eu/learn/api/v1',
-    portalUrl: process.env.ZOHO_LEARN_PORTAL_URL || 'https://learn.zoho.eu',
-    hubUrl: process.env.ZOHO_LEARN_HUB_URL || 'zylker-academy',
-    hubId: process.env.ZOHO_LEARN_HUB_ID || '178262000000002002',
-    listLimit: Number(process.env.ZOHO_LEARN_LIST_LIMIT || 99),
-    // Verified public course URL pattern, e.g.
-    // https://learn.zoho.eu/portal/zylker-academy/course/sust-101-sustainable-business-practices
-    courseUrlTemplate: process.env.LEARN_COURSE_URL_TEMPLATE || '{portal}/portal/{hub}/course/{slug}',
-    connector: process.env.LEARN_CONNECTOR || 'zylker_learn',
-    connection: process.env.LEARN_CONNECTION || 'zylker_learn',
-    customPortalId: process.env.LEARN_CUSTOM_PORTAL_ID || null,
-    customPortalUrl: process.env.LEARN_CUSTOM_PORTAL_URL || null
+  // External LMS Connector. The dataset lives in the Catalyst Data Store —
+  // there is no outbound connection to any LMS product, and no OAuth
+  // credential, portal id or provider endpoint is involved. Provider names are
+  // simulated source labels on Catalyst rows.
+  lms: {
+    coursesTable: process.env.LMS_COURSES_TABLE || 'lms_courses',
+    enrolmentsTable: process.env.LMS_ENROLMENTS_TABLE || 'lms_enrolments',
+    syncLogTable: process.env.LMS_SYNC_LOG_TABLE || 'lms_sync_log',
+    label: 'External LMS Connector — Demonstration dataset'
   },
   books: {
     // EU Books API domain, matching the data centre of the rest of the estate.

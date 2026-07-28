@@ -4,8 +4,8 @@ import { useApi, useAction } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
-  Async, Card, Pill, SourceBadge, ReadOnlyBadge, RefBadge, ConfirmDialog,
-  SectionUnavailable, useToast, fmtDate, fmtMoney
+  Async, Card, Pill, Progress, SourceBadge, ReadOnlyBadge, DemoDataBadge, RefBadge,
+  ConfirmDialog, SectionUnavailable, useToast, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import { friendlyError } from '../components/Form.jsx';
 import ActivityLog from '../components/ActivityLog.jsx';
@@ -14,10 +14,10 @@ import ActivityLog from '../components/ActivityLog.jsx';
  * Student 360.
  *
  * The page is assembled from three systems. The CRM half is the page's spine
- * and always renders; the Learn and Books sections each report their own state,
- * so an outage in either degrades one card rather than the whole record. The
- * backend guarantees this by resolving each integration independently and never
- * rejecting the response because one of them failed.
+ * and always renders; the Learning and Books sections each report their own
+ * state, so an outage in either degrades one card rather than the whole record.
+ * The backend guarantees this by resolving each integration independently and
+ * never rejecting the response because one of them failed.
  */
 
 /* --------------------------- Zoho Books section --------------------------- */
@@ -218,18 +218,16 @@ export default function Student360() {
                 </dl>
               </Card>
 
-              <Card
-                title="Learner platform"
-                action={<div className="head-actions"><SourceBadge source="learn" /><ReadOnlyBadge system="Zoho Learn" /></div>}
-              >
+              <Card title="Learner platform identifiers" action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Provider</dt><dd>{s.lms.provider || '—'}</dd>
-                  <dt>Learn user id</dt><dd className="mono">{s.lms.userId || <span className="muted">Not linked</span>}</dd>
-                  <dt>Last sync</dt><dd>{s.lms.lastSync ? fmtDate(s.lms.lastSync) : '—'}</dd>
+                  <dt>Provider</dt><dd>{s.lms.provider || <span className="muted">—</span>}</dd>
+                  <dt>LMS user id</dt><dd className="mono">{s.lms.userId || <span className="muted">Not linked</span>}</dd>
+                  <dt>Last sync</dt><dd>{s.lms.lastSync ? fmtDate(s.lms.lastSync) : <span className="muted">—</span>}</dd>
                 </dl>
                 <p className="note">
-                  These fields are maintained manually in CRM. This application does not
-                  create learners or enrol them in Zoho Learn.
+                  These three fields live on the CRM Contact and are set by hand. The
+                  learning records below come from the external LMS connector and are a
+                  separate source — the two can disagree.
                 </p>
               </Card>
             </div>
@@ -297,40 +295,74 @@ export default function Student360() {
             </Card>
 
             <Card
-              title="Programmes and course mapping"
-              action={<div className="head-actions"><SourceBadge source="crm" /><SourceBadge source="learn" /></div>}
+              title="Learning"
+              action={(
+                <div className="head-actions">
+                  <SourceBadge source="lms" />
+                  <DemoDataBadge />
+                  <Link className="btn" to="/learning/enrolments">Learning Hub</Link>
+                </div>
+              )}
             >
+              {d.learning.length ? (
+                <div className="t-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Course</th>
+                        <th scope="col">Provider</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Progress</th>
+                        <th scope="col">Score</th>
+                        <th scope="col">Certificate</th>
+                        <th scope="col">Last activity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {d.learning.map((l) => (
+                        <tr key={l.id}>
+                          <td>
+                            <Link to={`/learning/enrolments/${l.id}`}>
+                              {l.course ? l.course.name : l.externalCourseId || l.externalEnrolmentId}
+                            </Link>
+                          </td>
+                          <td>{l.provider}</td>
+                          <td><Pill value={l.lmsStatus} /></td>
+                          <td><Progress value={l.progressPercentage} /></td>
+                          <td className="mono">
+                            {l.assessmentScore === null ? <span className="muted">—</span> : l.assessmentScore}
+                          </td>
+                          <td>
+                            <Pill value={l.certificateStatus} />
+                            {l.certificateUrl && (
+                              <> <a href={l.certificateUrl} target="_blank" rel="noreferrer noopener">View</a></>
+                            )}
+                          </td>
+                          <td>{l.lastActivityTime ? fmtDate(l.lastActivityTime) : <span className="muted">—</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="muted">
+                  No external learning records are mapped to this student. A record exists in
+                  the connector only once it has been matched to this CRM contact.
+                </p>
+              )}
+            </Card>
+
+            <Card title="Programmes" action={<SourceBadge source="crm" />}>
               {d.programmes.length ? (
                 <ul className="plain-list">
                   {d.programmes.map((p) => (
                     <li key={p.id}>
                       <Link to={`/programmes/${p.id}`}>{p.name}</Link>
-                      {p.learnCourse ? (
-                        <>
-                          {' · '}
-                          <a href={p.learnCourse.url} target="_blank" rel="noreferrer noopener">
-                            {p.learnCourse.name} in Zoho Learn
-                          </a>
-                          {p.learnMatch.inferred && (
-                            <span className="pill warn" title="Matched on course name because no identifier was stored">
-                              Inferred match
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="muted"> · no Zoho Learn course mapped</span>
-                      )}
+                      {p.code && <span className="mono muted"> {p.code}</span>}
                     </li>
                   ))}
                 </ul>
               ) : <p className="muted">No programmes are linked to this student.</p>}
-
-              {d.learn.status !== 'connected' && (
-                <p className="note">
-                  Zoho Learn is unavailable ({d.learn.label}), so course details could not be
-                  loaded. Programme information above is from CRM and is unaffected.
-                </p>
-              )}
             </Card>
 
             <InvoiceSection invoices={d.invoices} />

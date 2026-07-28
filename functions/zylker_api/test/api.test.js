@@ -75,9 +75,15 @@ test('every route except /api/health rejects an unauthenticated caller', async (
   const protectedRoutes = [
     ['GET', '/api/me'], ['GET', '/api/dashboard'], ['GET', '/api/students'],
     ['GET', '/api/students/123'], ['GET', '/api/applications'], ['GET', '/api/programmes'],
-    ['GET', '/api/intakes'], ['GET', '/api/enrolments'], ['GET', '/api/courses'],
+    ['GET', '/api/intakes'], ['GET', '/api/enrolments'],
     ['GET', '/api/invoices'], ['GET', '/api/invoices/1'], ['GET', '/api/students/1/invoices'],
-    ['GET', '/api/integration-status'], ['GET', '/api/activity'], ['GET', '/api/diag']
+    ['GET', '/api/integration-status'], ['GET', '/api/activity'], ['GET', '/api/diag'],
+    // External LMS Connector — the Catalyst dataset is no less protected than
+    // the CRM data it maps to.
+    ['GET', '/api/lms/courses'], ['GET', '/api/lms/courses/1'],
+    ['GET', '/api/lms/enrolments'], ['GET', '/api/lms/enrolments/1'],
+    ['GET', '/api/lms/sync-log'],
+    ['GET', '/api/students/1/learning'], ['GET', '/api/enrolments/1/learning']
   ];
   for (const [method, path] of protectedRoutes) {
     const res = await request(server, method, path);
@@ -98,7 +104,17 @@ test('every route except /api/health rejects an unauthenticated caller', async (
     ['DELETE', '/api/intakes/1', undefined],
     ['POST', '/api/enrolments', { studentId: '1' }],
     ['POST', '/api/enrolments/1/complete', {}],
-    ['DELETE', '/api/enrolments/1', undefined]
+    ['DELETE', '/api/enrolments/1', undefined],
+    ['POST', '/api/lms/courses', { provider: 'Moodle', externalCourseId: 'X', name: 'X' }],
+    ['PATCH', '/api/lms/courses/1', { name: 'X' }],
+    ['POST', '/api/lms/courses/1/map', { programmeId: '1' }],
+    ['POST', '/api/lms/courses/1/sync', {}],
+    ['POST', '/api/lms/courses/bulk-sync', {}],
+    ['POST', '/api/lms/enrolments', { provider: 'Moodle', externalEnrolmentId: 'X' }],
+    ['PATCH', '/api/lms/enrolments/1', { progressPercentage: 10 }],
+    ['POST', '/api/lms/enrolments/1/map', {}],
+    ['POST', '/api/lms/enrolments/1/sync', {}],
+    ['POST', '/api/lms/enrolments/1/create-crm-enrolment', { intakeId: '1' }]
   ];
   for (const [method, path, body] of writeRoutes) {
     const res = await request(server, method, path, { body });

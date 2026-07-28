@@ -4,7 +4,7 @@ import { useApi, useAction } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
-  Async, Card, Pill, SourceBadge, ReadOnlyBadge, ConfirmDialog, Modal, useToast, fmtDate, fmtMoney
+  Async, Card, Pill, SourceBadge, DemoDataBadge, ConfirmDialog, Modal, useToast, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
 
@@ -73,10 +73,10 @@ function EditDialog({ programme, onClose, onDone }) {
           <Field id="tuitionFee" label="Tuition fee">
             <input type="number" min="0" value={form.tuitionFee} onChange={set('tuitionFee')} />
           </Field>
-          <Field id="lmsCourseId" label="Zoho Learn course id">
+          <Field id="lmsCourseId" label="LMS course id">
             <input value={form.lmsCourseId} onChange={set('lmsCourseId')} />
           </Field>
-          <Field id="lmsCourseUrl" label="Zoho Learn course URL">
+          <Field id="lmsCourseUrl" label="LMS course URL">
             <input value={form.lmsCourseUrl} onChange={set('lmsCourseUrl')} />
           </Field>
         </div>
@@ -176,34 +176,29 @@ export default function ProgrammeDetail() {
               </Card>
 
               <Card
-                title="Zoho Learn course"
-                action={<div className="head-actions"><SourceBadge source="learn" /><ReadOnlyBadge system="Zoho Learn" /></div>}
+                title="LMS course"
+                action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
               >
-                {d.learnCourse ? (
+                {d.lmsCourse ? (
                   <>
                     <dl className="dl">
                       <dt>Course</dt>
-                      <dd>
-                        <a href={d.learnCourse.url} target="_blank" rel="noreferrer noopener">
-                          {d.learnCourse.name}
-                        </a>
-                      </dd>
-                      <dt>Publication status</dt>
-                      <dd><Pill value={d.learnCourse.published ? 'Published' : 'Not published'} /></dd>
-                      <dt>Lessons</dt><dd className="mono">{d.learnCourse.lessonCount ?? '—'}</dd>
-                      <dt>Matched on</dt>
-                      <dd>
-                        {d.learnMatch.matchedOn || '—'}
-                        {d.learnMatch.inferred && <span className="pill warn">Inferred</span>}
-                      </dd>
+                      <dd><Link to={`/learning/courses/${d.lmsCourse.id}`}>{d.lmsCourse.name}</Link></dd>
+                      <dt>Provider</dt><dd>{d.lmsCourse.provider}</dd>
+                      <dt>External course id</dt><dd className="mono">{d.lmsCourse.externalCourseId}</dd>
+                      <dt>Delivery type</dt>
+                      <dd>{d.lmsCourse.deliveryType || <span className="muted">—</span>}</dd>
+                      <dt>Publication</dt><dd><Pill value={d.lmsCourse.publicationStatus} /></dd>
+                      <dt>Sync status</dt><dd><Pill value={d.lmsCourse.syncStatus} /></dd>
                     </dl>
-                    {d.learnCourse.description && <p className="muted">{d.learnCourse.description}</p>}
+                    {d.lmsCourse.description && <p className="muted">{d.lmsCourse.description}</p>}
                   </>
                 ) : (
                   <p className="muted">
-                    {d.learn.status === 'connected'
-                      ? 'No Zoho Learn course is mapped. Add the Learn course id in Edit to map one by identifier.'
-                      : `Zoho Learn is unavailable (${d.learn.label}). Course details are not shown; CRM data above is unaffected.`}
+                    No LMS course is mapped to this programme. Map one from the{' '}
+                    <Link to="/learning/courses">Learning Hub</Link> — the mapping is made
+                    against this programme&rsquo;s CRM id, so it cannot attach to the wrong
+                    record.
                   </p>
                 )}
               </Card>

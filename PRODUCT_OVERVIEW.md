@@ -16,9 +16,10 @@ place, on top of systems the institution already owns.
 |---|---|
 | **Students** | Search and filter, create, edit, archive, delete when safe. Duplicate detection on normalised email. |
 | **Applications** | Create against an existing or brand-new applicant, edit, move through admissions stages, withdraw, delete when permitted. |
-| **Programmes** | Create, edit, activate/deactivate, map to a Zoho Learn course, delete only when nothing depends on them. |
+| **Programmes** | Create, edit, activate/deactivate, map to an external LMS course, delete only when nothing depends on them. |
 | **Intakes** | Create, edit, open/close, with capacity, delivery method, location, dates, and live application/enrolment counts. |
-| **Enrolments** | Create, edit, complete, cancel, delete when safe, with student/programme/intake links and Learn sync status. |
+| **Enrolments** | Create, edit, complete, cancel, delete when safe, with student/programme/intake links and LMS sync status. |
+| **Learning Hub** | Browse the external course catalogue and learner records, map them to CRM programmes, students and enrolments, push progress into CRM, and read the synchronisation log. |
 
 All of it reads and writes **live Zoho CRM records**. There is no separate
 database to reconcile, and no nightly sync to go stale.
@@ -26,22 +27,26 @@ database to reconcile, and no nightly sync to go stale.
 ### The three integrations
 
 - **Zoho CRM** — the operational system of record. Read and write.
-- **Zoho Learn** — course catalogue, publication status, course URLs, mapped to
-  CRM programmes by identifier where one is stored and by name otherwise
-  (flagged as an inferred match, never silently). Read-only.
+- **External LMS connector (Catalyst Data Store)** — a provider-neutral course
+  catalogue and learner progress dataset, mapped to CRM programmes, students and
+  enrolments **by identifier only**, never by name. The provider labels (Moodle,
+  Canvas, TrainerCentral, Generic SCORM LMS) and the progress data are a
+  demonstration dataset; the mapping and the push into CRM are real authenticated
+  writes, verified by reading the record back.
 - **Zoho Books** — invoice list, detail, line items, payments, filters, and a
   per-student finance position. Read-only.
 
 ### The parts that make it a product rather than a set of forms
 
 **Student 360.** One page holding personal details, current status,
-applications, enrolments, programme and intake, the mapped Learn course, the
-Books customer link, related invoices, outstanding balance and recent activity.
-Each integration section loads independently, so Learn or Books being
-unreachable degrades one card instead of the page.
+applications, enrolments, programme and intake, external learning records with
+progress and certificates, the Books customer link, related invoices,
+outstanding balance and recent activity. Each integration section loads
+independently, so the LMS connector or Books being unreachable degrades one card
+instead of the page.
 
-**A dashboard where every figure names its source.** Nine KPIs badged CRM, Learn
-or Books, each linking to the filtered list behind it. A source that fails reads
+**A dashboard where every figure names its source.** Fourteen KPIs badged CRM,
+External LMS or Books, each linking to the filtered list behind it. A source that fails reads
 "Not available" — never zero. That distinction matters: "you have no overdue
 invoices" and "we could not reach Books" are very different messages to give a
 finance officer.
@@ -179,15 +184,16 @@ enrol. Institutions over-offer by guesswork; a model turns that into a number,
 and directly affects revenue forecasting and cohort planning.
 → *Shows: ML on the customer's own data, no data science team required.*
 
-**8. Two-way Zoho Learn provisioning** · *Catalyst Functions + Circuits*
-Today Learn is read-only and enrolment sync is manual. Automatically create the
-learner and enrol them on the mapped course when an enrolment is created, then
-sync progress back. This is the loop that makes the CRM record tell the truth
-about whether a student is actually studying.
+**8. Two-way LMS provisioning against a live provider** · *Catalyst Functions + Circuits*
+Today the connector holds a demonstration dataset and the push to CRM is
+triggered by hand. Point it at a real Moodle or Canvas tenant, create the learner
+and enrol them on the mapped course when an enrolment is created, then sync
+progress back on a schedule. This is the loop that makes the CRM record tell the
+truth about whether a student is actually studying.
 → *Shows: orchestration across Zoho apps with retry and error handling.*
 
 **9. Attendance and at-risk alerts** · *Catalyst Circuits + Signals*
-Combine Learn progress, attendance and finance status into an at-risk flag, and
+Combine LMS progress, attendance and finance status into an at-risk flag, and
 alert the student's tutor. Retention is worth more than recruitment to most
 institutions, and nobody currently has this view.
 → *Shows: multi-source workflow orchestration.*
@@ -223,7 +229,7 @@ staff intervention.
 4. **Walk it to Enrolled** — an enrolment appears automatically. Click again:
    still one enrolment.
 5. **Try to oversell an intake** — refused, with an administrator override.
-6. **Student 360** — CRM, Learn and Books on one page.
+6. **Student 360** — CRM, external learning records and Books on one page.
 7. **Break Books** (unset the org id) — dashboard still loads, one card reads
    "Not available".
 8. **Sign in as Admissions instead of Administrator** — Finance disappears from
@@ -238,7 +244,7 @@ three integrations is the difference between a demo and a system.
 
 **Verified against the live deployment:** authentication and role resolution;
 student create and read-back; application create; Books invoice retrieval;
-Learn course catalogue; the production build; and 29 offline tests covering the
+LMS course mapping and push to CRM; the production build; and 32 offline tests covering the
 permission matrix, stage transitions, idempotent enrolment, capacity, duplicate
 prevention, date validation and payload allow-listing.
 
@@ -246,7 +252,9 @@ prevention, date validation and payload allow-listing.
 notably the capacity override, delete-refusal paths, and Student-to-Books
 matching against a student with an ambiguous email.
 
-**Known limitations:** Learn and Books are read-only this phase; CRM Contacts has
+**Known limitations:** the learning dataset is a demonstration dataset in Catalyst
+rather than a live provider connection, and Books is read-only this phase; six LMS
+fields have no CRM equivalent and are held in Catalyst; CRM Contacts has
 no Books customer-id field so student-to-invoice matching relies on exact email;
 Books totals on the dashboard are capped and flagged "Partial" beyond that; CRM
 lists are capped at 200 rows per module per request.

@@ -17,7 +17,17 @@ const meta = (module_, r) => ({
 
 /** Zoho lookups arrive as { id, name } - flatten them for the client. */
 const lookup = (v) => (v && v.id ? { id: v.id, name: v.name || null } : null);
-const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+/**
+ * Anything that does not parse to a finite number is absent, not zero and not
+ * NaN. A `NaN` survives a `=== null` check in the client and renders as "NaN%"
+ * on a student's record, which reads as a fault in the data rather than in the
+ * conversion.
+ */
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 const str = (v) => (v === null || v === undefined || v === '' ? null : String(v));
 
 function student(r) {
@@ -129,7 +139,8 @@ function enrolment(r) {
       enrolmentId: str(r.LMS_Enrolment_ID),
       progressPercentage: num(r.Progress_Percentage),
       lastSync: str(r.Last_LMS_Sync),
-      // Manually maintained in CRM - the UI must label it as such.
+      // Written onto the CRM record by the LMS connector's last sync. It is a
+      // snapshot, not the connector's current position, and the UI says so.
       syncStatus: str(r.External_Sync_Status)
     },
     modifiedTime: str(r.Modified_Time),
@@ -137,77 +148,4 @@ function enrolment(r) {
   };
 }
 
-/** Builds a public Learn course URL from the configured template. */
-function courseUrl(slug) {
-  if (!slug) return null;
-  return cfg.learn.courseUrlTemplate
-    .replace('{portal}', String(cfg.learn.portalUrl).replace(/\/+$/, ''))
-    .replace('{hub}', cfg.learn.hubUrl)
-    .replace('{slug}', slug);
-}
-
-function course(c) {
-  const slug = str(c.url);
-  return {
-    id: str(c.id),
-    name: str(c.name),
-    description: str(c.description),
-    slug,
-    // Absolute link built from the configured, verified URL template.
-    url: courseUrl(slug),
-    status: str(c.status),
-    published: String(c.status || '').toUpperCase() === 'ACTIVE',
-    durationText: str(c.durationText),
-    lessonCount: num(c.lessonCount),
-    enrollmentType: str(c.enrollmentType),
-    bannerUrl: str(c.bannerUrl)
-  };
-}
-
-/** Normalises a course/programme title for last-resort comparison. */
-function normName(v) {
-  return String(v || '')
-    .replace(/^\s*\[[^\]]*\]\s*/, '')   // drop a [CODE] prefix
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-}
-
-/**
- * Matches a CRM programme to a Learn course.
- * Identifier matches (Learn Course ID, then stored course URL) are authoritative.
- * A normalised-name match is only used when no identifier resolves, and is
- * flagged as inferred so the UI can say so.
- */
-function matchCourse(programme, courses) {
-  const none = { course: null, inferred: false, matchedOn: null };
-  if (!programme || !Array.isArray(courses) || !courses.length) return none;
-
-  const id = programme.lms && programme.lms.courseId;
-  if (id) {
-    const hit = courses.find((c) => c.id && String(c.id) === String(id));
-    if (hit) return { course: hit, inferred: false, matchedOn: 'courseId' };
-  }
-
-  const storedUrl = programme.lms && programme.lms.courseUrl;
-  if (storedUrl) {
-    const slug = String(storedUrl).split('?')[0].split('/').filter(Boolean).pop();
-    const hit = courses.find((c) => c.slug && c.slug === slug);
-    if (hit) return { course: hit, inferred: false, matchedOn: 'courseUrl' };
-  }
-
-  const target = normName(programme.name);
-  if (target) {
-    const hits = courses.filter((c) => normName(c.name) === target);
-    if (hits.length === 1) return { course: hits[0], inferred: true, matchedOn: 'name' };
-  }
-  return none;
-}
-
-/** Derives the programme code from a "[CODE] Name" Learn course title. */
-function codeFromCourseName(name) {
-  const m = /^\s*\[([^\]]+)\]/.exec(name || '');
-  return m ? m[1].trim() : null;
-}
-
-module.exports = { student, application, programme, intake, enrolment, course, courseUrl, codeFromCourseName, normName, matchCourse };
+module.exports = { student, application, programme, intake, enrolment };

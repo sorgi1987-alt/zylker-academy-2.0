@@ -192,95 +192,13 @@ async function crmDelete(req, module_, id) {
   return firstWriteResult(res.data);
 }
 
-/* ------------------------------ LEARN --------------------------------- */
-
-/**
- * Zoho wraps list payloads inconsistently across services. Try the documented
- * shape first, then known variants. Returns null (not []) when no array is
- * found anywhere, so "empty list" and "shape not recognised" stay distinct.
- */
-function extractCourses(body) {
-  if (!body || typeof body !== 'object') return null;
-  const candidates = [
-    body.data,
-    body.data && body.data.data,
-    body.data && body.data.courses,
-    body.data && body.data.DATA,
-    body.DATA,
-    body.courses,
-    body.result && body.result.data
-  ];
-  for (const c of candidates) if (Array.isArray(c)) return c;
-  return null;
-}
-
-/** Structure-only description of a payload: keys and types, never values. */
-function shapeOf(body, depth = 2) {
-  if (body === null || body === undefined) return String(body);
-  if (Array.isArray(body)) return `array(${body.length})`;
-  if (typeof body !== 'object') return typeof body;
-  if (depth <= 0) return 'object';
-  const out = {};
-  for (const k of Object.keys(body).slice(0, 25)) out[k] = shapeOf(body[k], depth - 1);
-  return out;
-}
-
-/**
- * Lists Learn courses via the portal course endpoint.
- * The default "learn" view is learner-scoped and returns nothing for an author,
- * so we request view=author first and fall back to view=all. The view that
- * produced results is reported back so the UI can be explicit about state.
- *
- * States: connected_with_courses | connected_no_courses | auth_error | unavailable
- */
-async function learnCourses(req) {
-  const creds = await credentials(req, cfg.learn.connection);
-  const http = client(cfg.learn.baseUrl, creds);
-  const path = `/portal/${cfg.learn.hubUrl}/course`;
-
-  let lastErr = null;
-  let lastShape = null;
-  for (const view of ['author', 'all']) {
-    try {
-      const res = await http.get(path, { params: { view, limit: cfg.learn.listLimit } });
-      const body = res.data || {};
-      const arr = extractCourses(body);
-      if (arr && arr.length) {
-        return { courses: arr, view, apiStatus: body.status || null, state: 'connected_with_courses', error: null };
-      }
-      // Remember the last shape so diagnostics can explain an empty result.
-      lastShape = { view, httpStatus: res.status, recognised: arr !== null, shape: shapeOf(body) };
-      lastErr = null;
-    } catch (err) {
-      lastErr = err;
-      const st = err && err.response ? err.response.status : null;
-      // Auth problems will not be fixed by trying another view.
-      if (st === 401 || st === 403) break;
-    }
-  }
-
-  if (lastErr) {
-    const st = lastErr.response ? lastErr.response.status : null;
-    return {
-      courses: [], view: null, apiStatus: null,
-      state: (st === 401 || st === 403) ? 'auth_error' : 'unavailable',
-      error: safeError(lastErr, 'learn')
-    };
-  }
-  return {
-    courses: [], view: 'all', apiStatus: null,
-    state: 'connected_no_courses', error: null,
-    diagnostic: lastShape
-  };
-}
-
 /**
  * Connection reachability probe. Returns booleans and redacted messages only -
  * never a token, client id or secret.
  */
 async function probe(req) {
   const out = {};
-  for (const [label, name] of [['crm', cfg.crm.connection], ['learn', cfg.learn.connection]]) {
+  for (const [label, name] of [['crm', cfg.crm.connection], ['books', cfg.books.connection]]) {
     try {
       const c = await credentials(req, name);
       out[label] = {
@@ -348,7 +266,7 @@ async function crmPicklist(req, module_, fieldApiName) {
 module.exports = {
   crmGet, crmQuery, crmGetRecord, crmCreate, crmUpdate, crmDelete,
   crmModuleLabels, crmPicklist, fieldList,
-  learnCourses, credentials, probe, safeError, crmErrorInfo, redact, extractCourses, shapeOf,
+  credentials, probe, safeError, crmErrorInfo, redact,
   // Exposed so books.js can build its own authorised client without
   // duplicating credential handling.
   httpClient: client

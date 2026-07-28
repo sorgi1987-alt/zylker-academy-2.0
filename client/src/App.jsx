@@ -16,7 +16,11 @@ import Programmes from './pages/Programmes.jsx';
 import ProgrammeDetail from './pages/ProgrammeDetail.jsx';
 import Intakes from './pages/Intakes.jsx';
 import IntakeDetail from './pages/IntakeDetail.jsx';
-import Courses from './pages/Courses.jsx';
+import LearningCourses from './pages/LearningCourses.jsx';
+import LearningCourseDetail from './pages/LearningCourseDetail.jsx';
+import LearningEnrolments from './pages/LearningEnrolments.jsx';
+import LearningEnrolmentDetail from './pages/LearningEnrolmentDetail.jsx';
+import LearningSyncLog from './pages/LearningSyncLog.jsx';
 import Invoices from './pages/Invoices.jsx';
 import InvoiceDetail from './pages/InvoiceDetail.jsx';
 import IntegrationStatus from './pages/IntegrationStatus.jsx';
@@ -35,7 +39,7 @@ const LINKS = [
   ['/enrolments', 'Enrolments', 'enrolment:read'],
   ['/programmes', 'Programmes', 'programme:read'],
   ['/intakes', 'Intakes', 'intake:read'],
-  ['/courses', 'Course Catalogue', 'course:read'],
+  ['/learning/courses', 'Learning Hub', 'lms:read'],
   ['/invoices', 'Finance', 'invoice:read'],
   ['/integration', 'Integration Status', 'integration:read']
 ];
@@ -144,7 +148,7 @@ function AppShell() {
         </div>
         <div className="sidebar-foot">
           Signed in as <strong>{user.name}</strong> ({user.roleLabel}).
-          Zoho Learn and Zoho Books are read-only.
+          Zoho Books is read-only. Learning data is a demonstration dataset in Catalyst.
         </div>
       </nav>
 
@@ -178,7 +182,15 @@ function AppShell() {
           <Route path="/intakes" element={<Guarded permission="intake:read"><Intakes /></Guarded>} />
           <Route path="/intakes/:id" element={<Guarded permission="intake:read"><IntakeDetail /></Guarded>} />
 
-          <Route path="/courses" element={<Guarded permission="course:read"><Courses /></Guarded>} />
+          <Route path="/learning" element={<Navigate to="/learning/courses" replace />} />
+          <Route path="/learning/courses" element={<Guarded permission="lms:read"><LearningCourses /></Guarded>} />
+          <Route path="/learning/courses/:id" element={<Guarded permission="lms:read"><LearningCourseDetail /></Guarded>} />
+          <Route path="/learning/enrolments" element={<Guarded permission="lms:read"><LearningEnrolments /></Guarded>} />
+          <Route path="/learning/enrolments/:id" element={<Guarded permission="lms:read"><LearningEnrolmentDetail /></Guarded>} />
+          <Route path="/learning/sync-log" element={<Guarded permission="lms:read"><LearningSyncLog /></Guarded>} />
+
+          {/* The Zoho Learn catalogue was replaced by the Learning Hub; keep old links working. */}
+          <Route path="/courses" element={<Navigate to="/learning/courses" replace />} />
 
           <Route path="/invoices" element={<Guarded permission="invoice:read"><Invoices /></Guarded>} />
           <Route path="/invoices/:id" element={<Guarded permission="invoice:read"><InvoiceDetail /></Guarded>} />

@@ -14,7 +14,7 @@ import * as catalystAuth from './catalystAuth.js';
  *
  * Consequently NO application data is requested until `status === 'authenticated'`.
  * The provider renders neither routes nor pages before then, so there is no
- * path on which a CRM, Learn or Books call can be issued by an unauthenticated
+ * path on which a CRM, LMS or Books call can be issued by an unauthenticated
  * visitor.
  */
 

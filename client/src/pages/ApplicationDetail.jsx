@@ -4,7 +4,7 @@ import { useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
-  Async, Card, Pill, SourceBadge, ReadOnlyBadge, RefBadge, ConfirmDialog, Modal,
+  Async, Card, Pill, SourceBadge, RefBadge, ConfirmDialog, Modal,
   useToast, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
@@ -258,33 +258,12 @@ export default function ApplicationDetail() {
               </Card>
             </div>
 
-            <Card
-              title="Zoho Learn course"
-              action={<div className="head-actions"><SourceBadge source="learn" /><ReadOnlyBadge system="Zoho Learn" /></div>}
-            >
-              {d.learnCourse ? (
-                <>
-                  <p>
-                    <a href={d.learnCourse.url} target="_blank" rel="noreferrer noopener">
-                      {d.learnCourse.name}
-                    </a>{' '}
-                    <Pill value={d.learnCourse.published ? 'Published' : 'Not published'} />
-                    {d.learnMatch.inferred && (
-                      <span className="pill warn" title="Matched on course name, not on a stored identifier">
-                        Inferred match
-                      </span>
-                    )}
-                  </p>
-                  {d.learnCourse.description && <p className="muted">{d.learnCourse.description}</p>}
-                </>
-              ) : (
-                <p className="muted">
-                  {d.learn.status === 'connected'
-                    ? 'No Zoho Learn course is mapped to this programme.'
-                    : `Zoho Learn is unavailable (${d.learn.label}), so course details could not be loaded.`}
-                </p>
-              )}
-            </Card>
+            {/*
+              * An application has no learning record of its own: learning starts at
+              * enrolment. The course a programme maps to is shown on the programme, and
+              * a learner's progress on the enrolment — putting a course card here would
+              * imply this applicant is on it.
+              */}
 
             <Card title="Activity">
               <ActivityLog rows={d.activity} />
