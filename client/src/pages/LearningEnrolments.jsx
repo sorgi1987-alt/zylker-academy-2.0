@@ -3,9 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList } from '../useApi.js';
 import { api } from '../api.js';
 import {
-  Async, Card, Pill, Progress, Pagination, SearchBox, FilterSelect, SourceBadge, DemoDataBadge, fmtDate
+  Async, Card, Pill, Progress, Pagination, SearchBox, FilterSelect, FilterChips,
+  SourceBadge, DemoDataBadge, fmtDate
 } from '../components/Ui.jsx';
 import LearningNav from '../components/LearningNav.jsx';
+
+const ACTIVITY_OPTIONS = [{ value: 'stale', label: 'No activity for 30 days or more' }];
+const activityLabel = (v) => (ACTIVITY_OPTIONS.find((o) => o.value === v) || {}).label || v;
 
 /**
  * Learner records held by the connector.
@@ -22,7 +26,9 @@ export default function LearningEnrolments() {
       provider: params.get('provider') || undefined,
       lmsStatus: params.get('lmsStatus') || undefined,
       mappingStatus: params.get('mappingStatus') || undefined,
-      syncStatus: params.get('syncStatus') || undefined
+      syncStatus: params.get('syncStatus') || undefined,
+      // Destination for the dashboard's inactive-learner card.
+      activity: params.get('activity') || undefined
     }
   });
 
@@ -81,7 +87,45 @@ export default function LearningEnrolments() {
             options={meta.syncStatuses || []}
             allLabel="Any"
           />
+          <FilterSelect
+            id="lms-enrolment-activity"
+            label="Activity"
+            value={list.filters.activity || ''}
+            onChange={(v) => list.setFilter('activity', v)}
+            options={ACTIVITY_OPTIONS}
+            allLabel="Any"
+          />
         </div>
+
+        <FilterChips
+          chips={[
+            list.filters.provider && {
+              key: 'provider', label: 'Provider', value: list.filters.provider,
+              onClear: () => list.setFilter('provider', '')
+            },
+            list.filters.lmsStatus && {
+              key: 'lmsStatus', label: 'LMS status', value: list.filters.lmsStatus,
+              onClear: () => list.setFilter('lmsStatus', '')
+            },
+            list.filters.mappingStatus && {
+              key: 'mappingStatus', label: 'Mapping', value: list.filters.mappingStatus,
+              onClear: () => list.setFilter('mappingStatus', '')
+            },
+            list.filters.syncStatus && {
+              key: 'syncStatus', label: 'Sync', value: list.filters.syncStatus,
+              onClear: () => list.setFilter('syncStatus', '')
+            },
+            list.filters.activity && {
+              key: 'activity', label: 'Activity', value: activityLabel(list.filters.activity),
+              onClear: () => list.setFilter('activity', '')
+            },
+            list.search && {
+              key: 'search', label: 'Search', value: list.search,
+              onClear: () => list.setSearch('')
+            }
+          ]}
+          onClearAll={list.clearFilters}
+        />
 
         <Async state={list} empty={{ title: 'No learner records match', message: 'Try clearing a filter.' }}>
           {(rows, m) => (

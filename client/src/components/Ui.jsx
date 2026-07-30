@@ -259,6 +259,35 @@ export const FilterSelect = ({ id, label, value, onChange, options, allLabel = '
 );
 
 /**
+ * Shows which filters are currently narrowing a list, and lets each one be
+ * removed.
+ *
+ * This exists because a dashboard card can arrive here with a filter already
+ * applied. Without a visible chip the destination looks like the whole list but
+ * is not, and "where did the other records go" is a much worse question than
+ * one extra row of controls.
+ */
+export const FilterChips = ({ chips = [], onClearAll }) => {
+  const active = chips.filter(Boolean);
+  if (!active.length) return null;
+  return (
+    <div className="chips" role="group" aria-label="Active filters">
+      <span className="chips-label">Filtered by</span>
+      {active.map((c) => (
+        <span className="chip" key={c.key}>
+          <span className="chip-k">{c.label}</span>
+          <span className="chip-v">{c.value}</span>
+          <button type="button" onClick={c.onClear} aria-label={`Remove the ${c.label} filter`}>×</button>
+        </span>
+      ))}
+      {onClearAll && active.length > 0 && (
+        <button type="button" className="chip-clear" onClick={onClearAll}>Clear all</button>
+      )}
+    </div>
+  );
+};
+
+/**
  * Explains that one integration is unavailable without implying the page failed.
  * Used wherever an LMS or Books section sits beside CRM data that loaded fine.
  */
@@ -269,6 +298,63 @@ export const SectionUnavailable = ({ system, detail, onRetry }) => (
     {onRetry && <button type="button" className="btn" onClick={onRetry}>Try again</button>}
   </div>
 );
+
+/**
+ * Admissions funnel.
+ *
+ * Cumulative by design: each step counts everyone who reached it, including
+ * those who have since moved past it. That is what makes the fall between two
+ * steps the drop-off rate rather than a snapshot of who is sitting where — and
+ * the drop is stated in words beside each bar so it does not have to be
+ * eyeballed from the bar lengths.
+ */
+export const Funnel = ({ steps = [], emptyText = 'No applications recorded.' }) => {
+  if (!steps.length || !steps[0].count) {
+    return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText}</p>;
+  }
+  const top = steps[0].count || 1;
+  return (
+    <div className="funnel">
+      {steps.map((s, i) => {
+        const prev = i === 0 ? null : steps[i - 1].count;
+        const drop = prev && prev > 0 ? Math.round(((prev - s.count) / prev) * 100) : null;
+        return (
+          <div className="funnel-row" key={s.stage}>
+            <span className="nm">{s.stage}</span>
+            <span className="funnel-bar">
+              <span style={{ width: `${Math.max(1, (s.count / top) * 100)}%` }} />
+            </span>
+            <span className="ct">{s.count}</span>
+            <span className="drop">
+              {drop === null ? '' : drop > 0 ? `−${drop}%` : '—'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+/** Bar list of currency amounts, used for invoice ageing. */
+export const MoneyBarList = ({ data, order, currency, emptyText = 'No data yet.' }) => {
+  const keys = order || Object.keys(data || {});
+  const values = keys.map((k) => Number((data || {})[k] || 0));
+  const max = Math.max(...values, 1);
+  if (!keys.length || values.every((v) => v === 0)) {
+    return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText}</p>;
+  }
+  return (
+    <div>
+      {keys.map((k, i) => (
+        <div className="bar-row" key={k}>
+          <span className="nm">{k}</span>
+          <span className="bar"><span style={{ width: `${(values[i] / max) * 100}%` }} /></span>
+          <span className="ct mono" style={{ width: 96 }}>{fmtMoney(values[i], currency)}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export const BarList = ({ data, emptyText = 'No data yet.' }) => {
   const entries = Object.entries(data || {});

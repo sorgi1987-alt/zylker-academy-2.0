@@ -73,7 +73,7 @@ test('every route except /api/health rejects an unauthenticated caller', async (
   assert.equal(diagOff.status, 404, '/api/auth-diag is 404 unless AUTH_DIAG=true');
 
   const protectedRoutes = [
-    ['GET', '/api/me'], ['GET', '/api/dashboard'], ['GET', '/api/students'],
+    ['GET', '/api/me'], ['GET', '/api/dashboard'], ['GET', '/api/attention'], ['GET', '/api/students'],
     ['GET', '/api/students/123'], ['GET', '/api/applications'], ['GET', '/api/programmes'],
     ['GET', '/api/intakes'], ['GET', '/api/enrolments'],
     ['GET', '/api/invoices'], ['GET', '/api/invoices/1'], ['GET', '/api/students/1/invoices'],

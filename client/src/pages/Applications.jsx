@@ -4,7 +4,7 @@ import { usePagedList } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, fmtDate, fmtMoney
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 
 export default function Applications() {
@@ -12,7 +12,12 @@ export default function Applications() {
   const [params] = useSearchParams();
   // A dashboard card can deep-link into a pre-filtered list.
   const list = usePagedList(api.applications, {
-    initialFilters: { stage: params.get('stage') || undefined }
+    initialFilters: {
+      stage: params.get('stage') || undefined,
+      // Set by the dashboard's "Applications awaiting action" card: the three
+      // stages where the next move is ours.
+      awaitingAction: params.get('awaitingAction') || undefined
+    }
   });
 
   const stages = (list.meta && list.meta.stages) || [];
@@ -52,6 +57,26 @@ export default function Applications() {
             allLabel="All stages"
           />
         </div>
+
+        {/* A dashboard card or attention item may have applied this, so it is
+            stated rather than left to be inferred from the row count. */}
+        <FilterChips
+          chips={[
+            list.filters.stage && {
+              key: 'stage', label: 'Stage', value: list.filters.stage,
+              onClear: () => list.setFilter('stage', '')
+            },
+            list.filters.awaitingAction === 'true' && {
+              key: 'awaitingAction', label: 'Queue', value: 'Awaiting our action',
+              onClear: () => list.setFilter('awaitingAction', '')
+            },
+            list.search && {
+              key: 'search', label: 'Search', value: list.search,
+              onClear: () => list.setSearch('')
+            }
+          ]}
+          onClearAll={list.clearFilters}
+        />
 
         <Async
           state={list}

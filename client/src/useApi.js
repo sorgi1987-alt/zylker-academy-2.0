@@ -63,7 +63,28 @@ export function usePagedList(fetcher, { perPage = 25, initialFilters = {} } = {}
     setFilters((f) => ({ ...f, [key]: value || undefined }));
   }, []);
 
-  return { ...state, page, setPage, search, setSearch, filters, setFilter, params };
+  /**
+   * Drops every filter and the search term in one go.
+   *
+   * Deliberately resets to `{}` rather than to `initialFilters`: when a
+   * dashboard card deep-links here with a filter applied, "clear all" has to
+   * mean the list is unfiltered. Restoring the filter the user just asked to be
+   * rid of would be the opposite of what the control says.
+   */
+  const clearFilters = useCallback(() => {
+    setFilters({});
+    setSearch('');
+  }, []);
+
+  const activeFilters = Object.entries(filters).filter(([, v]) => v !== undefined && v !== '');
+
+  return {
+    ...state,
+    page, setPage, search, setSearch,
+    filters, setFilter, clearFilters,
+    activeFilterCount: activeFilters.length + (search ? 1 : 0),
+    params
+  };
 }
 
 /**

@@ -4,11 +4,20 @@ import { usePagedList, useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, Modal, useToast, fmtDate
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, Modal, useToast, fmtDate
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
 
 const STATUSES = ['Planning', 'Open', 'Full', 'In Progress', 'Completed', 'Cancelled'];
+/*
+ * Capacity filters. Intakes with no capacity recorded are not limited and are
+ * excluded from both, rather than being treated as a limit of zero.
+ */
+const CAPACITY_OPTIONS = [
+  { value: 'at-risk', label: 'At 90% or more of capacity' },
+  { value: 'full', label: 'At or over capacity' }
+];
+const capacityLabel = (v) => (CAPACITY_OPTIONS.find((o) => o.value === v) || {}).label || v;
 const DELIVERY = ['On Campus', 'Online', 'Hybrid'];
 
 function NewIntakeDialog({ onClose, onDone }) {
@@ -108,7 +117,12 @@ export default function Intakes() {
   const can = useCan();
   const [params, setParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
-  const list = usePagedList(api.intakes);
+  const list = usePagedList(api.intakes, {
+    initialFilters: {
+      status: params.get('status') || undefined,
+      capacity: params.get('capacity') || undefined
+    }
+  });
 
   // Opened by the global Create menu via ?new=1; the flag is cleared once used
   // so Back and refresh do not reopen the dialog. See Programmes for the same
@@ -156,7 +170,33 @@ export default function Intakes() {
             options={STATUSES}
             allLabel="All statuses"
           />
+          <FilterSelect
+            id="intake-capacity"
+            label="Capacity"
+            value={list.filters.capacity || ''}
+            onChange={(v) => list.setFilter('capacity', v)}
+            options={CAPACITY_OPTIONS}
+            allLabel="Any"
+          />
         </div>
+
+        <FilterChips
+          chips={[
+            list.filters.status && {
+              key: 'status', label: 'Status', value: list.filters.status,
+              onClear: () => list.setFilter('status', '')
+            },
+            list.filters.capacity && {
+              key: 'capacity', label: 'Capacity', value: capacityLabel(list.filters.capacity),
+              onClear: () => list.setFilter('capacity', '')
+            },
+            list.search && {
+              key: 'search', label: 'Search', value: list.search,
+              onClear: () => list.setSearch('')
+            }
+          ]}
+          onClearAll={list.clearFilters}
+        />
 
         <Async state={list} empty={{ title: 'No intakes match' }}>
           {(rows, meta) => (

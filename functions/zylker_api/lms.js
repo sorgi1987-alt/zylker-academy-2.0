@@ -1021,7 +1021,18 @@ async function status(req) {
         failedSyncs: courses.filter((c) => c.syncStatus === 'Error').length
           + enrolments.filter((e) => e.syncStatus === 'Error').length,
         certificatesIssued: enrolments.filter((e) => e.certificateStatus === 'Issued').length,
-        completed: enrolments.filter((e) => e.lmsStatus === 'Completed').length
+        completed: enrolments.filter((e) => e.lmsStatus === 'Completed').length,
+        // Learners in progress with no recorded activity for 30 days. Counted
+        // here because this function already holds every enrolment, so the
+        // dashboard and the attention queue read one figure rather than two
+        // that could drift apart.
+        inactiveLearners: enrolments.filter((e) => {
+          if (e.lmsStatus !== 'In Progress') return false;
+          const seen = e.lastActivityTime || e.startedDate;
+          if (!seen) return false;
+          const t = Date.parse(seen);
+          return !Number.isNaN(t) && (Date.now() - t) >= 30 * 86400000;
+        }).length
       },
       averageProgress: avgProgress,
       coursesByProvider: byProvider(courses),

@@ -19,6 +19,7 @@ const identity = require('./identity');
 const writes = require('./writes');
 const books = require('./books');
 const lms = require('./lms');
+const attention = require('./attention');
 
 const app = express();
 app.disable('x-powered-by');
@@ -427,6 +428,31 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
 
   const closedStages = new Set([writes.STAGE.ENROLLED, writes.STAGE.REJECTED, writes.STAGE.WITHDRAWN]);
 
+  // Stages where the next move belongs to this institution rather than to the
+  // applicant. "Offer Issued" is excluded on purpose: that queue is waiting on
+  // the applicant and is reported separately.
+  const actionStages = new Set([
+    writes.STAGE.SUBMITTED, writes.STAGE.UNDER_REVIEW, writes.STAGE.DOCUMENTS_PENDING
+  ]);
+
+  // Active enrolments per intake, so capacity can be reported without a second
+  // pass over the same records further down.
+  const activeByIntake = E.reduce((acc, e) => {
+    if (e.intake && e.status === writes.ENROLMENT_STATUS.ACTIVE) {
+      acc[e.intake.id] = (acc[e.intake.id] || 0) + 1;
+    }
+    return acc;
+  }, {});
+  const capacityWatch = I.filter((i) => i.capacity != null && i.capacity > 0
+    && (!i.endDate || i.endDate >= today)
+    && ((activeByIntake[i.id] || 0) / i.capacity) >= 0.9);
+
+  const enrolledCount = A.filter((a) => a.stage === writes.STAGE.ENROLLED).length;
+  // Expressed against every application ever recorded. A rate over a rolling
+  // window would be more useful but would also be a different number, so the
+  // label on the card says which one this is.
+  const conversionRate = A.length ? Math.round((enrolledCount / A.length) * 1000) / 10 : null;
+
   // The LMS connector and Books are settled independently and never rejected,
   // so a failure in either degrades one card instead of the whole dashboard.
   const [lmsStatus, booksTotals, booksHealth] = await Promise.all([
@@ -446,9 +472,19 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     kpis: {
       totalStudents: { value: S.length, source: 'crm' },
       openApplications: { value: A.filter((a) => !closedStages.has(a.stage)).length, source: 'crm' },
+      applicationsAwaitingAction: { value: A.filter((a) => actionStages.has(a.stage)).length, source: 'crm' },
+      offersAwaitingResponse: { value: A.filter((a) => a.stage === writes.STAGE.OFFER_ISSUED).length, source: 'crm' },
+      // Null rather than 0 when there are no applications: a conversion rate
+      // over an empty set is undefined, and "0%" would read as a failure.
+      conversionRate: { value: conversionRate, source: 'crm', unavailable: conversionRate === null, suffix: '%' },
       activeProgrammes: { value: P.filter((p) => p.active && p.status !== 'Archived').length, source: 'crm' },
       upcomingIntakes: { value: I.filter((i) => (i.startDate || '') >= today).length, source: 'crm' },
+      intakeCapacityWarnings: { value: capacityWatch.length, source: 'crm' },
       activeEnrolments: { value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE).length, source: 'crm' },
+      enrolmentsWithoutLmsMapping: {
+        value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE && !(e.lms && e.lms.enrolmentId)).length,
+        source: 'crm'
+      },
       lmsCourses: {
         value: lmsOk ? lmsStatus.counts.activeCourses : null,
         source: 'lms', unavailable: !lmsOk
@@ -473,6 +509,10 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
         value: lmsOk ? lmsStatus.counts.failedSyncs : null,
         source: 'lms', unavailable: !lmsOk
       },
+      inactiveLearners: {
+        value: lmsOk ? lmsStatus.counts.inactiveLearners : null,
+        source: 'lms', unavailable: !lmsOk
+      },
       outstandingInvoices: {
         value: booksOk ? booksTotals.outstandingCount : null,
         source: 'books', unavailable: !booksOk
@@ -486,10 +526,59 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
         currency: booksOk ? booksTotals.currency : null,
         source: 'books', unavailable: !booksOk,
         partial: booksOk ? booksTotals.truncated === true : false
+      },
+      overdueBalance: {
+        value: booksOk ? booksTotals.overdueBalance : null,
+        currency: booksOk ? booksTotals.currency : null,
+        source: 'books', unavailable: !booksOk,
+        partial: booksOk ? booksTotals.truncated === true : false
       }
     },
     applicationsByStage: groupBy(A, (a) => a.stage),
     enrolmentsByStatus: groupBy(E, (e) => e.status),
+    /*
+     * Admissions funnel. Ordered by the pipeline rather than by size, and
+     * cumulative — each step counts everyone who reached it, including those who
+     * have since moved past it, which is what makes the drop between steps
+     * meaningful. Rejected and Withdrawn are exits, not steps, so they are
+     * reported beside the funnel instead of inside it.
+     */
+    admissionsFunnel: (() => {
+      const order = [
+        writes.STAGE.SUBMITTED, writes.STAGE.UNDER_REVIEW, writes.STAGE.DOCUMENTS_PENDING,
+        writes.STAGE.OFFER_ISSUED, writes.STAGE.OFFER_ACCEPTED, writes.STAGE.ENROLLED
+      ];
+      const rank = new Map(order.map((s, i) => [s, i]));
+      return order.map((stage, i) => ({
+        stage,
+        // Anything at or beyond this step reached it. A rejected application is
+        // not counted onward, because it did not reach the later steps.
+        count: A.filter((a) => {
+          const r = rank.get(a.stage);
+          return r !== undefined && r >= i;
+        }).length
+      }));
+    })(),
+    admissionsExits: {
+      [writes.STAGE.REJECTED]: A.filter((a) => a.stage === writes.STAGE.REJECTED).length,
+      [writes.STAGE.WITHDRAWN]: A.filter((a) => a.stage === writes.STAGE.WITHDRAWN).length,
+      [writes.STAGE.DEFERRED]: A.filter((a) => a.stage === writes.STAGE.DEFERRED).length
+    },
+    enrolmentsByProgramme: groupBy(
+      E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE),
+      (e) => (e.programme && e.programme.name) || 'Unassigned'
+    ),
+    // Money outstanding by how long it has been outstanding. Null, not an empty
+    // object, when Books did not answer — so the card can say so.
+    invoiceAgeing: booksOk ? booksTotals.ageing : null,
+    invoiceAgeingCurrency: booksOk ? booksTotals.currency : null,
+    intakeCapacity: capacityWatch.slice(0, 6).map((i) => ({
+      id: i.id,
+      name: i.name,
+      startDate: i.startDate,
+      capacity: i.capacity,
+      activeEnrolments: activeByIntake[i.id] || 0
+    })),
     lmsCoursesByProvider: lmsOk ? lmsStatus.coursesByProvider : null,
     learnersByLmsStatus: lmsOk ? lmsStatus.learnersByStatus : null,
     recentApplications: [...A]
@@ -501,6 +590,68 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
       crm: { status: 'connected', label: 'Connected' },
       lms: { status: lmsStatus.status, label: lmsStatus.label, detail: lmsStatus.detail || null, demonstrationDataset: true },
       books: booksHealth
+    }
+  });
+});
+
+/* ----------------------------- attention queue -------------------------- */
+
+/**
+ * Work that is waiting on somebody.
+ *
+ * A separate endpoint from the dashboard on purpose: the panel loads, fails and
+ * retries on its own, so a slow Books call delays one card rather than the whole
+ * page. The three sources are settled independently and a rejection from the LMS
+ * connector or Books becomes a named "could not be checked" item instead of
+ * taking the CRM items down with it.
+ */
+R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
+  const [applications, enrolments, intakes] = await Promise.all([
+    listApplications(req), listEnrolments(req), listIntakes(req)
+  ]);
+
+  const E = enrolments.map(n.enrolment);
+  const activeByIntake = E.reduce((acc, e) => {
+    if (e.intake && e.status === writes.ENROLMENT_STATUS.ACTIVE) {
+      acc[e.intake.id] = (acc[e.intake.id] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  const [lmsStatus, lmsEnrolments, booksTotals] = await Promise.all([
+    lms.status(req).catch(() => null),
+    lms.listEnrolments(req).catch(() => null),
+    cfg.books.organizationId
+      ? books.invoiceTotals(z, req).catch(() => null)
+      : Promise.resolve(null)
+  ]);
+
+  const booksState = !cfg.books.organizationId ? 'not_configured'
+    : booksTotals ? 'ok' : 'unavailable';
+
+  const items = attention.build({
+    applications: applications.map(n.application),
+    enrolments: E,
+    intakes: intakes.map(n.intake).map((i) => ({
+      ...i, counts: { activeEnrolments: activeByIntake[i.id] || 0 }
+    })),
+    lmsEnrolments,
+    lmsStatus,
+    booksTotals,
+    booksState,
+    now: Date.now()
+  });
+
+  ok(res, {
+    items,
+    // Drives the header indicator without the client having to re-rank.
+    worstSeverity: attention.worstSeverity(items),
+    total: items.reduce((sum, i) => sum + (i.unavailable ? 0 : i.count), 0)
+  }, {
+    sources: {
+      crm: 'ok',
+      lms: lmsStatus && lmsStatus.status === 'connected' ? 'ok' : 'unavailable',
+      books: booksState
     }
   });
 });
@@ -608,6 +759,18 @@ R('/api/applications', perms.P.APPLICATION_READ, async (req, res) => {
 
   const byStage = groupBy(data, (a) => a.stage);
   if (req.query.stage) data = data.filter((a) => a.stage === req.query.stage);
+  /*
+   * Stages where the next move belongs to this institution. Offer Issued is
+   * excluded: that queue is waiting on the applicant, and mixing the two would
+   * make the number unusable as a workload figure. The dashboard card of the
+   * same name links here, so the count and the destination agree.
+   */
+  if (req.query.awaitingAction === 'true') {
+    const actionStages = new Set([
+      writes.STAGE.SUBMITTED, writes.STAGE.UNDER_REVIEW, writes.STAGE.DOCUMENTS_PENDING
+    ]);
+    data = data.filter((a) => actionStages.has(a.stage));
+  }
   data = data.filter((a) => matches(a, req.query.search, ['name', 'applicationId', 'applicantName', 'applicantEmail', 'externalReference']));
 
   const { items, meta } = paginate(data, req, { byStage, stages: [...writes.ALL_STAGES], source: 'crm' });
@@ -734,6 +897,21 @@ R('/api/intakes', perms.P.INTAKE_READ, async (req, res) => {
 
   if (req.query.status) data = data.filter((i) => i.status === req.query.status);
   if (req.query.programmeId) data = data.filter((i) => i.programme && String(i.programme.id) === String(req.query.programmeId));
+  /*
+   * Capacity filters, used by the dashboard card and the attention item.
+   * An intake with no capacity recorded is not limited and so can be neither
+   * full nor at risk — it is excluded rather than treated as capacity zero.
+   * Intakes that have already ended are excluded too: a finished intake being
+   * full is a fact, not a problem to act on.
+   */
+  const capacityFilter = req.query.capacity;
+  if (capacityFilter === 'full' || capacityFilter === 'at-risk') {
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const threshold = capacityFilter === 'full' ? 1 : 0.9;
+    data = data.filter((i) => i.capacity != null && i.capacity > 0
+      && (!i.endDate || i.endDate >= todayIso)
+      && (i.counts.activeEnrolments / i.capacity) >= threshold);
+  }
   data = data.filter((i) => matches(i, req.query.search, ['name', 'intakeId', 'academicYear', 'location']));
 
   const { items, meta } = paginate(data, req, {
@@ -788,6 +966,11 @@ R('/api/enrolments', perms.P.ENROLMENT_READ, async (req, res) => {
   if (req.query.status) data = data.filter((e) => e.status === req.query.status);
   if (req.query.programmeId) data = data.filter((e) => e.programme && String(e.programme.id) === String(req.query.programmeId));
   if (req.query.intakeId) data = data.filter((e) => e.intake && String(e.intake.id) === String(req.query.intakeId));
+  // Destination for the dashboard's "Enrolments without an LMS mapping" card
+  // and the matching attention item.
+  if (req.query.lmsMapped === 'no') data = data.filter((e) => !(e.lms && e.lms.enrolmentId));
+  if (req.query.lmsMapped === 'yes') data = data.filter((e) => Boolean(e.lms && e.lms.enrolmentId));
+  if (req.query.syncStatus) data = data.filter((e) => (e.lms && e.lms.syncStatus) === req.query.syncStatus);
   data = data.filter((e) => matches(e, req.query.search, ['reference', 'externalReference', 'studentName', 'studentEmail']));
 
   const { items, meta } = paginate(data, req, {
@@ -933,6 +1116,20 @@ R('/api/lms/enrolments', perms.P.LMS_READ, async (req, res) => {
   if (req.query.lmsStatus) data = data.filter((e) => e.lmsStatus === req.query.lmsStatus);
   if (req.query.mappingStatus) data = data.filter((e) => e.mappingStatus === req.query.mappingStatus);
   if (req.query.syncStatus) data = data.filter((e) => e.syncStatus === req.query.syncStatus);
+  /*
+   * Learners who started and stopped. A record with no activity date at all is
+   * excluded: never having reported activity is not the same as having gone
+   * quiet, and only the second is something to chase.
+   */
+  if (req.query.activity === 'stale') {
+    const cutoff = Date.now() - 30 * 86400000;
+    data = data.filter((e) => {
+      if (e.lmsStatus !== 'In Progress') return false;
+      const seen = e.lastActivityTime || e.startedDate;
+      const t = seen ? Date.parse(seen) : NaN;
+      return !Number.isNaN(t) && t <= cutoff;
+    });
+  }
   data = data.filter((e) => matches(e, req.query.search,
     ['externalEnrolmentId', 'externalLearnerId', 'provider', 'crmStudentReference', 'crmStudent.fullName', 'course.name']));
 

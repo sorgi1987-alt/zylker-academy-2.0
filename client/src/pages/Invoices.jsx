@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useApi, useDebounced } from '../useApi.js';
 import { api } from '../api.js';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, ReadOnlyBadge,
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, ReadOnlyBadge,
   fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 
@@ -46,6 +46,8 @@ export default function Invoices() {
   const changeFilter = (setter) => (v) => { setter(v); setPage(1); };
 
   const statuses = (state.meta && state.meta.statuses) || [];
+  // Books returns machine statuses; the chip shows the label the filter offered.
+  const statusLabel = (v) => (statuses.find((s) => s.value === v) || {}).label || v;
 
   return (
     <>
@@ -108,6 +110,32 @@ export default function Invoices() {
             />
           </div>
         </div>
+
+        {/* The dashboard's overdue card and the attention item both land here
+            with a status applied, so it is named on arrival. */}
+        <FilterChips
+          chips={[
+            status && {
+              key: 'status', label: 'Status', value: statusLabel(status),
+              onClear: () => changeFilter(setStatus)('')
+            },
+            dateStart && {
+              key: 'from', label: 'From', value: dateStart,
+              onClear: () => changeFilter(setDateStart)('')
+            },
+            dateEnd && {
+              key: 'to', label: 'To', value: dateEnd,
+              onClear: () => changeFilter(setDateEnd)('')
+            },
+            search && {
+              key: 'search', label: 'Search', value: search,
+              onClear: () => changeFilter(setSearch)('')
+            }
+          ]}
+          onClearAll={() => {
+            setStatus(''); setDateStart(''); setDateEnd(''); setSearch(''); setPage(1);
+          }}
+        />
 
         <Async
           state={state}

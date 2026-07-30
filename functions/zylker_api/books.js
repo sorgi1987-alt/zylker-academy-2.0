@@ -223,34 +223,88 @@ async function findCustomersByEmail(zoho, req, email) {
  * so a large ledger cannot stall the dashboard, and reports whether the walk
  * was truncated rather than presenting a partial total as complete.
  */
-async function invoiceTotals(zoho, req) {
+/**
+ * Ageing bucket for an outstanding invoice, by days past its due date.
+ * An invoice with no due date is reported as "Not due" rather than assumed
+ * current — Books does not require a due date and inventing one would move
+ * money between buckets.
+ */
+const AGEING_BUCKETS = ['Not yet due', '1–30 days', '31–60 days', '61–90 days', 'Over 90 days'];
+function ageingBucket(daysPastDue) {
+  if (daysPastDue === null || daysPastDue <= 0) return AGEING_BUCKETS[0];
+  if (daysPastDue <= 30) return AGEING_BUCKETS[1];
+  if (daysPastDue <= 60) return AGEING_BUCKETS[2];
+  if (daysPastDue <= 90) return AGEING_BUCKETS[3];
+  return AGEING_BUCKETS[4];
+}
+
+async function invoiceTotals(zoho, req, { now = Date.now() } = {}) {
   let page = 1;
+  let invoicedTotal = 0;
+  let paidTotal = 0;
   let outstandingCount = 0;
   let overdueCount = 0;
   let outstandingBalance = 0;
+  let overdueBalance = 0;
   let truncated = false;
   let currency = null;
+  let oldestOverdue = null;
+  const ageing = AGEING_BUCKETS.reduce((acc, b) => { acc[b] = 0; return acc; }, {});
 
   for (; page <= cfg.books.maxAggregatePages; page += 1) {
     const r = await listInvoices(zoho, req, { page, perPage: 200 });
     r.invoices.forEach((inv) => {
       if (!currency && inv.currency) currency = inv.currency;
+      invoicedTotal += Number(inv.total || 0);
+      paidTotal += Number(inv.total || 0) - Number(inv.balance || 0);
+
       if (inv.outstanding) {
         outstandingCount += 1;
         outstandingBalance += Number(inv.balance || 0);
+
+        const due = inv.dueDate ? Date.parse(inv.dueDate) : NaN;
+        const daysPastDue = Number.isNaN(due) ? null : Math.floor((now - due) / 86400000);
+        ageing[ageingBucket(daysPastDue)] += Number(inv.balance || 0);
       }
-      if (inv.overdue) overdueCount += 1;
+
+      if (inv.overdue) {
+        overdueCount += 1;
+        overdueBalance += Number(inv.balance || 0);
+        const due = inv.dueDate ? Date.parse(inv.dueDate) : NaN;
+        if (!Number.isNaN(due) && (!oldestOverdue || due < oldestOverdue._due)) {
+          oldestOverdue = {
+            _due: due,
+            id: inv.id,
+            invoiceNumber: inv.invoiceNumber,
+            customerName: inv.customerName,
+            dueDate: inv.dueDate,
+            balance: inv.balance,
+            currency: inv.currency,
+            daysOverdue: Math.floor((now - due) / 86400000)
+          };
+        }
+      }
     });
     if (!r.hasMore) break;
     if (page === cfg.books.maxAggregatePages) truncated = true;
   }
 
+  // Rounded to cents; floating-point addition over many invoices otherwise
+  // produces a long tail that looks like a data error in the UI.
+  const cents = (v) => Math.round(v * 100) / 100;
+  Object.keys(ageing).forEach((k) => { ageing[k] = cents(ageing[k]); });
+  if (oldestOverdue) delete oldestOverdue._due;
+
   return {
     outstandingCount,
     overdueCount,
-    // Rounded to cents; floating-point addition over many invoices otherwise
-    // produces a long tail that looks like a data error in the UI.
-    outstandingBalance: Math.round(outstandingBalance * 100) / 100,
+    outstandingBalance: cents(outstandingBalance),
+    overdueBalance: cents(overdueBalance),
+    invoicedTotal: cents(invoicedTotal),
+    paidTotal: cents(paidTotal),
+    ageing,
+    ageingBuckets: AGEING_BUCKETS,
+    oldestOverdue,
     currency,
     truncated
   };
@@ -293,5 +347,6 @@ module.exports = {
   BooksNotConfigured,
   listInvoices, getInvoice, findCustomersByEmail, invoiceTotals, health,
   invoiceSummary, invoiceDetail, customerSummary,
-  STATUS_LABEL, OUTSTANDING_STATUSES
+  STATUS_LABEL, OUTSTANDING_STATUSES, AGEING_BUCKETS,
+  _internals: { ageingBucket }
 };

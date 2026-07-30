@@ -118,6 +118,12 @@ export const api = {
 
   /* dashboard + status */
   dashboard: (o) => get('/api/dashboard', o),
+  /*
+   * The attention queue is fetched separately from the dashboard so the panel
+   * loads, fails and retries on its own — a slow Books call must not hold up
+   * the rest of the page.
+   */
+  attention: (o) => get('/api/attention', o),
   integrationStatus: (o) => get('/api/integration-status', o),
   diagnostics: (o) => get('/api/diag', o),
 
