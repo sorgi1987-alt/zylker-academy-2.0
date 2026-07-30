@@ -45,6 +45,7 @@ const STATUS = {
 export function AuthProvider({ children }) {
   const [status, setStatus] = useState(STATUS.CHECKING);
   const [user, setUser] = useState(null);
+  const [environment, setEnvironment] = useState(null);
   const [error, setError] = useState(null);
 
   /**
@@ -76,6 +77,9 @@ export function AuthProvider({ children }) {
     try {
       const res = await api.me();
       setUser(res.data.user);
+      // Which deployment answered. Reported by the server rather than inferred
+      // from the browser URL, so it names the backend actually being used.
+      setEnvironment(res.data.environment || null);
       setStatus(STATUS.AUTHENTICATED);
       return true;
     } catch (err) {
@@ -112,6 +116,7 @@ export function AuthProvider({ children }) {
   const value = {
     status,
     user,
+    environment,
     error,
     isAuthenticated: status === STATUS.AUTHENTICATED,
     recheck: check,

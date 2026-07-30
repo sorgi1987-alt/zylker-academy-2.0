@@ -163,6 +163,23 @@ function paginate(rows, req, extraMeta = {}) {
   };
 }
 
+/**
+ * Names the deployment the request arrived on.
+ *
+ * Read from the host rather than hard-coded, so the same build reports
+ * "Development" on the development gateway and "Production" on the production
+ * one without a second configuration. ZYLKER_ENVIRONMENT overrides it for a
+ * deployment whose hostname does not follow the Catalyst convention.
+ */
+function environmentOf(req) {
+  const override = String(process.env.ZYLKER_ENVIRONMENT || '').trim();
+  if (override) return { name: override.toLowerCase(), label: override };
+  const host = String((req.headers && (req.headers['x-forwarded-host'] || req.headers.host)) || '');
+  if (/\.development\./i.test(host)) return { name: 'development', label: 'Development' };
+  if (host) return { name: 'production', label: 'Production' };
+  return { name: 'unknown', label: 'Unknown environment' };
+}
+
 /** Case-insensitive substring match over the named fields of a record. */
 const matches = (row, term, fields) => {
   if (!term) return true;
@@ -273,8 +290,124 @@ R('/api/me', null, async (req, res) => {
     authenticated: true,
     user: req.principal,
     roles: perms.ROLE_LABEL,
-    resolvedBy: req.user.resolvedBy
+    resolvedBy: req.user.resolvedBy,
+    // Which deployment answered. The header badges this so nobody mistakes the
+    // development gateway for the live one while making changes.
+    environment: environmentOf(req)
   });
+});
+
+/* ----------------------------- global search --------------------------- */
+
+/**
+ * Search across the CRM entities the CALLER may read.
+ *
+ * The permission check is per entity and happens here, not in the client: a
+ * viewer who cannot read invoices never receives an invoice in a search
+ * response, whatever the browser asks for. The route itself declares no single
+ * permission because the set it covers depends on the role.
+ *
+ * Matching is done on normalised records so a search hits the same fields the
+ * user can see on screen — including the server-minted external references,
+ * which are how staff actually refer to records to each other.
+ */
+const SEARCH_MIN = 2;
+const SEARCH_PER_ENTITY = 5;
+
+R('/api/search', null, async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  if (query.length < SEARCH_MIN) {
+    return ok(res, { query, groups: [], total: 0 }, { minQueryLength: SEARCH_MIN, tooShort: true });
+  }
+
+  const may = (permission) => perms.can(req.principal && req.principal.role, permission);
+
+  // Only the modules this role may read are fetched at all, so an unauthorised
+  // module is never even retrieved, let alone filtered out afterwards.
+  const [students, applications, enrolments, programmes, intakes] = await Promise.all([
+    may(perms.P.STUDENT_READ) ? listStudents(req) : Promise.resolve([]),
+    may(perms.P.APPLICATION_READ) ? listApplications(req) : Promise.resolve([]),
+    may(perms.P.ENROLMENT_READ) ? listEnrolments(req) : Promise.resolve([]),
+    may(perms.P.PROGRAMME_READ) ? listProgrammes(req) : Promise.resolve([]),
+    may(perms.P.INTAKE_READ) ? listIntakes(req) : Promise.resolve([])
+  ]);
+
+  const take = (rows, fields, shape) => {
+    const hits = rows.filter((r) => matches(r, query, fields));
+    return { items: hits.slice(0, SEARCH_PER_ENTITY).map(shape), total: hits.length };
+  };
+
+  const groups = [];
+  const add = (entity, label, permission, result) => {
+    if (!may(permission) || !result.items.length) return;
+    groups.push({ entity, label, total: result.total, items: result.items });
+  };
+
+  add('student', 'Students', perms.P.STUDENT_READ, take(
+    students.map(n.student),
+    ['fullName', 'email', 'studentId', 'externalReference', 'meta.reference'],
+    (s) => ({
+      id: s.id,
+      label: s.fullName || s.email || `Student ${s.id}`,
+      secondary: [s.email, s.status].filter(Boolean).join(' · ') || null,
+      reference: s.studentId || s.meta.reference || null,
+      to: `/students/${s.id}`
+    })
+  ));
+
+  add('application', 'Applications', perms.P.APPLICATION_READ, take(
+    applications.map(n.application),
+    ['name', 'applicationId', 'externalReference', 'meta.reference', 'student.name', 'programme.name'],
+    (a) => ({
+      id: a.id,
+      label: a.name || a.applicationId || `Application ${a.id}`,
+      secondary: [a.student && a.student.name, a.stage].filter(Boolean).join(' · ') || null,
+      reference: a.applicationId || a.meta.reference || null,
+      to: `/applications/${a.id}`
+    })
+  ));
+
+  add('enrolment', 'Enrolments', perms.P.ENROLMENT_READ, take(
+    enrolments.map(n.enrolment),
+    ['reference', 'externalReference', 'meta.reference', 'student.name', 'programme.name'],
+    (e) => ({
+      id: e.id,
+      label: e.reference || `Enrolment ${e.id}`,
+      secondary: [e.student && e.student.name, e.programme && e.programme.name, e.status]
+        .filter(Boolean).join(' · ') || null,
+      reference: e.externalReference || e.meta.reference || null,
+      to: `/enrolments/${e.id}`
+    })
+  ));
+
+  add('programme', 'Programmes', perms.P.PROGRAMME_READ, take(
+    programmes.map(n.programme),
+    ['name', 'code', 'meta.reference'],
+    (p) => ({
+      id: p.id,
+      label: p.name || `Programme ${p.id}`,
+      secondary: [p.code, p.academicLevel, p.status].filter(Boolean).join(' · ') || null,
+      reference: p.code || p.meta.reference || null,
+      to: `/programmes/${p.id}`
+    })
+  ));
+
+  add('intake', 'Intakes', perms.P.INTAKE_READ, take(
+    intakes.map(n.intake),
+    ['name', 'intakeId', 'externalReference', 'meta.reference', 'programme.name'],
+    (i) => ({
+      id: i.id,
+      label: i.name || `Intake ${i.id}`,
+      secondary: [i.programme && i.programme.name, i.academicYear, i.status]
+        .filter(Boolean).join(' · ') || null,
+      reference: i.intakeId || i.meta.reference || null,
+      to: `/intakes/${i.id}`
+    })
+  ));
+
+  ok(res,
+    { query, groups, total: groups.reduce((sum, g) => sum + g.total, 0) },
+    { source: 'crm', perEntityLimit: SEARCH_PER_ENTITY, minQueryLength: SEARCH_MIN });
 });
 
 /* ------------------------------- dashboard ----------------------------- */

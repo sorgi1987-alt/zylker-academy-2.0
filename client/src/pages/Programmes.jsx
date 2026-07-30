@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
@@ -96,11 +96,26 @@ function NewProgrammeDialog({ onClose, onDone }) {
 
 export default function Programmes() {
   const can = useCan();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
   const list = usePagedList(api.programmes, {
     initialFilters: { active: params.get('active') || undefined }
   });
+
+  /*
+   * The global Create menu links here with ?new=1 rather than to a separate
+   * route, so the one working programme form is reused instead of duplicated.
+   * The flag is removed once consumed, so Back does not reopen the dialog and a
+   * refresh does not either.
+   */
+  const wantsNew = params.get('new') === '1';
+  useEffect(() => {
+    if (!wantsNew) return;
+    if (can('programme:write')) setCreating(true);
+    const next = new URLSearchParams(params);
+    next.delete('new');
+    setParams(next, { replace: true });
+  }, [wantsNew, can, params, setParams]);
 
   return (
     <>

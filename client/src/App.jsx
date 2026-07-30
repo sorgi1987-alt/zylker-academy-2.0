@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { NavLink, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth, useCan, STATUS } from './AuthContext.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -25,72 +25,7 @@ import Invoices from './pages/Invoices.jsx';
 import InvoiceDetail from './pages/InvoiceDetail.jsx';
 import IntegrationStatus from './pages/IntegrationStatus.jsx';
 import { Loading } from './components/Ui.jsx';
-
-/**
- * Navigation. Each entry names the permission required to see it, so the menu
- * is derived from the signed-in role rather than maintained separately. A link
- * the user cannot use is not rendered — but hiding it is presentation only:
- * typing the URL still reaches a route whose data call the server refuses.
- */
-const LINKS = [
-  ['/dashboard', 'Dashboard', 'dashboard:read'],
-  ['/students', 'Students', 'student:read'],
-  ['/applications', 'Applications', 'application:read'],
-  ['/enrolments', 'Enrolments', 'enrolment:read'],
-  ['/programmes', 'Programmes', 'programme:read'],
-  ['/intakes', 'Intakes', 'intake:read'],
-  ['/learning/courses', 'Learning Hub', 'lms:read'],
-  ['/invoices', 'Finance', 'invoice:read'],
-  ['/integration', 'Integration Status', 'integration:read']
-];
-
-/* ------------------------------- user menu ------------------------------- */
-
-function UserMenu() {
-  const { user, signOut } = useAuth();
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
-  if (!user) return null;
-
-  return (
-    <div className="user-menu" ref={ref}>
-      <button
-        type="button"
-        className="btn"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        {user.name} · {user.roleLabel}
-      </button>
-      {open && (
-        <div className="user-menu-pop" role="menu">
-          <div className="user-menu-id">
-            <strong>{user.name}</strong>
-            <span className="muted">{user.email}</span>
-            <span className="pill info">{user.roleLabel}</span>
-          </div>
-          <button type="button" role="menuitem" className="user-menu-item" onClick={signOut}>
-            Sign out
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+import { Shell, NAV } from './components/Shell.jsx';
 
 /* ------------------------------ route guard ------------------------------ */
 
@@ -118,7 +53,7 @@ function Guarded({ permission, children }) {
 /* --------------------------------- shell --------------------------------- */
 
 function AppShell() {
-  const { user, takeIntendedRoute } = useAuth();
+  const { takeIntendedRoute } = useAuth();
   const can = useCan();
   const navigate = useNavigate();
   const restored = useRef(false);
@@ -131,32 +66,11 @@ function AppShell() {
     if (route) navigate(route, { replace: true });
   }, [navigate, takeIntendedRoute]);
 
-  const links = LINKS.filter(([, , permission]) => can(permission));
-  const landing = links.length ? links[0][0] : '/dashboard';
+  const links = NAV.filter((l) => can(l.permission));
+  const landing = links.length ? links[0].to : '/dashboard';
 
   return (
-    <div className="layout">
-      <nav className="sidebar" aria-label="Main navigation">
-        <p className="brand">Zylker Academy</p>
-        <p className="brand-sub">Education Management</p>
-        <div className="nav">
-          {links.map(([to, label]) => (
-            <NavLink key={to} to={to} className={({ isActive }) => (isActive ? 'active' : undefined)}>
-              {label}
-            </NavLink>
-          ))}
-        </div>
-        <div className="sidebar-foot">
-          Signed in as <strong>{user.name}</strong> ({user.roleLabel}).
-          Zoho Books is read-only. Learning data is a demonstration dataset in Catalyst.
-        </div>
-      </nav>
-
-      <main className="main">
-        <div className="top-bar">
-          <UserMenu />
-        </div>
-
+    <Shell links={links}>
         <Routes>
           <Route path="/" element={<Navigate to={landing} replace />} />
           <Route path="/login" element={<Navigate to={landing} replace />} />
@@ -199,8 +113,7 @@ function AppShell() {
 
           <Route path="*" element={<div className="state"><h3>Page not found</h3><p>Use the navigation to continue.</p></div>} />
         </Routes>
-      </main>
-    </div>
+    </Shell>
   );
 }
 

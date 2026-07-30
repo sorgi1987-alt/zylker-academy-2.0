@@ -78,6 +78,9 @@ test('every route except /api/health rejects an unauthenticated caller', async (
     ['GET', '/api/intakes'], ['GET', '/api/enrolments'],
     ['GET', '/api/invoices'], ['GET', '/api/invoices/1'], ['GET', '/api/students/1/invoices'],
     ['GET', '/api/integration-status'], ['GET', '/api/activity'], ['GET', '/api/diag'],
+    // Global search reads the same CRM modules as the list pages and is no less
+    // protected than they are.
+    ['GET', '/api/search?q=murphy'],
     // External LMS Connector — the Catalyst dataset is no less protected than
     // the CRM data it maps to.
     ['GET', '/api/lms/courses'], ['GET', '/api/lms/courses/1'],
@@ -326,4 +329,84 @@ test('session validation is only ever addressed to a Catalyst host', () => {
     platformBaseUrlFrom({ headers: { host: 'evil.com, zylker.catalystserverless.eu' } }),
     null
   );
+});
+
+/* ---------------------------- global search ----------------------------- */
+
+/**
+ * Search is exercised against a stubbed CRM so the shape of the response, the
+ * minimum-query rule and the fields it matches on can be asserted without
+ * touching the live org.
+ */
+test('global search groups results by entity, matches references, and refuses a short query', async (t) => {
+  const zohoPath = require.resolve('../zoho.js');
+  for (const k of Object.keys(require.cache)) delete require.cache[k];
+
+  const queries = [];
+  const rows = {
+    Contacts: [{ id: '1', First_Name: 'Aoife', Last_Name: 'Murphy', Email: 'aoife@example.com',
+      Student_ID: 'STU-0001', Student_Status: 'Active', Created_Time: 'T' }],
+    Deals: [{ id: '30', Deal_Name: 'Murphy — MSc Data', Application_ID: 'APP-0030',
+      Stage: 'Submitted', Contact_Name: { id: '1', name: 'Aoife Murphy' }, Created_Time: 'T' }],
+    Enrolments: [{ id: '50', Name: 'ENR-0050', Student: { id: '1', name: 'Aoife Murphy' },
+      Enrolment_Status: 'Active', Created_Time: 'T' }],
+    Products: [{ id: '70', Product_Name: 'MSc Data Science', Product_Code: 'MSC-DS', Created_Time: 'T' }],
+    Intakes: [{ id: '90', Name: 'September 2026', Intake_ID: 'INT-0090', Created_Time: 'T' }]
+  };
+
+  // Substituting the module wholesale is the smallest stub that still runs the
+  // real route, the real permission check and the real normalisers.
+  require.cache[zohoPath] = {
+    id: zohoPath,
+    filename: zohoPath,
+    loaded: true,
+    exports: {
+      async crmQuery(req, q) {
+        queries.push(q);
+        const m = /from\s+(\w+)/.exec(q);
+        return rows[m && m[1]] || [];
+      },
+      safeError: (err) => ({ status: 502, detail: 'stub', service: 'crm' })
+    }
+  };
+
+  process.env.ZYLKER_AUTH_BYPASS = 'true';
+  const app = require('../index.js');
+  const server = await listen(app);
+  t.after(() => {
+    server.close();
+    delete process.env.ZYLKER_AUTH_BYPASS;
+    for (const k of Object.keys(require.cache)) delete require.cache[k];
+  });
+
+  // Below the minimum length: answered without touching the CRM at all.
+  const short = await request(server, 'GET', '/api/search?q=m');
+  assert.equal(short.status, 200);
+  assert.equal(short.body.meta.tooShort, true);
+  assert.deepEqual(short.body.data.groups, []);
+  assert.equal(queries.length, 0, 'a too-short query must not reach the CRM');
+
+  // A name that appears on a student and on an application groups under both.
+  const byName = await request(server, 'GET', '/api/search?q=murphy');
+  assert.equal(byName.status, 200);
+  const entities = byName.body.data.groups.map((g) => g.entity);
+  assert.ok(entities.includes('student'), 'the student should match on name');
+  assert.ok(entities.includes('application'), 'the application should match on its title');
+  assert.ok(entities.includes('enrolment'), 'the enrolment should match on its student name');
+
+  const student = byName.body.data.groups.find((g) => g.entity === 'student').items[0];
+  assert.equal(student.label, 'Aoife Murphy');
+  assert.equal(student.to, '/students/1', 'every result links straight to its record');
+  assert.equal(student.reference, 'STU-0001');
+
+  // Staff quote references to each other, so references have to be searchable.
+  const byRef = await request(server, 'GET', '/api/search?q=INT-0090');
+  assert.deepEqual(byRef.body.data.groups.map((g) => g.entity), ['intake']);
+  assert.equal(byRef.body.data.groups[0].items[0].to, '/intakes/90');
+
+  // A term nobody holds returns an empty result, not an error.
+  const none = await request(server, 'GET', '/api/search?q=zzzznotarecord');
+  assert.equal(none.status, 200);
+  assert.equal(none.body.data.total, 0);
+  assert.deepEqual(none.body.data.groups, []);
 });

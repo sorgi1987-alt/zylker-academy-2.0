@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList, useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
@@ -106,8 +106,21 @@ function NewIntakeDialog({ onClose, onDone }) {
 
 export default function Intakes() {
   const can = useCan();
+  const [params, setParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
   const list = usePagedList(api.intakes);
+
+  // Opened by the global Create menu via ?new=1; the flag is cleared once used
+  // so Back and refresh do not reopen the dialog. See Programmes for the same
+  // pattern.
+  const wantsNew = params.get('new') === '1';
+  useEffect(() => {
+    if (!wantsNew) return;
+    if (can('intake:write')) setCreating(true);
+    const next = new URLSearchParams(params);
+    next.delete('new');
+    setParams(next, { replace: true });
+  }, [wantsNew, can, params, setParams]);
 
   return (
     <>

@@ -109,6 +109,13 @@ export const api = {
   /* identity */
   me: (o) => get('/api/me', o),
 
+  /*
+   * Global search. The backend decides which entities this role may see and
+   * searches only those, so the response cannot contain a record the caller is
+   * not authorised to open.
+   */
+  search: (q, o) => get(`/api/search${qs({ q })}`, o),
+
   /* dashboard + status */
   dashboard: (o) => get('/api/dashboard', o),
   integrationStatus: (o) => get('/api/integration-status', o),
