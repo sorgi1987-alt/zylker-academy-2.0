@@ -34,6 +34,11 @@ module.exports = {
   },
   crm: {
     baseUrl: process.env.ZOHO_CRM_BASE_URL || 'https://www.zohoapis.eu/crm/v8',
+    // Web console origin, used only to build an "open in Zoho CRM" link. Not an
+    // API endpoint and not a credential. Overridable because the console host
+    // differs by data centre, and because an organisation-scoped URL may be
+    // preferred once the org id is known.
+    appUrl: process.env.ZOHO_CRM_APP_URL || 'https://crm.zoho.eu',
     connector: process.env.CRM_CONNECTOR || 'zylker_zoho',
     connection: process.env.CRM_CONNECTION || 'zylker_zoho'
   },

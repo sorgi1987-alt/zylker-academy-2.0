@@ -239,6 +239,19 @@ function pick(record, fields) {
  * NOTE: the column is result_status, not result — 'result' is a reserved
  * keyword in the Catalyst Data Store and cannot be used as a column name.
  */
+/**
+ * Reserved key used to carry a free-text note inside `after_values`.
+ *
+ * The audit table has no note column, and adding one would mean a Data Store
+ * schema change that an existing deployment would not have — insertRow would
+ * fail against an unknown column and the note would be swallowed by the catch
+ * below, which is the worst possible outcome: a comment the user believes was
+ * saved. Riding inside the JSON blob costs nothing, works on every deployment,
+ * and readActivity lifts it back out as `note`.
+ */
+const NOTE_KEY = '__note';
+const NOTE_MAX = 1000;
+
 async function audit(req, event) {
   try {
     const app = catalyst.initialize(req);
@@ -256,7 +269,12 @@ async function audit(req, event) {
       record_ref: event.recordRef || null,
       changed_fields: fields.join(','),
       before_values: event.before ? JSON.stringify(pick(event.before, fields)).slice(0, 9000) : null,
-      after_values: event.after ? JSON.stringify(pick(event.after, fields)).slice(0, 9000) : null,
+      after_values: (event.after || event.note)
+        ? JSON.stringify({
+          ...(event.after ? pick(event.after, fields) : {}),
+          ...(event.note ? { [NOTE_KEY]: String(event.note).slice(0, NOTE_MAX) } : {})
+        }).slice(0, 9000)
+        : null,
       result_status: event.result,
       request_id: req.requestId || null
     });
@@ -284,8 +302,17 @@ async function readActivity(req, { entityType, recordId, limit = 50 } = {}) {
   const parse = (s) => { try { return s ? JSON.parse(s) : null; } catch { return null; } };
   return (rows || []).map((r) => {
     const a = r[tableName] || r;
+    // Lift the note back out so it is never rendered as though it were a
+    // changed CRM field.
+    const after = parse(a.after_values);
+    let note = null;
+    if (after && Object.prototype.hasOwnProperty.call(after, NOTE_KEY)) {
+      note = after[NOTE_KEY];
+      delete after[NOTE_KEY];
+    }
     return {
       id: a.ROWID,
+      note,
       occurredAt: a.occurred_at,
       actor: a.user_email || null,
       actorRole: a.user_role || null,
@@ -295,7 +322,7 @@ async function readActivity(req, { entityType, recordId, limit = 50 } = {}) {
       recordRef: a.record_ref,
       changedFields: a.changed_fields ? String(a.changed_fields).split(',').filter(Boolean) : [],
       before: parse(a.before_values),
-      after: parse(a.after_values),
+      after,
       result: a.result_status,
       requestId: a.request_id
     };

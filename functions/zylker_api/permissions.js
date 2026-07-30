@@ -78,6 +78,10 @@ const P = {
   DASHBOARD_READ: 'dashboard:read',
   INTEGRATION_READ: 'integration:read',
   ACTIVITY_READ: 'activity:read',
+  // Records an internal note in the activity trail. Deliberately separate from
+  // the entity write permissions: writing an observation about a record is not
+  // the same act as changing it, and no CRM field is touched.
+  ACTIVITY_WRITE: 'activity:write',
   // Overrides a capacity limit on an intake. Deliberately administrator-only.
   CAPACITY_OVERRIDE: 'intake:capacity-override'
 };
@@ -99,6 +103,7 @@ const MATRIX = {
   // Admissions owns applicants and their applications end to end.
   [ROLES.ADMISSIONS]: [
     ...COMMON_READ, P.INVOICE_READ,
+    P.ACTIVITY_WRITE,
     P.STUDENT_WRITE,
     P.APPLICATION_WRITE, P.APPLICATION_TRANSITION,
     // Transitioning an application to Enrolled provisions an enrolment, so
@@ -111,6 +116,7 @@ const MATRIX = {
   // Academic owns the delivery structure: programmes, intakes, enrolments.
   [ROLES.ACADEMIC]: [
     ...COMMON_READ,
+    P.ACTIVITY_WRITE,
     P.PROGRAMME_WRITE, P.INTAKE_WRITE,
     P.ENROLMENT_WRITE,
     // Owns the External LMS Connector: create, edit, map and sync individual

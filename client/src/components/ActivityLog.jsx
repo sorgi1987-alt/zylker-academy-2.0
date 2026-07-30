@@ -15,6 +15,9 @@ const ACTION_LABEL = {
   'enrolment:archive': 'Enrolment cancelled',
   'enrolment:complete': 'Enrolment completed',
   'enrolment:delete': 'Enrolment deleted',
+  'student:note': 'Internal note',
+  'application:note': 'Internal note',
+  'enrolment:note': 'Internal note',
   'programme:create': 'Programme created',
   'programme:update': 'Programme updated',
   'programme:activate': 'Programme activated',
@@ -59,6 +62,10 @@ export default function ActivityLog({ rows, unavailable }) {
             {a.actorRole ? ` (${a.actorRole})` : ''}
             {a.requestId ? ` · ${a.requestId}` : ''}
           </div>
+          {/* A comment left with an action, or a standalone internal note.
+              Rendered as text, never as a changed field, because nothing on the
+              CRM record changed to hold it. */}
+          {a.note && <p className="act-note">{a.note}</p>}
           {a.changedFields && a.changedFields.length > 0 && (
             <ul className="chg">
               {a.changedFields.map((f) => {

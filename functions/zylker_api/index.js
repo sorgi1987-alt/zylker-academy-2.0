@@ -794,16 +794,95 @@ R('/api/applications/:id', perms.P.APPLICATION_READ, async (req, res) => {
   ]);
 
   const programme = progRows.length ? n.programme(progRows[0]) : null;
+  const intake = intakeRows.length ? n.intake(intakeRows[0]) : null;
+  const student = studRows.length ? n.student(studRows[0]) : null;
+  const enrolment = enrolRows.length ? n.enrolment(enrolRows[0]) : null;
+  const allowed = writes.TRANSITIONS[application.stage] || [];
+
+  /*
+   * Places consumed on the linked intake. Only fetched when there is an intake
+   * with a capacity and a move to Enrolled is on the table — a detail page
+   * should not pay for a query whose answer it will not show.
+   */
+  let intakeUsage = null;
+  if (intake && intake.capacity != null && intake.capacity > 0 && allowed.includes(writes.STAGE.ENROLLED)) {
+    const taken = await listEnrolments(req,
+      `Intake = ${intake.id} and Enrolment_Status = '${writes.ENROLMENT_STATUS.ACTIVE}'`).catch(() => null);
+    if (taken) intakeUsage = { used: taken.length, capacity: intake.capacity };
+  }
+
+  /*
+   * Conditions that would make a transition fail, evaluated here so the UI can
+   * disable the action and say why instead of letting the user find out from a
+   * 422. Each one mirrors a check the write handler actually performs.
+   */
+  const blockers = [];
+  if (!student) {
+    blockers.push({
+      stage: writes.STAGE.ENROLLED,
+      reason: 'No student is linked to this application, so an enrolment cannot be created.'
+    });
+  }
+  if (!application.programme) {
+    blockers.push({
+      stage: writes.STAGE.ENROLLED,
+      reason: 'No programme is linked, so the enrolment would be created without one.',
+      warningOnly: true
+    });
+  }
+  if (!application.intake) {
+    blockers.push({
+      stage: writes.STAGE.ENROLLED,
+      reason: 'No intake is linked, so the enrolment would be created without one.',
+      warningOnly: true
+    });
+  }
+  if (intakeUsage && intakeUsage.used >= intakeUsage.capacity) {
+    blockers.push({
+      stage: writes.STAGE.ENROLLED,
+      reason: `The linked intake is full (${intakeUsage.used} of ${intakeUsage.capacity} places taken). An administrator can override this.`
+    });
+  }
 
   ok(res, {
     application,
-    student: studRows.length ? n.student(studRows[0]) : null,
-    enrolment: enrolRows.length ? n.enrolment(enrolRows[0]) : null,
+    student,
+    enrolment,
     programme,
-    intake: intakeRows.length ? n.intake(intakeRows[0]) : null,
+    intake,
     // Only the transitions the backend will actually accept, so the UI cannot
     // offer a button that is guaranteed to 422.
-    allowedTransitions: writes.TRANSITIONS[application.stage] || [],
+    allowedTransitions: allowed,
+    /*
+     * Everything the workflow panel needs, derived from the same transition
+     * table the write handler validates against — so the panel and the API can
+     * never disagree about what is possible.
+     */
+    workflow: {
+      stageOrder: writes.PIPELINE_ORDER,
+      exitStages: writes.EXIT_STAGES,
+      currentStage: application.stage,
+      completedStages: writes.completedStages(application.stage),
+      isTerminal: allowed.length === 0,
+      allowed,
+      // Every stage this application cannot move to, with the reason. Shown so
+      // the absence of a button is explained rather than merely observed.
+      blocked: writes.PIPELINE_ORDER.concat(writes.EXIT_STAGES)
+        .filter((s) => s !== application.stage && !allowed.includes(s))
+        .map((s) => ({
+          stage: s,
+          reason: `Not a permitted move from "${application.stage || 'unknown'}".`
+        })),
+      blockers,
+      intakeUsage,
+      // Fields the transition dialog may collect, decided by what this CRM
+      // module actually has rather than by what would be nice to record.
+      collects: {
+        comment: true,
+        decisionDate: allowed.filter((s) => writes.DECISION_STAGES.has(s)),
+        documentsStatus: allowed.includes(writes.STAGE.DOCUMENTS_PENDING)
+      }
+    },
     activity
   });
 });
@@ -1021,11 +1100,95 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
     ? await studentInvoices(req, studRows[0], n.student(studRows[0]))
     : null;
 
+  const intake = intakeRows.length ? n.intake(intakeRows[0]) : null;
+
+  /*
+   * Places consumed on this enrolment's intake. Only fetched when the intake
+   * actually has a limit, so an uncapped intake costs no query.
+   */
+  let intakeUsage = null;
+  if (intake && intake.capacity != null && intake.capacity > 0) {
+    const taken = await listEnrolments(req,
+      `Intake = ${intake.id} and Enrolment_Status = '${writes.ENROLMENT_STATUS.ACTIVE}'`).catch(() => null);
+    if (taken) intakeUsage = { used: taken.length, capacity: intake.capacity };
+  }
+
+  /*
+   * Contextual warnings.
+   *
+   * Computed here rather than in the browser because three sources have to
+   * agree on them, and because a warning is a factual claim about the record —
+   * it should come from the same place the record does. Nothing here blocks an
+   * action: an unpaid invoice is stated, not used to bar an academic decision,
+   * because no business rule in this application says it should.
+   */
+  const warnings = [];
+  const warn = (severity, message, extra = {}) => warnings.push({ severity, message, ...extra });
+
+  if (enrolment.status === writes.ENROLMENT_STATUS.ACTIVE) {
+    if (!enrolment.intake) {
+      warn('warning', 'This enrolment has no intake, so it is not attached to a scheduled delivery.');
+    }
+    if (intake && programme && intake.programme && String(intake.programme.id) !== String(programme.id)) {
+      warn('critical',
+        `The intake "${intake.name}" belongs to a different programme than this enrolment. One of the two links is wrong.`,
+        { to: `/intakes/${intake.id}` });
+    }
+    if (intakeUsage && intakeUsage.used > intakeUsage.capacity) {
+      warn('critical',
+        `The intake is over capacity: ${intakeUsage.used} active enrolments against ${intakeUsage.capacity} places.`,
+        { to: `/intakes/${intake.id}` });
+    } else if (intakeUsage && intakeUsage.used === intakeUsage.capacity) {
+      warn('information',
+        `The intake is exactly at capacity (${intakeUsage.used} of ${intakeUsage.capacity} places).`,
+        { to: `/intakes/${intake.id}` });
+    }
+    if (!enrolment.lms.enrolmentId && !learning.length) {
+      warn('warning',
+        'No external learning record is linked, so no progress can be reported for this enrolment.',
+        { to: '/learning/enrolments?mappingStatus=Unmapped' });
+    }
+  }
+
+  const failed = learning.filter((l) => l.syncStatus === 'Error');
+  if (failed.length || enrolment.lms.syncStatus === 'Error') {
+    warn('critical',
+      'The last synchronisation to CRM for this enrolment ended in an error and has not succeeded since.',
+      { to: '/learning/sync-log?result=error' });
+  }
+
+  const stale = learning.filter((l) => {
+    if (l.lmsStatus !== 'In Progress') return false;
+    const seen = l.lastActivityTime || l.startedDate;
+    const t = seen ? Date.parse(seen) : NaN;
+    return !Number.isNaN(t) && (Date.now() - t) >= 30 * 86400000;
+  });
+  if (stale.length) {
+    warn('warning',
+      'The learner has recorded no activity for 30 days or more on a course that is still in progress.',
+      { to: `/learning/enrolments/${stale[0].id}` });
+  }
+
+  if (invoices && invoices.status === 'matched') {
+    const overdue = invoices.invoices.filter((i) => i.overdue);
+    const outstanding = invoices.invoices.filter((i) => i.outstanding);
+    if (overdue.length) {
+      warn('warning',
+        `${overdue.length} invoice${overdue.length === 1 ? ' is' : 's are'} overdue for this student. This does not block academic actions.`,
+        { to: '/invoices?status=overdue' });
+    } else if (outstanding.length) {
+      warn('information',
+        `${outstanding.length} invoice${outstanding.length === 1 ? ' is' : 's are'} outstanding for this student.`);
+    }
+  }
+
   ok(res, {
     enrolment,
     student: studRows.length ? n.student(studRows[0]) : null,
     programme,
-    intake: intakeRows.length ? n.intake(intakeRows[0]) : null,
+    intake,
+    intakeUsage,
+    warnings,
     application: appRows.length ? n.application(appRows[0]) : null,
     learning,
     lmsCourse: programme
@@ -1433,7 +1596,15 @@ const WRITE_ROUTES = [
   ['patch', '/api/enrolments/:id', P.ENROLMENT_WRITE, writes.enrolmentUpdate],
   ['post', '/api/enrolments/:id/archive', P.ENROLMENT_WRITE, writes.enrolmentArchive],
   ['post', '/api/enrolments/:id/complete', P.ENROLMENT_WRITE, writes.enrolmentComplete],
-  ['delete', '/api/enrolments/:id', P.ENROLMENT_DELETE, writes.enrolmentDelete]
+  ['delete', '/api/enrolments/:id', P.ENROLMENT_DELETE, writes.enrolmentDelete],
+
+  /*
+   * Internal notes. Guarded by activity:write rather than by each entity's
+   * write permission: recording an observation is not the same act as changing
+   * a record, and nothing here touches CRM. The handler still refuses a note
+   * against a record that does not exist.
+   */
+  ['post', '/api/notes', P.ACTIVITY_WRITE, writes.noteCreate]
 ];
 
 /**

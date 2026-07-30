@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
@@ -25,8 +25,12 @@ export default function NewEnrolment() {
   const programmes = useApi((o) => api.programmes({ perPage: 100 }, o), []);
   const intakes = useApi((o) => api.intakes({ perPage: 100 }, o), []);
 
+  // Pre-selected when arriving from a student's record, so the person is not
+  // asked to find in a dropdown the student they were just looking at.
+  const [params] = useSearchParams();
   const [form, setForm] = useState({
-    studentId: '', programmeId: '', intakeId: '', applicationId: '',
+    studentId: params.get('studentId') || '',
+    programmeId: '', intakeId: '', applicationId: '',
     enrolmentDate: '', startDate: ''
   });
   const [override, setOverride] = useState(false);

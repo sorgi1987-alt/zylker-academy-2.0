@@ -53,6 +53,33 @@ const STAGE = {
 };
 const ALL_STAGES = new Set(Object.values(STAGE));
 
+/**
+ * The pipeline read left to right, and the ways out of it.
+ *
+ * Separated because a stage tracker that shows Rejected as the step after
+ * Offer Accepted is telling a lie about the process. Exits are ends, not steps,
+ * and the UI renders them differently.
+ */
+const PIPELINE_ORDER = [
+  STAGE.SUBMITTED, STAGE.UNDER_REVIEW, STAGE.DOCUMENTS_PENDING,
+  STAGE.OFFER_ISSUED, STAGE.OFFER_ACCEPTED, STAGE.ENROLLED
+];
+const EXIT_STAGES = [STAGE.REJECTED, STAGE.WITHDRAWN, STAGE.DEFERRED];
+
+/**
+ * Stages an application has demonstrably passed through.
+ *
+ * Derived from position in the pipeline, not from history: the audit trail is
+ * the record of what happened, and an application that was created directly at
+ * Offer Issued did not "complete" review. Everything before the current step is
+ * reported as behind it, which is what a tracker is claiming; for an exit stage
+ * nothing is claimed at all.
+ */
+function completedStages(stage) {
+  const i = PIPELINE_ORDER.indexOf(stage);
+  return i <= 0 ? [] : PIPELINE_ORDER.slice(0, i);
+}
+
 /** Allowed forward transitions within the Student Admissions pipeline. */
 const TRANSITIONS = {
   [STAGE.SUBMITTED]: [STAGE.UNDER_REVIEW, STAGE.REJECTED, STAGE.WITHDRAWN],
@@ -369,12 +396,31 @@ async function applicationTransition(deps, req) {
   }
 
   const payload = { Stage: toStage };
-  if (DECISION_STAGES.has(toStage)) payload.Decision_Date = today();
+
+  /*
+   * Optional values collected by the transition dialog.
+   *
+   * Only fields the CRM module actually has are written: Decision_Date and
+   * Documents_Status. A follow-up date and a responsible staff member have no
+   * field in this module's metadata, so they are not accepted here — inventing
+   * an API name would fail at the CRM boundary, and quietly dropping them would
+   * be worse. A free-text comment has nowhere to live on the record either, so
+   * it is attached to the audit entry instead and the dialog says so.
+   */
+  if (DECISION_STAGES.has(toStage)) {
+    payload.Decision_Date = dateOrNull(b.decisionDate, 'Decision date') || today();
+  }
+  if (b.documentsStatus !== undefined) {
+    const ds = trimOrNull(b.documentsStatus);
+    if (ds) payload.Documents_Status = ds;
+  }
+
   await deps.zoho.crmUpdate(req, cfg.modules.applications, id, payload);
 
   const rawAfter = await readBackRaw(deps, req, cfg.modules.applications, id, RB.application);
   const out = { application: n.application(rawAfter) };
   const changed = Object.keys(payload);
+  const note = trimOrNull(b.comment);
 
   // On Enrolled: provision exactly one Student + Enrolment, idempotently.
   if (toStage === STAGE.ENROLLED) {
@@ -387,8 +433,11 @@ async function applicationTransition(deps, req) {
 
   return {
     data: out,
-    audit: auditEvent('application:transition', 'application', cfg.modules.applications, id,
-      changed.concat(toStage === STAGE.ENROLLED ? ['enrolment'] : []), current, rawAfter)
+    audit: {
+      ...auditEvent('application:transition', 'application', cfg.modules.applications, id,
+        changed.concat(toStage === STAGE.ENROLLED ? ['enrolment'] : []), current, rawAfter),
+      note
+    }
   };
 }
 
@@ -635,6 +684,52 @@ async function enrolmentUpdate(deps, req) {
   await deps.zoho.crmUpdate(req, cfg.modules.enrolments, id, payload);
   const raw = await readBackRaw(deps, req, cfg.modules.enrolments, id, RB.enrolment);
   return { data: n.enrolment(raw), audit: auditEvent('enrolment:update', 'enrolment', cfg.modules.enrolments, id, Object.keys(payload), current, raw) };
+}
+
+/* ------------------------------ internal notes ---------------------------- */
+
+/**
+ * Records an internal note against a record.
+ *
+ * Nothing is written to CRM. None of these modules has a notes field this
+ * application is allowed to write, and adding one would be a schema change to
+ * somebody else's org. The note goes to the audit trail instead, attributed to
+ * the authenticated user, and every screen that offers this says plainly that
+ * the note lives in the activity history rather than on the CRM record.
+ *
+ * The record is loaded first so a note cannot be attached to an id that does
+ * not exist — an orphaned note is worse than a refused one.
+ */
+const NOTE_ENTITIES = {
+  student: { module: () => cfg.modules.students, rb: () => RB.student, label: 'student' },
+  application: { module: () => cfg.modules.applications, rb: () => RB.application, label: 'application' },
+  enrolment: { module: () => cfg.modules.enrolments, rb: () => RB.enrolment, label: 'enrolment' }
+};
+
+async function noteCreate(deps, req) {
+  const b = req.body || {};
+  const entityType = trimOrNull(b.entityType);
+  const spec = NOTE_ENTITIES[entityType];
+  if (!spec) throw new AppError(422, 'INVALID_ENTITY', 'Notes can be recorded against a student, application or enrolment.');
+
+  const id = numericId(b.recordId);
+  if (!id) throw new AppError(400, 'INVALID_ID', 'A numeric record id is required.');
+
+  const note = trimOrNull(b.note);
+  if (!note) throw new AppError(422, 'EMPTY_NOTE', 'A note cannot be empty.');
+  if (note.length > 1000) throw new AppError(422, 'NOTE_TOO_LONG', 'A note is limited to 1000 characters.');
+
+  const current = await loadRecord(deps, req, spec.module(), id, spec.rb(), `No ${spec.label} matches that id.`);
+
+  return {
+    data: { recorded: true, entityType, recordId: String(id) },
+    audit: {
+      ...auditEvent(`${entityType}:note`, entityType, spec.module(), id, [], null, current),
+      // No CRM field changed, so nothing is reported as changed.
+      changedFields: [],
+      note
+    }
+  };
 }
 
 async function enrolmentArchive(deps, req) {
@@ -992,10 +1087,12 @@ module.exports = {
   AppError,
   STAGE, ALL_STAGES, TRANSITIONS, ENROLMENT_STATUS, STUDENT_STATUS,
   SYNC_STATUS_NOT_SYNCED, MANUAL_ACTION, PIPELINE,
+  PIPELINE_ORDER, EXIT_STAGES, DECISION_STAGES, completedStages,
   // handlers
   applicationCreate, applicationUpdate, applicationTransition, applicationArchive, applicationDelete,
   studentCreate, studentUpdate, studentArchive, studentDelete,
   enrolmentCreate, enrolmentUpdate, enrolmentArchive, enrolmentDelete,
+  noteCreate,
   programmeCreate, programmeUpdate, programmeSetActive, programmeDelete,
   intakeCreate, intakeUpdate, intakeSetStatus, intakeDelete,
   enrolmentComplete,

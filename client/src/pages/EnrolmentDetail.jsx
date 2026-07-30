@@ -9,6 +9,8 @@ import {
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
 import ActivityLog from '../components/ActivityLog.jsx';
+import { Warnings, NoteDialog } from '../components/Record.jsx';
+import { useBreadcrumbLeaf } from '../components/Shell.jsx';
 
 function EditDialog({ enrolment, onClose, onDone }) {
   const toast = useToast();
@@ -185,8 +187,12 @@ export default function EnrolmentDetail() {
   const toast = useToast();
   const state = useApi((o) => api.enrolment(id, o), [id]);
   const [editing, setEditing] = useState(false);
+  const [noting, setNoting] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const action = useAction(async () => { await state.reload(); });
+
+  const loaded = state.data && state.data.enrolment;
+  useBreadcrumbLeaf(loaded ? (loaded.reference || loaded.externalReference || null) : null);
 
   return (
     <Async state={state} empty={{ title: 'Enrolment not found' }} emptyWhen={(d) => !d || !d.enrolment}>
@@ -211,6 +217,19 @@ export default function EnrolmentDetail() {
           run: async () => {
             const r = await action.run(() => api.archiveEnrolment(id, { expectedModifiedTime: e.modifiedTime }));
             if (r) { toast('Enrolment cancelled.'); setConfirm(null); }
+          }
+        });
+
+        const onActivate = () => setConfirm({
+          title: 'Reactivate this enrolment?',
+          message: 'The status returns to Active in Zoho CRM. This consumes a place on the intake again.',
+          confirmLabel: 'Reactivate',
+          danger: false,
+          run: async () => {
+            const r = await action.run(() => api.updateEnrolment(id, {
+              enrolmentStatus: 'Active', expectedModifiedTime: e.modifiedTime
+            }));
+            if (r) { toast('Enrolment reactivated.'); setConfirm(null); }
           }
         });
 
@@ -239,7 +258,26 @@ export default function EnrolmentDetail() {
                         <button type="button" className="btn" onClick={onCancel}>Cancel enrolment</button>
                       </>
                     )}
+                    {/* Reinstating a cancelled enrolment. Completed is not
+                        reopened here: that would rewrite an outcome. */}
+                    {e.status === 'Cancelled' && (
+                      <button type="button" className="btn" onClick={onActivate}>Reactivate</button>
+                    )}
                   </>
+                )}
+                {can('activity:write') && (
+                  <button type="button" className="btn" onClick={() => setNoting(true)}>Add note</button>
+                )}
+                {/* Only offered when a Books customer was actually resolved:
+                    a link to an empty customer filter would show every
+                    invoice in the org under this student's name. */}
+                {can('invoice:read') && d.invoices && d.invoices.match && d.invoices.match.customerId && (
+                  <Link
+                    className="btn"
+                    to={`/invoices?customerId=${encodeURIComponent(d.invoices.match.customerId)}`}
+                  >
+                    Invoices
+                  </Link>
                 )}
                 {can('enrolment:delete') && (
                   <button type="button" className="btn danger" onClick={onDelete}>Delete</button>
@@ -253,6 +291,10 @@ export default function EnrolmentDetail() {
                 <p>{friendlyError(action.error)}</p>
               </div>
             )}
+
+            {/* Computed on the server from CRM, the LMS connector and Books
+                together. Nothing here blocks an action. */}
+            <Warnings items={d.warnings} />
 
             <div className="grid g-2">
               <Card title="Enrolment details" action={<SourceBadge source="crm" />}>
@@ -389,6 +431,15 @@ export default function EnrolmentDetail() {
 
             {editing && (
               <EditDialog enrolment={e} onClose={() => setEditing(false)} onDone={async () => { await state.reload(); }} />
+            )}
+
+            {noting && (
+              <NoteDialog
+                entityType="enrolment"
+                recordId={e.id}
+                onClose={() => setNoting(false)}
+                onDone={async () => { await state.reload(); }}
+              />
             )}
 
             {confirm && (

@@ -12,7 +12,13 @@ const refs = require('./references');
 const meta = (module_, r) => ({
   module: module_,
   reference: refs.referenceOf(module_, r),
-  source: 'crm'
+  source: 'crm',
+  // Deep link into the Zoho CRM console. Built from configuration and the
+  // record id rather than from anything the API returned, so it cannot be used
+  // to send a user to an arbitrary host.
+  crmUrl: r && r.id
+    ? `${String(cfg.crm.appUrl).replace(/\/+$/, '')}/crm/tab/${encodeURIComponent(module_)}/${encodeURIComponent(r.id)}`
+    : null
 });
 
 /** Zoho lookups arrive as { id, name } - flatten them for the client. */

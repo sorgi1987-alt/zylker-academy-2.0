@@ -203,5 +203,11 @@ export const api = {
   invoice: (id, o) => get(`/api/invoices/${encodeURIComponent(id)}`, o),
 
   /* audit */
-  activity: (params, o) => get(`/api/activity${qs(params)}`, o)
+  activity: (params, o) => get(`/api/activity${qs(params)}`, o),
+  /*
+   * Internal note. Written to the activity trail only — no CRM field is
+   * touched, because none of these modules has a notes field this application
+   * may write.
+   */
+  createNote: (payload) => send('POST', '/api/notes', payload)
 };

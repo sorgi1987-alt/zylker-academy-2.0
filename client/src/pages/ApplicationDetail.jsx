@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApi, useAction } from '../useApi.js';
-import { api, newIdempotencyKey } from '../api.js';
+import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import {
   Async, Card, Pill, SourceBadge, RefBadge, ConfirmDialog, Modal,
@@ -9,74 +9,8 @@ import {
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
 import ActivityLog from '../components/ActivityLog.jsx';
-
-/**
- * Stage transition control.
- *
- * Only the transitions the SERVER will accept are offered — the detail endpoint
- * returns `allowedTransitions` computed from the same table the write handler
- * validates against. Rendering every stage and letting the API reject most of
- * them would teach people that this application guesses.
- */
-function StageActions({ application, allowed, onDone }) {
-  const [target, setTarget] = useState(null);
-  const [idempotencyKey, setKey] = useState(newIdempotencyKey);
-  const toast = useToast();
-  const action = useAction(onDone);
-
-  if (!allowed.length) {
-    return <p className="muted small">This application is at a final stage and cannot be moved further.</p>;
-  }
-
-  const commit = async () => {
-    const r = await action.run(() => api.transitionApplication(
-      application.id,
-      { toStage: target, expectedModifiedTime: application.modifiedTime },
-      { idempotencyKey }
-    ));
-    if (r) {
-      toast(
-        r.data.enrolmentCreated
-          ? 'Stage changed and an enrolment was created.'
-          : r.data.enrolment
-            ? 'Stage changed. The existing enrolment was reused.'
-            : 'Stage changed.'
-      );
-      setTarget(null);
-      // A fresh key for the next action, so a later transition is not treated
-      // as a replay of this one.
-      setKey(newIdempotencyKey());
-    }
-  };
-
-  return (
-    <>
-      <div className="head-actions">
-        {allowed.map((s) => (
-          <button key={s} type="button" className="btn" onClick={() => setTarget(s)}>
-            Move to {s}
-          </button>
-        ))}
-      </div>
-
-      {action.error && <p className="field-error" role="alert">{friendlyError(action.error)}</p>}
-
-      {target && (
-        <ConfirmDialog
-          title={`Move to ${target}?`}
-          message={target === 'Enrolled'
-            ? 'This updates the application in Zoho CRM and creates an enrolment if one does not already exist. Repeating the action will not create a second enrolment.'
-            : `The application stage will be changed to ${target} in Zoho CRM.`}
-          confirmLabel={`Move to ${target}`}
-          danger={false}
-          busy={action.busy}
-          onConfirm={commit}
-          onCancel={() => setTarget(null)}
-        />
-      )}
-    </>
-  );
-}
+import WorkflowPanel from '../components/Workflow.jsx';
+import { useBreadcrumbLeaf } from '../components/Shell.jsx';
 
 /* --------------------------------- edit ---------------------------------- */
 
@@ -123,7 +57,7 @@ function EditDialog({ application, onClose, onDone }) {
           </Field>
         </div>
         <p className="note">
-          The stage is changed with the stage buttons, not here, so a transition always
+          The stage is changed in the workflow panel, not here, so a transition always
           goes through the rules the server validates.
         </p>
         <FormError error={action.error ? friendlyError(action.error) : null} />
@@ -144,6 +78,12 @@ export default function ApplicationDetail() {
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(null);
   const action = useAction(async () => { await state.reload(); });
+
+  // Names this record in the breadcrumb trail rather than showing "Details".
+  // Read from state at the top level: hooks cannot run inside <Async>'s render
+  // callback, which is a plain function and not a component.
+  const loaded = state.data && state.data.application;
+  useBreadcrumbLeaf(loaded ? (loaded.name || loaded.applicationId || null) : null);
 
   return (
     <Async state={state} empty={{ title: 'Application not found' }} emptyWhen={(d) => !d || !d.application}>
@@ -200,18 +140,13 @@ export default function ApplicationDetail() {
               </div>
             )}
 
-            {can('application:transition') && (
-              <Card title="Admissions stage" action={<SourceBadge source="crm" />}>
-                <p>
-                  Current stage: <Pill value={a.stage} />
-                </p>
-                <StageActions
-                  application={a}
-                  allowed={d.allowedTransitions}
-                  onDone={async () => { await state.reload(); }}
-                />
-              </Card>
-            )}
+            <WorkflowPanel
+              application={a}
+              workflow={d.workflow}
+              enrolment={d.enrolment}
+              canTransition={can('application:transition')}
+              onDone={async () => { await state.reload(); }}
+            />
 
             <div className="grid g-2">
               <Card title="Application details" action={<SourceBadge source="crm" />}>

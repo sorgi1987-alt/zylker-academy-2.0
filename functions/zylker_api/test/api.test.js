@@ -107,6 +107,7 @@ test('every route except /api/health rejects an unauthenticated caller', async (
     ['DELETE', '/api/intakes/1', undefined],
     ['POST', '/api/enrolments', { studentId: '1' }],
     ['POST', '/api/enrolments/1/complete', {}],
+    ['POST', '/api/notes', { entityType: 'student', recordId: '1', note: 'x' }],
     ['DELETE', '/api/enrolments/1', undefined],
     ['POST', '/api/lms/courses', { provider: 'Moodle', externalCourseId: 'X', name: 'X' }],
     ['PATCH', '/api/lms/courses/1', { name: 'X' }],

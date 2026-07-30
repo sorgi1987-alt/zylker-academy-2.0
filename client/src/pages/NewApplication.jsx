@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { Card, Loading, ErrorState, useToast } from '../components/Ui.jsx';
@@ -26,9 +26,12 @@ export default function NewApplication() {
   const programmes = useApi((o) => api.programmes({ perPage: 100, active: 'true' }, o), []);
   const intakes = useApi((o) => api.intakes({ perPage: 100 }, o), []);
 
+  // Pre-selected when arriving from a student's record.
+  const [params] = useSearchParams();
   const [mode, setMode] = useState('existing');   // existing | new
   const [form, setForm] = useState({
-    studentId: '', firstName: '', lastName: '', email: '',
+    studentId: params.get('studentId') || '',
+    firstName: '', lastName: '', email: '',
     programmeId: '', intakeId: '', applicationDate: '', closingDate: '', tuitionFee: '', studyMode: ''
   });
   const [touched, setTouched] = useState(false);
