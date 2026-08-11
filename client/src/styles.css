@@ -202,7 +202,16 @@ a{color:var(--brand-2)}
 .grid+.grid,.grid+.card,.card+.card,.card+.grid{margin-top:16px}
 
 .kpi{padding:16px 18px}
-.kpi .label{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);font-weight:600}
+.kpi .label{display:flex;flex-direction:column;gap:6px}
+/* Fixed height, not min: clamped to exactly two lines regardless of how much
+   text there is. A short label doesn't stretch to fill it and a long one is
+   truncated with an ellipsis rather than wrapping to a third line — either
+   way every card's label block is the same height, so the badge below it
+   and the value below THAT land on the same row across every card, whether
+   its neighbour's text was one word or eight. */
+.kpi .label-text{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);
+  font-weight:600;line-height:1.3;height:calc(1.3em * 2);
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .kpi .value{font-size:30px;font-weight:700;margin-top:6px;letter-spacing:-.5px}
 .kpi .value.na{font-size:15px;color:var(--ink-3);font-weight:500;padding:9px 0}
 
@@ -382,12 +391,6 @@ input[type=search]{flex:1;min-width:220px}
 /* --- KPI cards that link somewhere --- */
 .kpi-link{text-decoration:none;color:inherit;transition:border-color .12s,transform .12s}
 .kpi-link:hover{border-color:var(--brand-2);transform:translateY(-1px)}
-/* Reserves room for a two-line label (the badge can push a long one to wrap)
-   so every card in a row is the same height and the VALUE line underneath
-   lands on the same baseline across the row — align-items:start on the grid
-   only stops cards stretching to match each other, it doesn't make short and
-   long labels line up on their own. */
-.kpi .label{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;min-height:34px}
 
 /* --- lists --- */
 .plain-list{list-style:none;margin:0;padding:0}

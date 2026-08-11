@@ -212,7 +212,9 @@ export const Kpi = ({ label, value, unavailable, source, to, partial, format }) 
   const body = (
     <>
       <div className="label">
-        {label}
+        {/* title gives the full text back on hover/focus for a label the
+            two-line clamp below has truncated. */}
+        <span className="label-text" title={label}>{label}</span>
         {source && <SourceBadge source={source} />}
       </div>
       {unavailable
