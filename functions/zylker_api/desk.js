@@ -146,10 +146,16 @@ async function listTickets(zoho, req, {
   // Whitelisted against the fixed enum: never pass caller-controlled free
   // text into a filter Desk applies to a live ticket queue.
   if (statusType && STATUS_TYPES.includes(statusType)) params.statusType = statusType;
-  if (contactId) params.contactId = String(contactId).replace(/[^A-Za-z0-9]/g, '');
   if (search) params.subject = String(search).slice(0, 100);
 
-  const body = await deskGet(zoho, req, '/tickets', params);
+  // Desk does not accept `contactId` as a filter on GET /tickets (confirmed
+  // against a live deployment — it answers 422 UNPROCESSABLE_ENTITY, "Extra
+  // query parameter"). A contact's tickets are a sub-resource instead.
+  const path = contactId
+    ? `/contacts/${String(contactId).replace(/[^A-Za-z0-9]/g, '')}/tickets`
+    : '/tickets';
+
+  const body = await deskGet(zoho, req, path, params);
   const rows = body.data || [];
   return {
     tickets: rows.map((t) => ticketSummary(t)),
