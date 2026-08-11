@@ -67,13 +67,35 @@ const CRM_CODE_MESSAGE = {
   NOT_APPROVED: 'has not approved this record'
 };
 
+/**
+ * Pulls the upstream's own explanation out of a 401/403 body, when it has one.
+ *
+ * "Not authorised" alone doesn't distinguish a missing scope from a bad org id
+ * from an unlicensed account — three different fixes. Zoho's own message
+ * (Desk: `{errorCode,message}`, CRM/Books: `{code,message}` or
+ * `{data:[{code,message}]}`) says which, and none of these shapes carry a
+ * token, so it's safe to surface redacted rather than discarded.
+ */
+function upstreamAuthDetail(body) {
+  const row = body && Array.isArray(body.data) ? body.data[0] : body;
+  const code = row && (row.errorCode || row.code);
+  const message = row && row.message;
+  if (!code && !message) return null;
+  const parts = [code, message].filter(Boolean).map((s) => redact(String(s)));
+  return parts.join(': ');
+}
+
 function safeError(err, service) {
   const status = err && err.response ? err.response.status : null;
   const body = err && err.response ? err.response.data : null;
   let detail;
 
   if (err && err.code === 'ECONNABORTED') detail = 'Upstream request timed out.';
-  else if (status === 401 || status === 403) detail = 'Not authorised for this service. Check the Catalyst connection scopes.';
+  else if (status === 401 || status === 403) {
+    const extra = upstreamAuthDetail(body);
+    detail = 'Not authorised for this service. Check the Catalyst connection scopes.'
+      + (extra ? ` (${extra})` : '');
+  }
   else if (status === 429) detail = 'Rate limited by the upstream service.';
   else if (status && status >= 500) detail = 'Upstream service error.';
   else if (status) {
