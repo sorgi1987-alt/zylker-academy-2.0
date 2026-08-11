@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAction } from '../useApi.js';
 import { api } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import { Modal, useToast } from './Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from './Form.jsx';
 
@@ -12,8 +13,6 @@ import { Field, FormActions, FormError, friendlyError } from './Form.jsx';
 
 /* ------------------------------- warnings -------------------------------- */
 
-const TAG = { critical: 'Critical', warning: 'Warning', information: 'Note' };
-
 /**
  * Contextual warnings about a record.
  *
@@ -23,21 +22,25 @@ const TAG = { critical: 'Critical', warning: 'Warning', information: 'Note' };
  * not used to bar it, since no business rule in this application says it should.
  *
  * Each row carries a word as well as a colour — severity conveyed by colour
- * alone is not information for every reader.
+ * alone is not information for every reader. `w.message` itself is authored
+ * server-side (functions/zylker_api/index.js), often with live counts and
+ * record-specific detail interpolated in, so it stays in English — the same
+ * treatment as any other server-originated sentence in this app.
  */
 export function Warnings({ items }) {
+  const t = useT();
   if (!items || !items.length) return null;
   const rank = { critical: 0, warning: 1, information: 2 };
   const sorted = [...items].sort((a, b) => rank[a.severity] - rank[b.severity]);
 
   return (
-    <div className="warns" role="status" aria-label="Warnings about this record">
+    <div className="warns" role="status" aria-label={t('common.record.warningsLabel')}>
       {sorted.map((w, i) => (
         <div className={`warn-row ${w.severity}`} key={`${w.severity}-${i}`}>
-          <span className="warn-tag">{TAG[w.severity] || w.severity}</span>
+          <span className="warn-tag">{t(`common.record.severityTag.${w.severity}`) || w.severity}</span>
           <span>
             {w.message}
-            {w.to && <> <Link to={w.to}>Open</Link></>}
+            {w.to && <> <Link to={w.to}>{t('common.record.open')}</Link></>}
           </span>
         </div>
       ))}
@@ -54,32 +57,33 @@ export function Warnings({ items }) {
  * from a URL. Arrow keys move between tabs, which is what a screen reader user
  * expects from a `tablist`.
  */
-export function Tabs({ tabs, active, onChange, label = 'Sections' }) {
+export function Tabs({ tabs, active, onChange, label }) {
+  const t = useT();
   const onKeyDown = (e) => {
-    const i = tabs.findIndex((t) => t.key === active);
+    const i = tabs.findIndex((tb) => tb.key === active);
     if (i < 0) return;
     if (e.key === 'ArrowRight') { e.preventDefault(); onChange(tabs[(i + 1) % tabs.length].key); }
     if (e.key === 'ArrowLeft') { e.preventDefault(); onChange(tabs[(i - 1 + tabs.length) % tabs.length].key); }
   };
 
   return (
-    <div className="tabs" role="tablist" aria-label={label} onKeyDown={onKeyDown}>
-      {tabs.map((t) => (
+    <div className="tabs" role="tablist" aria-label={label || t('common.record.sectionsLabel')} onKeyDown={onKeyDown}>
+      {tabs.map((tb) => (
         <button
-          key={t.key}
+          key={tb.key}
           type="button"
           role="tab"
-          id={`tab-${t.key}`}
-          aria-selected={t.key === active}
-          aria-controls={`panel-${t.key}`}
-          tabIndex={t.key === active ? 0 : -1}
-          onClick={() => onChange(t.key)}
+          id={`tab-${tb.key}`}
+          aria-selected={tb.key === active}
+          aria-controls={`panel-${tb.key}`}
+          tabIndex={tb.key === active ? 0 : -1}
+          onClick={() => onChange(tb.key)}
         >
-          {t.label}
+          {tb.label}
           {/* A count of null means "not loaded or unavailable", which is not the
               same as zero and so shows nothing rather than a 0 badge. */}
-          {t.count !== null && t.count !== undefined && (
-            <span className="tab-count">{t.count}</span>
+          {tb.count !== null && tb.count !== undefined && (
+            <span className="tab-count">{tb.count}</span>
           )}
         </button>
       ))}
@@ -103,6 +107,7 @@ export const TabPanel = ({ id, active, children }) => (
  * than letting someone believe the text landed on the record in Zoho.
  */
 export function NoteDialog({ entityType, recordId, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const [note, setNote] = useState('');
   const action = useAction(async () => { await onDone(); onClose(); });
@@ -110,26 +115,26 @@ export function NoteDialog({ entityType, recordId, onClose, onDone }) {
   const submit = async (e) => {
     e.preventDefault();
     const r = await action.run(() => api.createNote({ entityType, recordId, note }));
-    if (r) toast('Note recorded in the activity trail.');
+    if (r) toast(t('common.record.note.recorded'));
   };
 
   return (
-    <Modal title="Add an internal note" onClose={onClose}>
+    <Modal title={t('common.record.note.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <Field
           id="note"
-          label="Note"
+          label={t('common.record.note.label')}
           required
-          hint="Recorded in this record's activity history, attributed to you and timestamped. It is not written onto the record in Zoho CRM — this module has no notes field."
+          hint={t('common.record.note.hint')}
         >
           <textarea rows={4} value={note} onChange={(e2) => setNote(e2.target.value)} maxLength={1000} />
         </Field>
-        <p className="field-hint">{note.length} of 1000 characters.</p>
+        <p className="field-hint">{t('common.record.note.charCount', { count: note.length })}</p>
         <FormError error={action.error ? friendlyError(action.error) : null} />
         <FormActions
           busy={action.busy}
           disabled={!note.trim()}
-          submitLabel="Record note"
+          submitLabel={t('common.record.note.submit')}
           onCancel={onClose}
         />
       </form>

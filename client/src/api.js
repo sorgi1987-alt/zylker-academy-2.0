@@ -8,6 +8,8 @@
  * The only credential the browser holds is the Catalyst session cookie, which
  * Catalyst set and which is sent automatically by `credentials: 'include'`.
  */
+import { translate } from './i18n/I18nContext.jsx';
+
 const BASE = import.meta.env.VITE_API_BASE || '/server/zylker_api';
 
 export class ApiError extends Error {
@@ -50,7 +52,7 @@ async function parse(res) {
   if (!res.ok) {
     const err = (body && body.error) || {};
     throw new ApiError(
-      err.message || 'Something went wrong.',
+      err.message || translate('common.errors.genericFetchError'),
       err.code || 'ERROR',
       err.service || null,
       res.status,
@@ -72,7 +74,7 @@ async function get(path, { signal } = {}) {
     });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
-    throw new ApiError('Could not reach the service. Check your connection.', 'NETWORK', null, 0);
+    throw new ApiError(translate('common.errors.networkUnreachable'), 'NETWORK', null, 0);
   }
   return parse(res);
 }
@@ -96,7 +98,7 @@ async function send(method, path, payload, { idempotencyKey } = {}) {
       body: JSON.stringify(payload || {})
     });
   } catch {
-    throw new ApiError('Could not reach the service. Check your connection.', 'NETWORK', null, 0);
+    throw new ApiError(translate('common.errors.networkUnreachable'), 'NETWORK', null, 0);
   }
   return parse(res);
 }

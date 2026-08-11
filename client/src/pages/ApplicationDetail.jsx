@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApi, useAction } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, SourceBadge, RefBadge, ConfirmDialog, Modal,
   useToast, fmtDate, fmtMoney
@@ -15,6 +16,7 @@ import { useBreadcrumbLeaf } from '../components/Shell.jsx';
 /* --------------------------------- edit ---------------------------------- */
 
 function EditDialog({ application, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const [form, setForm] = useState({
     applicationDate: application.applicationDate || '',
@@ -33,35 +35,34 @@ function EditDialog({ application, onClose, onDone }) {
       tuitionFee: form.tuitionFee === '' ? undefined : Number(form.tuitionFee),
       expectedModifiedTime: application.modifiedTime
     }));
-    if (r) toast('Application updated.');
+    if (r) toast(t('applicationDetail.editDialog.updatedToast'));
   };
 
   return (
-    <Modal title="Edit application" onClose={onClose}>
+    <Modal title={t('applicationDetail.editDialog.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
-          <Field id="applicationDate" label="Application date">
+          <Field id="applicationDate" label={t('applicationDetail.editDialog.applicationDateLabel')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.applicationDate} onChange={set('applicationDate')} />
           </Field>
-          <Field id="closingDate" label="Expected decision date">
+          <Field id="closingDate" label={t('applicationDetail.editDialog.closingDateLabel')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.closingDate} onChange={set('closingDate')} />
           </Field>
-          <Field id="tuitionFee" label="Tuition fee">
+          <Field id="tuitionFee" label={t('applicationDetail.editDialog.tuitionFeeLabel')}>
             <input type="number" min="0" step="1" value={form.tuitionFee} onChange={set('tuitionFee')} />
           </Field>
-          <Field id="studyMode" label="Preferred study mode">
+          <Field id="studyMode" label={t('applicationDetail.editDialog.studyModeLabel')}>
             <input value={form.studyMode} onChange={set('studyMode')} />
           </Field>
-          <Field id="documentsStatus" label="Documents status">
+          <Field id="documentsStatus" label={t('applicationDetail.editDialog.documentsStatusLabel')}>
             <input value={form.documentsStatus} onChange={set('documentsStatus')} />
           </Field>
         </div>
         <p className="note">
-          The stage is changed in the workflow panel, not here, so a transition always
-          goes through the rules the server validates.
+          {t('applicationDetail.editDialog.note')}
         </p>
         <FormError error={action.error ? friendlyError(action.error) : null} />
-        <FormActions busy={action.busy} submitLabel="Save changes" onCancel={onClose} />
+        <FormActions busy={action.busy} submitLabel={t('applicationDetail.editDialog.submitLabel')} onCancel={onClose} />
       </form>
     </Modal>
   );
@@ -70,6 +71,7 @@ function EditDialog({ application, onClose, onDone }) {
 /* -------------------------------- the page -------------------------------- */
 
 export default function ApplicationDetail() {
+  const t = useT();
   const { id } = useParams();
   const navigate = useNavigate();
   const can = useCan();
@@ -86,34 +88,34 @@ export default function ApplicationDetail() {
   useBreadcrumbLeaf(loaded ? (loaded.name || loaded.applicationId || null) : null);
 
   return (
-    <Async state={state} empty={{ title: 'Application not found' }} emptyWhen={(d) => !d || !d.application}>
+    <Async state={state} empty={{ title: t('applicationDetail.notFoundTitle') }} emptyWhen={(d) => !d || !d.application}>
       {(d) => {
         const a = d.application;
 
         const onWithdraw = () => setConfirm({
-          title: 'Withdraw this application?',
-          message: 'The stage will be set to Withdrawn in Zoho CRM. The record is kept.',
-          confirmLabel: 'Withdraw application',
+          title: t('applicationDetail.withdrawConfirm.title'),
+          message: t('applicationDetail.withdrawConfirm.message'),
+          confirmLabel: t('applicationDetail.withdrawConfirm.confirmLabel'),
           run: async () => {
             const r = await action.run(() => api.archiveApplication(id, { expectedModifiedTime: a.modifiedTime }));
-            if (r) { toast('Application withdrawn.'); setConfirm(null); }
+            if (r) { toast(t('applicationDetail.withdrawConfirm.toast')); setConfirm(null); }
           }
         });
 
         const onDelete = () => setConfirm({
-          title: 'Delete this application permanently?',
-          message: 'This cannot be undone. Deletion is refused while a related enrolment exists.',
-          confirmLabel: 'Delete permanently',
+          title: t('applicationDetail.deleteConfirm.title'),
+          message: t('applicationDetail.deleteConfirm.message'),
+          confirmLabel: t('applicationDetail.deleteConfirm.confirmLabel'),
           run: async () => {
             const r = await action.run(() => api.deleteApplication(id));
-            if (r) { toast('Application deleted.'); navigate('/applications', { replace: true }); }
+            if (r) { toast(t('applicationDetail.deleteConfirm.toast')); navigate('/applications', { replace: true }); }
           }
         });
 
         return (
           <>
             <div className="page-head">
-              <h1>{a.name || a.applicationId || 'Application'}</h1>
+              <h1>{a.name || a.applicationId || t('applicationDetail.fallbackTitle')}</h1>
               <p>
                 <Pill value={a.stage} />{' '}
                 <RefBadge reference={a.applicationId || a.externalReference} />
@@ -121,21 +123,21 @@ export default function ApplicationDetail() {
               <div className="head-actions">
                 {can('application:write') && (
                   <>
-                    <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
+                    <button type="button" className="btn" onClick={() => setEditing(true)}>{t('applicationDetail.editButton')}</button>
                     {a.stage !== 'Withdrawn' && (
-                      <button type="button" className="btn" onClick={onWithdraw}>Withdraw</button>
+                      <button type="button" className="btn" onClick={onWithdraw}>{t('applicationDetail.withdrawButton')}</button>
                     )}
                   </>
                 )}
                 {can('application:delete') && (
-                  <button type="button" className="btn danger" onClick={onDelete}>Delete</button>
+                  <button type="button" className="btn danger" onClick={onDelete}>{t('applicationDetail.deleteButton')}</button>
                 )}
               </div>
             </div>
 
             {action.error && (
               <div className="state err" role="alert">
-                <h3>That action could not be completed</h3>
+                <h3>{t('applicationDetail.actionErrorTitle')}</h3>
                 <p>{friendlyError(action.error)}</p>
               </div>
             )}
@@ -149,45 +151,45 @@ export default function ApplicationDetail() {
             />
 
             <div className="grid g-2">
-              <Card title="Application details" action={<SourceBadge source="crm" />}>
+              <Card title={t('applicationDetail.detailsCard.title')} action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Application ID</dt><dd className="mono">{a.applicationId || '—'}</dd>
-                  <dt>Pipeline</dt><dd>{a.pipeline || '—'}</dd>
-                  <dt>Applied</dt><dd>{fmtDate(a.applicationDate)}</dd>
-                  <dt>Expected decision</dt><dd>{fmtDate(a.expectedDecisionDate)}</dd>
-                  <dt>Decision recorded</dt><dd>{fmtDate(a.decisionDate)}</dd>
-                  <dt>Tuition fee</dt><dd className="mono">{fmtMoney(a.tuitionFee)}</dd>
-                  <dt>Study mode</dt><dd>{a.studyMode || '—'}</dd>
-                  <dt>Documents</dt><dd>{a.documentsStatus || '—'}</dd>
-                  <dt>Last modified</dt><dd>{fmtDate(a.modifiedTime)}</dd>
+                  <dt>{t('applicationDetail.detailsCard.applicationId')}</dt><dd className="mono">{a.applicationId || '—'}</dd>
+                  <dt>{t('applicationDetail.detailsCard.pipeline')}</dt><dd>{a.pipeline || '—'}</dd>
+                  <dt>{t('applicationDetail.detailsCard.applied')}</dt><dd>{fmtDate(a.applicationDate)}</dd>
+                  <dt>{t('applicationDetail.detailsCard.expectedDecision')}</dt><dd>{fmtDate(a.expectedDecisionDate)}</dd>
+                  <dt>{t('applicationDetail.detailsCard.decisionRecorded')}</dt><dd>{fmtDate(a.decisionDate)}</dd>
+                  <dt>{t('applicationDetail.detailsCard.tuitionFee')}</dt><dd className="mono">{fmtMoney(a.tuitionFee)}</dd>
+                  <dt>{t('applicationDetail.detailsCard.studyMode')}</dt><dd>{a.studyMode || '—'}</dd>
+                  <dt>{t('applicationDetail.detailsCard.documents')}</dt><dd>{a.documentsStatus || '—'}</dd>
+                  <dt>{t('applicationDetail.detailsCard.lastModified')}</dt><dd>{fmtDate(a.modifiedTime)}</dd>
                 </dl>
               </Card>
 
-              <Card title="Related records" action={<SourceBadge source="crm" />}>
+              <Card title={t('applicationDetail.relatedCard.title')} action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Student</dt>
+                  <dt>{t('applicationDetail.relatedCard.student')}</dt>
                   <dd>
                     {d.student
                       ? <Link to={`/students/${d.student.id}`}>{d.student.fullName || d.student.email}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('applicationDetail.relatedCard.notLinked')}</span>}
                   </dd>
-                  <dt>Programme</dt>
+                  <dt>{t('applicationDetail.relatedCard.programme')}</dt>
                   <dd>
                     {d.programme
                       ? <Link to={`/programmes/${d.programme.id}`}>{d.programme.name}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('applicationDetail.relatedCard.notLinked')}</span>}
                   </dd>
-                  <dt>Intake</dt>
+                  <dt>{t('applicationDetail.relatedCard.intake')}</dt>
                   <dd>
                     {d.intake
                       ? <Link to={`/intakes/${d.intake.id}`}>{d.intake.name}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('applicationDetail.relatedCard.notLinked')}</span>}
                   </dd>
-                  <dt>Enrolment</dt>
+                  <dt>{t('applicationDetail.relatedCard.enrolment')}</dt>
                   <dd>
                     {d.enrolment
                       ? <Link to={`/enrolments/${d.enrolment.id}`}>{d.enrolment.reference || d.enrolment.id}</Link>
-                      : <span className="muted">None yet</span>}
+                      : <span className="muted">{t('applicationDetail.relatedCard.noneYet')}</span>}
                   </dd>
                 </dl>
               </Card>
@@ -200,7 +202,7 @@ export default function ApplicationDetail() {
               * imply this applicant is on it.
               */}
 
-            <Card title="Activity">
+            <Card title={t('applicationDetail.activityCard.title')}>
               <ActivityLog rows={d.activity} />
             </Card>
 

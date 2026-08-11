@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useApi, useDebounced } from '../useApi.js';
 import { api } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, ReadOnlyBadge,
   fmtDate, fmtMoney
@@ -20,6 +21,7 @@ import {
  * and the backend exposes no route that would accept one.
  */
 export default function Invoices() {
+  const t = useT();
   const [params] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -52,15 +54,12 @@ export default function Invoices() {
   return (
     <>
       <div className="page-head">
-        <h1>Finance</h1>
-        <p>
-          Invoices from Zoho Books. This application reads invoices only —
-          creating, editing, paying and deleting are done in Zoho Books.
-        </p>
+        <h1>{t('invoices.pageTitle')}</h1>
+        <p>{t('invoices.pageIntro')}</p>
       </div>
 
       <Card
-        title="Invoices"
+        title={t('invoices.cardTitle')}
         action={(
           <div className="head-actions">
             <SourceBadge source="books" />
@@ -70,29 +69,29 @@ export default function Invoices() {
       >
         {customerId && (
           <p className="note">
-            Filtered to Zoho Books customer <span className="mono">{customerId}</span>.{' '}
-            <Link to="/invoices">Show all invoices</Link>.
+            {t('invoices.filteredToCustomer')} <span className="mono">{customerId}</span>.{' '}
+            <Link to="/invoices">{t('invoices.showAllInvoices')}</Link>.
           </p>
         )}
 
         <div className="toolbar">
           <SearchBox
             id="invoice-search"
-            label="Search"
+            label={t('common.search')}
             value={search}
             onChange={changeFilter(setSearch)}
-            placeholder="Invoice number or customer"
+            placeholder={t('invoices.searchPlaceholder')}
           />
           <FilterSelect
             id="invoice-status"
-            label="Status"
+            label={t('invoices.status.label')}
             value={status}
             onChange={changeFilter(setStatus)}
             options={statuses}
-            allLabel="All statuses"
+            allLabel={t('invoices.status.all')}
           />
           <div className="field">
-            <label htmlFor="invoice-from">Invoiced from</label>
+            <label htmlFor="invoice-from">{t('invoices.invoicedFrom')}</label>
             <input
               id="invoice-from"
               type="date"
@@ -101,7 +100,7 @@ export default function Invoices() {
             />
           </div>
           <div className="field">
-            <label htmlFor="invoice-to">Invoiced to</label>
+            <label htmlFor="invoice-to">{t('invoices.invoicedTo')}</label>
             <input
               id="invoice-to"
               type="date"
@@ -116,19 +115,19 @@ export default function Invoices() {
         <FilterChips
           chips={[
             status && {
-              key: 'status', label: 'Status', value: statusLabel(status),
+              key: 'status', label: t('invoices.filters.status'), value: statusLabel(status),
               onClear: () => changeFilter(setStatus)('')
             },
             dateStart && {
-              key: 'from', label: 'From', value: dateStart,
+              key: 'from', label: t('invoices.filters.from'), value: dateStart,
               onClear: () => changeFilter(setDateStart)('')
             },
             dateEnd && {
-              key: 'to', label: 'To', value: dateEnd,
+              key: 'to', label: t('invoices.filters.to'), value: dateEnd,
               onClear: () => changeFilter(setDateEnd)('')
             },
             search && {
-              key: 'search', label: 'Search', value: search,
+              key: 'search', label: t('common.search'), value: search,
               onClear: () => changeFilter(setSearch)('')
             }
           ]}
@@ -140,8 +139,8 @@ export default function Invoices() {
         <Async
           state={state}
           empty={{
-            title: 'No invoices match',
-            message: 'Try a different search term, status or date range.'
+            title: t('invoices.empty.title'),
+            message: t('invoices.empty.message')
           }}
         >
           {(rows, meta) => (
@@ -150,15 +149,15 @@ export default function Invoices() {
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Invoice</th>
-                      <th scope="col">Customer</th>
-                      <th scope="col">Date</th>
-                      <th scope="col">Due</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Subtotal</th>
-                      <th scope="col">Tax</th>
-                      <th scope="col">Total</th>
-                      <th scope="col">Balance</th>
+                      <th scope="col">{t('invoices.table.invoice')}</th>
+                      <th scope="col">{t('invoices.table.customer')}</th>
+                      <th scope="col">{t('invoices.table.date')}</th>
+                      <th scope="col">{t('invoices.table.due')}</th>
+                      <th scope="col">{t('invoices.table.status')}</th>
+                      <th scope="col">{t('invoices.table.subtotal')}</th>
+                      <th scope="col">{t('invoices.table.tax')}</th>
+                      <th scope="col">{t('invoices.table.total')}</th>
+                      <th scope="col">{t('invoices.table.balance')}</th>
                     </tr>
                   </thead>
                   <tbody>

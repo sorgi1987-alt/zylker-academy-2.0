@@ -3,11 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 
 export default function Applications() {
+  const t = useT();
   const can = useCan();
   const [params] = useSearchParams();
   // A dashboard card can deep-link into a pre-filtered list.
@@ -25,17 +27,17 @@ export default function Applications() {
   return (
     <>
       <div className="page-head">
-        <h1>Applications</h1>
-        <p>Admissions applications held in Zoho CRM, with their current stage.</p>
+        <h1>{t('applications.pageTitle')}</h1>
+        <p>{t('applications.pageIntro')}</p>
       </div>
 
       <Card
-        title="All applications"
+        title={t('applications.cardTitle')}
         action={(
           <div className="head-actions">
             <SourceBadge source="crm" />
             {can('application:write') && (
-              <Link className="btn primary" to="/applications/new">New application</Link>
+              <Link className="btn primary" to="/applications/new">{t('applications.newApplicationLink')}</Link>
             )}
           </div>
         )}
@@ -43,18 +45,18 @@ export default function Applications() {
         <div className="toolbar">
           <SearchBox
             id="application-search"
-            label="Search"
+            label={t('common.search')}
             value={list.search}
             onChange={list.setSearch}
-            placeholder="Applicant, email or application ID"
+            placeholder={t('applications.searchPlaceholder')}
           />
           <FilterSelect
             id="application-stage"
-            label="Stage"
+            label={t('applications.stageLabel')}
             value={list.filters.stage || ''}
             onChange={(v) => list.setFilter('stage', v)}
             options={stages}
-            allLabel="All stages"
+            allLabel={t('applications.allStages')}
           />
         </div>
 
@@ -63,15 +65,15 @@ export default function Applications() {
         <FilterChips
           chips={[
             list.filters.stage && {
-              key: 'stage', label: 'Stage', value: list.filters.stage,
+              key: 'stage', label: t('applications.filters.stage'), value: list.filters.stage,
               onClear: () => list.setFilter('stage', '')
             },
             list.filters.awaitingAction === 'true' && {
-              key: 'awaitingAction', label: 'Queue', value: 'Awaiting our action',
+              key: 'awaitingAction', label: t('applications.filters.queue'), value: t('applications.filters.awaitingOurAction'),
               onClear: () => list.setFilter('awaitingAction', '')
             },
             list.search && {
-              key: 'search', label: 'Search', value: list.search,
+              key: 'search', label: t('common.search'), value: list.search,
               onClear: () => list.setSearch('')
             }
           ]}
@@ -81,8 +83,8 @@ export default function Applications() {
         <Async
           state={list}
           empty={{
-            title: 'No applications match',
-            message: 'Try a different search term or clear the stage filter.'
+            title: t('applications.empty.title'),
+            message: t('applications.empty.message')
           }}
         >
           {(rows, meta) => (
@@ -91,13 +93,13 @@ export default function Applications() {
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Application</th>
-                      <th scope="col">Applicant</th>
-                      <th scope="col">Stage</th>
-                      <th scope="col">Programme</th>
-                      <th scope="col">Intake</th>
-                      <th scope="col">Applied</th>
-                      <th scope="col">Fee</th>
+                      <th scope="col">{t('applications.table.application')}</th>
+                      <th scope="col">{t('applications.table.applicant')}</th>
+                      <th scope="col">{t('applications.table.stage')}</th>
+                      <th scope="col">{t('applications.table.programme')}</th>
+                      <th scope="col">{t('applications.table.intake')}</th>
+                      <th scope="col">{t('applications.table.applied')}</th>
+                      <th scope="col">{t('applications.table.fee')}</th>
                     </tr>
                   </thead>
                   <tbody>

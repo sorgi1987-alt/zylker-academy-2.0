@@ -1,32 +1,33 @@
 import React from 'react';
+import { useT, getLocale } from '../i18n/I18nContext.jsx';
 
-const ACTION_LABEL = {
-  'application:create': 'Application created',
-  'application:update': 'Application updated',
-  'application:transition': 'Stage changed',
-  'application:archive': 'Application withdrawn',
-  'application:delete': 'Application deleted',
-  'student:create': 'Student created',
-  'student:update': 'Student updated',
-  'student:archive': 'Student archived',
-  'student:delete': 'Student deleted',
-  'enrolment:create': 'Enrolment created',
-  'enrolment:update': 'Enrolment updated',
-  'enrolment:archive': 'Enrolment cancelled',
-  'enrolment:complete': 'Enrolment completed',
-  'enrolment:delete': 'Enrolment deleted',
-  'student:note': 'Internal note',
-  'application:note': 'Internal note',
-  'enrolment:note': 'Internal note',
-  'programme:create': 'Programme created',
-  'programme:update': 'Programme updated',
-  'programme:activate': 'Programme activated',
-  'programme:deactivate': 'Programme deactivated',
-  'programme:delete': 'Programme deleted',
-  'intake:create': 'Intake created',
-  'intake:update': 'Intake updated',
-  'intake:status': 'Intake status changed',
-  'intake:delete': 'Intake deleted'
+const ACTION_KEY = {
+  'application:create': 'applicationCreate',
+  'application:update': 'applicationUpdate',
+  'application:transition': 'applicationTransition',
+  'application:archive': 'applicationArchive',
+  'application:delete': 'applicationDelete',
+  'student:create': 'studentCreate',
+  'student:update': 'studentUpdate',
+  'student:archive': 'studentArchive',
+  'student:delete': 'studentDelete',
+  'enrolment:create': 'enrolmentCreate',
+  'enrolment:update': 'enrolmentUpdate',
+  'enrolment:archive': 'enrolmentArchive',
+  'enrolment:complete': 'enrolmentComplete',
+  'enrolment:delete': 'enrolmentDelete',
+  'student:note': 'note',
+  'application:note': 'note',
+  'enrolment:note': 'note',
+  'programme:create': 'programmeCreate',
+  'programme:update': 'programmeUpdate',
+  'programme:activate': 'programmeActivate',
+  'programme:deactivate': 'programmeDeactivate',
+  'programme:delete': 'programmeDelete',
+  'intake:create': 'intakeCreate',
+  'intake:update': 'intakeUpdate',
+  'intake:status': 'intakeStatus',
+  'intake:delete': 'intakeDelete'
 };
 
 const fmt = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));
@@ -40,11 +41,12 @@ const fmt = (v) => (v === null || v === undefined || v === '' ? '—' : String(v
  * the previous unauthenticated build could not do.
  */
 export default function ActivityLog({ rows, unavailable }) {
+  const t = useT();
   if (unavailable) {
-    return <p className="muted small">Activity logging is not available on this deployment.</p>;
+    return <p className="muted small">{t('common.activity.unavailable')}</p>;
   }
   if (!rows || !rows.length) {
-    return <p className="muted small">No changes have been recorded for this record.</p>;
+    return <p className="muted small">{t('common.activity.empty')}</p>;
   }
 
   return (
@@ -52,12 +54,12 @@ export default function ActivityLog({ rows, unavailable }) {
       {rows.map((a) => (
         <li key={a.id}>
           <div>
-            <strong>{ACTION_LABEL[a.action] || a.action}</strong>{' '}
+            <strong>{(ACTION_KEY[a.action] && t(`common.activity.action.${ACTION_KEY[a.action]}`)) || a.action}</strong>{' '}
             {a.result !== 'success' && <span className="pill stop">{a.result}</span>}
             {a.recordRef && <span className="mono muted small"> · {a.recordRef}</span>}
           </div>
           <div className="muted small">
-            {a.occurredAt ? new Date(a.occurredAt).toLocaleString('en-GB') : '—'}
+            {a.occurredAt ? new Date(a.occurredAt).toLocaleString(getLocale()) : '—'}
             {a.actor ? ` · ${a.actor}` : ''}
             {a.actorRole ? ` (${a.actorRole})` : ''}
             {a.requestId ? ` · ${a.requestId}` : ''}

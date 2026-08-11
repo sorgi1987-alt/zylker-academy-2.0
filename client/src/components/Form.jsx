@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT, translate } from '../i18n/I18nContext.jsx';
 
 /** Labelled field with inline validation message and hint. */
 export function Field({ id, label, error, hint, children, required }) {
@@ -20,12 +21,13 @@ export function Field({ id, label, error, hint, children, required }) {
 
 /** Standard action row for a form: submit + cancel with busy state. */
 export function FormActions({ busy, submitLabel, onCancel, disabled }) {
+  const t = useT();
   return (
     <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
       <button className="btn primary" type="submit" disabled={busy || disabled}>
-        {busy ? 'Saving…' : submitLabel}
+        {busy ? t('common.saving') : submitLabel}
       </button>
-      {onCancel && <button className="btn" type="button" onClick={onCancel} disabled={busy}>Cancel</button>}
+      {onCancel && <button className="btn" type="button" onClick={onCancel} disabled={busy}>{t('common.cancel')}</button>}
     </div>
   );
 }
@@ -60,26 +62,26 @@ export const DATE_MAX = '2200-12-31';
 export function friendlyError(err) {
   if (!err) return null;
   const map = {
-    UNAUTHENTICATED: 'Your session has ended. Reload the page and sign in again.',
+    UNAUTHENTICATED: translate('common.errors.sessionEnded'),
     FORBIDDEN: err.requiredPermission
-      ? `Your role does not allow this action (${err.requiredPermission}).`
-      : 'Your role does not allow this action.',
-    CONFLICT: 'Someone else changed this record while you had it open. Reload to see their version, then reapply your change.',
-    NO_MODIFIED_TIME: 'This change could not be applied safely because the record was read incompletely. This is a fault in the application, not something you did.',
-    DUPLICATE_EMAIL: 'A student with this email already exists.',
-    DUPLICATE_ENROLMENT: 'This student already has an active enrolment for that programme and intake.',
-    INTAKE_PROGRAMME_MISMATCH: 'That intake belongs to a different programme.',
-    INTAKE_AT_CAPACITY: 'That intake is full. An administrator can confirm an override.',
-    INVALID_DATE_RANGE: 'Check the dates: an end date cannot come before its start date.',
-    INVALID_DATE: err.message || 'Check the date — it is not a valid calendar date.',
+      ? translate('common.errors.notAllowedWithPermission', { permission: err.requiredPermission })
+      : translate('common.errors.notAllowed'),
+    CONFLICT: translate('common.errors.conflict'),
+    NO_MODIFIED_TIME: translate('common.errors.noModifiedTime'),
+    DUPLICATE_EMAIL: translate('common.errors.duplicateEmail'),
+    DUPLICATE_ENROLMENT: translate('common.errors.duplicateEnrolment'),
+    INTAKE_PROGRAMME_MISMATCH: translate('common.errors.intakeProgrammeMismatch'),
+    INTAKE_AT_CAPACITY: translate('common.errors.intakeAtCapacity'),
+    INVALID_DATE_RANGE: translate('common.errors.invalidDateRange'),
+    INVALID_DATE: err.message || translate('common.errors.invalidDateFallback'),
     // Zoho names the field it objected to; safeError() puts that in the message.
-    INVALID_DATA: err.message || 'Zoho rejected one of the values. Check the highlighted field.',
-    MANDATORY_NOT_FOUND: err.message || 'Zoho requires a value that was not supplied.',
-    HAS_RELATED_RECORDS: err.message || 'Other records still depend on this one, so it cannot be deleted.',
-    HAS_RELATED_ENROLMENT: err.message || 'An enrolment still depends on this record.',
-    RATE_LIMITED: 'Too many changes just now. Wait a moment and try again.',
-    NETWORK: 'Could not reach the service. Check your connection and try again.',
-    BOOKS_NOT_CONFIGURED: 'Zoho Books is not configured for this deployment.'
+    INVALID_DATA: err.message || translate('common.errors.invalidDataFallback'),
+    MANDATORY_NOT_FOUND: err.message || translate('common.errors.mandatoryNotFoundFallback'),
+    HAS_RELATED_RECORDS: err.message || translate('common.errors.hasRelatedRecordsFallback'),
+    HAS_RELATED_ENROLMENT: err.message || translate('common.errors.hasRelatedEnrolmentFallback'),
+    RATE_LIMITED: translate('common.errors.rateLimited'),
+    NETWORK: translate('common.errors.network'),
+    BOOKS_NOT_CONFIGURED: translate('common.errors.booksNotConfigured')
   };
-  return map[err.code] || err.message || 'The action could not be completed.';
+  return map[err.code] || err.message || translate('common.errors.actionFailedFallback');
 }

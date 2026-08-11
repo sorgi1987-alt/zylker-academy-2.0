@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useT } from '../i18n/I18nContext.jsx';
 
 /**
  * Sub-navigation for the Learning Hub.
@@ -9,12 +10,13 @@ import { NavLink } from 'react-router-dom';
  * appearing as three unrelated entries in the main menu.
  */
 export default function LearningNav() {
+  const t = useT();
   const cls = ({ isActive }) => (isActive ? 'active' : undefined);
   return (
-    <nav className="subnav" aria-label="Learning Hub sections">
-      <NavLink to="/learning/courses" className={cls}>Courses</NavLink>
-      <NavLink to="/learning/enrolments" className={cls}>Learners</NavLink>
-      <NavLink to="/learning/sync-log" className={cls}>Synchronisation log</NavLink>
+    <nav className="subnav" aria-label={t('common.learningNav.sectionsLabel')}>
+      <NavLink to="/learning/courses" className={cls}>{t('common.learningNav.courses')}</NavLink>
+      <NavLink to="/learning/enrolments" className={cls}>{t('common.learningNav.learners')}</NavLink>
+      <NavLink to="/learning/sync-log" className={cls}>{t('common.learningNav.syncLog')}</NavLink>
     </nav>
   );
 }

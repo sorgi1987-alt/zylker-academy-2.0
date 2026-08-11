@@ -3,24 +3,17 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList, useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, Modal, useToast, fmtDate
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
 
 const STATUSES = ['Planning', 'Open', 'Full', 'In Progress', 'Completed', 'Cancelled'];
-/*
- * Capacity filters. Intakes with no capacity recorded are not limited and are
- * excluded from both, rather than being treated as a limit of zero.
- */
-const CAPACITY_OPTIONS = [
-  { value: 'at-risk', label: 'At 90% or more of capacity' },
-  { value: 'full', label: 'At or over capacity' }
-];
-const capacityLabel = (v) => (CAPACITY_OPTIONS.find((o) => o.value === v) || {}).label || v;
 const DELIVERY = ['On Campus', 'Online', 'Hybrid'];
 
 function NewIntakeDialog({ onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const programmes = useApi((o) => api.programmes({ perPage: 100 }, o), []);
   const [form, setForm] = useState({
@@ -34,15 +27,15 @@ function NewIntakeDialog({ onClose, onDone }) {
   const action = useAction(async (r) => { await onDone(r); onClose(); });
 
   const errors = {
-    name: !form.name.trim() ? 'An intake name is required.' : null,
-    programmeId: !form.programmeId ? 'Choose the programme this intake belongs to.' : null,
+    name: !form.name.trim() ? t('intakes.newDialog.nameRequired') : null,
+    programmeId: !form.programmeId ? t('intakes.newDialog.programmeRequired') : null,
     // Checked here as well as on the server, so the mistake is caught before a
     // round trip rather than after one.
     endDate: form.startDate && form.endDate && form.endDate < form.startDate
-      ? 'The end date cannot be before the start date.' : null,
+      ? t('intakes.newDialog.endDateError') : null,
     applicationDeadline: form.applicationOpenDate && form.applicationDeadline
       && form.applicationDeadline < form.applicationOpenDate
-      ? 'The deadline cannot be before the opening date.' : null
+      ? t('intakes.newDialog.applicationDeadlineError') : null
   };
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -57,63 +50,64 @@ function NewIntakeDialog({ onClose, onDone }) {
       location: form.location.trim() || undefined,
       academicYear: form.academicYear.trim() || undefined
     }, { idempotencyKey }));
-    if (r) toast('Intake created.');
+    if (r) toast(t('intakes.newDialog.created'));
   };
 
   return (
-    <Modal title="New intake" onClose={onClose} wide>
+    <Modal title={t('intakes.newDialog.title')} onClose={onClose} wide>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
-          <Field id="name" label="Intake name" required error={touched ? errors.name : null}>
+          <Field id="name" label={t('intakes.newDialog.nameLabel')} required error={touched ? errors.name : null}>
             <input value={form.name} onChange={set('name')} />
           </Field>
-          <Field id="programmeId" label="Programme" required error={touched ? errors.programmeId : null}>
+          <Field id="programmeId" label={t('intakes.newDialog.programmeLabel')} required error={touched ? errors.programmeId : null}>
             <select value={form.programmeId} onChange={set('programmeId')}>
-              <option value="">Choose a programme…</option>
+              <option value="">{t('intakes.newDialog.programmePlaceholder')}</option>
               {(programmes.data || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
-          <Field id="status" label="Status">
+          <Field id="status" label={t('intakes.newDialog.statusLabel')}>
             <select value={form.status} onChange={set('status')}>
               {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </Field>
-          <Field id="academicYear" label="Academic year">
+          <Field id="academicYear" label={t('intakes.newDialog.academicYearLabel')}>
             <input value={form.academicYear} onChange={set('academicYear')} placeholder="2026/27" />
           </Field>
-          <Field id="startDate" label="Start date">
+          <Field id="startDate" label={t('intakes.newDialog.startDateLabel')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.startDate} onChange={set('startDate')} />
           </Field>
-          <Field id="endDate" label="End date" error={touched ? errors.endDate : null}>
+          <Field id="endDate" label={t('intakes.newDialog.endDateLabel')} error={touched ? errors.endDate : null}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.endDate} onChange={set('endDate')} />
           </Field>
-          <Field id="applicationOpenDate" label="Applications open">
+          <Field id="applicationOpenDate" label={t('intakes.newDialog.applicationOpenLabel')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.applicationOpenDate} onChange={set('applicationOpenDate')} />
           </Field>
-          <Field id="applicationDeadline" label="Application deadline" error={touched ? errors.applicationDeadline : null}>
+          <Field id="applicationDeadline" label={t('intakes.newDialog.applicationDeadlineLabel')} error={touched ? errors.applicationDeadline : null}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.applicationDeadline} onChange={set('applicationDeadline')} />
           </Field>
-          <Field id="capacity" label="Capacity" hint="Leave blank for no limit.">
+          <Field id="capacity" label={t('intakes.newDialog.capacityLabel')} hint={t('intakes.newDialog.capacityHint')}>
             <input type="number" min="0" value={form.capacity} onChange={set('capacity')} />
           </Field>
-          <Field id="deliveryMode" label="Delivery method">
+          <Field id="deliveryMode" label={t('intakes.newDialog.deliveryLabel')}>
             <select value={form.deliveryMode} onChange={set('deliveryMode')}>
-              <option value="">Not set</option>
+              <option value="">{t('intakes.newDialog.notSet')}</option>
               {DELIVERY.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
-          <Field id="location" label="Campus or location">
+          <Field id="location" label={t('intakes.newDialog.locationLabel')}>
             <input value={form.location} onChange={set('location')} />
           </Field>
         </div>
         <FormError error={action.error ? friendlyError(action.error) : null} />
-        <FormActions busy={action.busy} submitLabel="Create intake" onCancel={onClose} />
+        <FormActions busy={action.busy} submitLabel={t('intakes.newDialog.submit')} onCancel={onClose} />
       </form>
     </Modal>
   );
 }
 
 export default function Intakes() {
+  const t = useT();
   const can = useCan();
   const [params, setParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
@@ -123,6 +117,16 @@ export default function Intakes() {
       capacity: params.get('capacity') || undefined
     }
   });
+
+  /*
+   * Capacity filters. Intakes with no capacity recorded are not limited and are
+   * excluded from both, rather than being treated as a limit of zero.
+   */
+  const CAPACITY_OPTIONS = [
+    { value: 'at-risk', label: t('intakes.capacityAtRisk') },
+    { value: 'full', label: t('intakes.capacityFull') }
+  ];
+  const capacityLabel = (v) => (CAPACITY_OPTIONS.find((o) => o.value === v) || {}).label || v;
 
   // Opened by the global Create menu via ?new=1; the flag is cleared once used
   // so Back and refresh do not reopen the dialog. See Programmes for the same
@@ -139,17 +143,17 @@ export default function Intakes() {
   return (
     <>
       <div className="page-head">
-        <h1>Intakes</h1>
-        <p>Scheduled intakes for each programme, with capacity and enrolment counts.</p>
+        <h1>{t('intakes.pageTitle')}</h1>
+        <p>{t('intakes.pageIntro')}</p>
       </div>
 
       <Card
-        title="All intakes"
+        title={t('intakes.allIntakes')}
         action={(
           <div className="head-actions">
             <SourceBadge source="crm" />
             {can('intake:write') && (
-              <button type="button" className="btn primary" onClick={() => setCreating(true)}>New intake</button>
+              <button type="button" className="btn primary" onClick={() => setCreating(true)}>{t('intakes.newIntake')}</button>
             )}
           </div>
         )}
@@ -157,62 +161,62 @@ export default function Intakes() {
         <div className="toolbar">
           <SearchBox
             id="intake-search"
-            label="Search"
+            label={t('common.search')}
             value={list.search}
             onChange={list.setSearch}
-            placeholder="Name, academic year or location"
+            placeholder={t('intakes.searchPlaceholder')}
           />
           <FilterSelect
             id="intake-status"
-            label="Status"
+            label={t('intakes.statusLabel')}
             value={list.filters.status || ''}
             onChange={(v) => list.setFilter('status', v)}
             options={STATUSES}
-            allLabel="All statuses"
+            allLabel={t('intakes.allStatuses')}
           />
           <FilterSelect
             id="intake-capacity"
-            label="Capacity"
+            label={t('intakes.capacityLabel')}
             value={list.filters.capacity || ''}
             onChange={(v) => list.setFilter('capacity', v)}
             options={CAPACITY_OPTIONS}
-            allLabel="Any"
+            allLabel={t('intakes.anyLabel')}
           />
         </div>
 
         <FilterChips
           chips={[
             list.filters.status && {
-              key: 'status', label: 'Status', value: list.filters.status,
+              key: 'status', label: t('intakes.statusLabel'), value: list.filters.status,
               onClear: () => list.setFilter('status', '')
             },
             list.filters.capacity && {
-              key: 'capacity', label: 'Capacity', value: capacityLabel(list.filters.capacity),
+              key: 'capacity', label: t('intakes.capacityLabel'), value: capacityLabel(list.filters.capacity),
               onClear: () => list.setFilter('capacity', '')
             },
             list.search && {
-              key: 'search', label: 'Search', value: list.search,
+              key: 'search', label: t('common.search'), value: list.search,
               onClear: () => list.setSearch('')
             }
           ]}
           onClearAll={list.clearFilters}
         />
 
-        <Async state={list} empty={{ title: 'No intakes match' }}>
+        <Async state={list} empty={{ title: t('intakes.noMatch') }}>
           {(rows, meta) => (
             <>
               <div className="t-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Intake</th>
-                      <th scope="col">Programme</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Starts</th>
-                      <th scope="col">Capacity</th>
-                      <th scope="col">Applications</th>
-                      <th scope="col">Enrolments</th>
-                      <th scope="col">Delivery</th>
+                      <th scope="col">{t('intakes.table.intake')}</th>
+                      <th scope="col">{t('intakes.table.programme')}</th>
+                      <th scope="col">{t('intakes.table.status')}</th>
+                      <th scope="col">{t('intakes.table.starts')}</th>
+                      <th scope="col">{t('intakes.table.capacity')}</th>
+                      <th scope="col">{t('intakes.table.applications')}</th>
+                      <th scope="col">{t('intakes.table.enrolments')}</th>
+                      <th scope="col">{t('intakes.table.delivery')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -226,14 +230,14 @@ export default function Intakes() {
                         </td>
                         <td>
                           <Pill value={i.status} />
-                          {i.full && <span className="pill stop">Full</span>}
+                          {i.full && <span className="pill stop">{t('intakes.fullBadge')}</span>}
                         </td>
                         <td>{fmtDate(i.startDate)}</td>
                         <td className="mono">
                           {/* "Not limited" and a capacity of zero are different
                               things and must not look the same. */}
                           {i.capacity === null
-                            ? <span className="muted">Not limited</span>
+                            ? <span className="muted">{t('intakes.notLimited')}</span>
                             : `${i.counts.activeEnrolments} / ${i.capacity}`}
                         </td>
                         <td className="mono">{i.counts.applications}</td>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '../i18n/I18nContext.jsx';
 import { Pill, fmtDate } from './Ui.jsx';
 
 /**
@@ -8,21 +9,22 @@ import { Pill, fmtDate } from './Ui.jsx';
  * worth keeping: "the integration changed it" is not an answer six months later
  * when someone asks why a CRM field holds what it holds.
  */
-export default function SyncLogTable({ rows, emptyText = 'Nothing has been synchronised yet.' }) {
-  if (!rows || !rows.length) return <p className="muted">{emptyText}</p>;
+export default function SyncLogTable({ rows, emptyText }) {
+  const t = useT();
+  if (!rows || !rows.length) return <p className="muted">{emptyText || t('common.syncLog.empty')}</p>;
   return (
     <div className="t-wrap">
       <table>
         <thead>
           <tr>
-            <th scope="col">When</th>
-            <th scope="col">Entity</th>
-            <th scope="col">Operation</th>
-            <th scope="col">Result</th>
-            <th scope="col">CRM record</th>
-            <th scope="col">Fields</th>
-            <th scope="col">Message</th>
-            <th scope="col">Triggered by</th>
+            <th scope="col">{t('common.syncLog.when')}</th>
+            <th scope="col">{t('common.syncLog.entity')}</th>
+            <th scope="col">{t('common.syncLog.operation')}</th>
+            <th scope="col">{t('common.syncLog.result')}</th>
+            <th scope="col">{t('common.syncLog.crmRecord')}</th>
+            <th scope="col">{t('common.syncLog.fields')}</th>
+            <th scope="col">{t('common.syncLog.message')}</th>
+            <th scope="col">{t('common.syncLog.triggeredBy')}</th>
           </tr>
         </thead>
         <tbody>
@@ -31,6 +33,8 @@ export default function SyncLogTable({ rows, emptyText = 'Nothing has been synch
               <td>{fmtDate(l.occurredAt)}</td>
               <td>{l.entityType || <span className="muted">—</span>}</td>
               <td>{l.operation || <span className="muted">—</span>}</td>
+              {/* 'Synced'/'Error' are the Pill tone-lookup keys, not display
+                  prose — left in English like every other Pill value. */}
               <td><Pill value={l.result === 'success' ? 'Synced' : 'Error'} /></td>
               <td className="mono">
                 {l.crmRecordId

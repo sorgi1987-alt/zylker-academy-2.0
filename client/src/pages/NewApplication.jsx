@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApi, useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import { Card, Loading, ErrorState, useToast } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, EMAIL_RE, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
 
@@ -19,6 +20,7 @@ import { Field, FormActions, FormError, EMAIL_RE, friendlyError, DATE_MIN, DATE_
  * be able to submit a mismatched pair.
  */
 export default function NewApplication() {
+  const t = useT();
   const navigate = useNavigate();
   const toast = useToast();
 
@@ -52,14 +54,14 @@ export default function NewApplication() {
   }, [form.programmeId, intakes.status, intakes.data]);
 
   const errors = {
-    studentId: mode === 'existing' && !form.studentId ? 'Choose a student.' : null,
-    lastName: mode === 'new' && !form.lastName.trim() ? 'A last name is required.' : null,
+    studentId: mode === 'existing' && !form.studentId ? t('newApplication.studentRequiredError') : null,
+    lastName: mode === 'new' && !form.lastName.trim() ? t('newApplication.lastNameRequiredError') : null,
     email: mode === 'new'
       ? (!form.email.trim()
-        ? 'An email is required to resolve or create the student.'
-        : (!EMAIL_RE.test(form.email.trim()) ? 'Enter a valid email address.' : null))
+        ? t('newApplication.emailRequiredError')
+        : (!EMAIL_RE.test(form.email.trim()) ? t('newApplication.emailInvalidError') : null))
       : null,
-    programmeId: !form.programmeId ? 'Choose a programme.' : null
+    programmeId: !form.programmeId ? t('newApplication.programmeRequiredError') : null
   };
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -84,7 +86,7 @@ export default function NewApplication() {
 
     const r = await action.run(() => api.createApplication(payload, { idempotencyKey }));
     if (r) {
-      toast('Application created.');
+      toast(t('newApplication.createdToast'));
       navigate(`/applications/${r.data.id}`, { replace: true });
     }
   };
@@ -92,21 +94,21 @@ export default function NewApplication() {
   const loading = students.status === 'loading' || programmes.status === 'loading' || intakes.status === 'loading';
   const failed = [students, programmes, intakes].find((s) => s.status === 'error');
 
-  if (loading) return <Loading rows={6} label="Loading form data" />;
+  if (loading) return <Loading rows={6} label={t('newApplication.loadingLabel')} />;
   if (failed) return <ErrorState error={failed.error} onRetry={failed.reload} />;
 
   return (
     <>
       <div className="page-head">
-        <h1>New application</h1>
-        <p>Creates an application in Zoho CRM at the Submitted stage.</p>
+        <h1>{t('newApplication.pageTitle')}</h1>
+        <p>{t('newApplication.pageIntro')}</p>
       </div>
 
       <Card>
         <form onSubmit={onSubmit} noValidate>
           <fieldset className="fieldset">
-            <legend>Applicant</legend>
-            <div className="radio-row" role="radiogroup" aria-label="Applicant source">
+            <legend>{t('newApplication.applicantLegend')}</legend>
+            <div className="radio-row" role="radiogroup" aria-label={t('newApplication.applicantSourceLabel')}>
               <label>
                 <input
                   type="radio"
@@ -114,7 +116,7 @@ export default function NewApplication() {
                   checked={mode === 'existing'}
                   onChange={() => setMode('existing')}
                 />
-                Existing student
+                {t('newApplication.existingStudent')}
               </label>
               <label>
                 <input
@@ -123,35 +125,35 @@ export default function NewApplication() {
                   checked={mode === 'new'}
                   onChange={() => setMode('new')}
                 />
-                New student
+                {t('newApplication.newStudent')}
               </label>
             </div>
 
             {mode === 'existing' ? (
-              <Field id="studentId" label="Student" required error={touched ? errors.studentId : null}>
+              <Field id="studentId" label={t('newApplication.studentLabel')} required error={touched ? errors.studentId : null}>
                 <select value={form.studentId} onChange={set('studentId')}>
-                  <option value="">Choose a student…</option>
+                  <option value="">{t('newApplication.studentPlaceholder')}</option>
                   {(students.data || []).map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.fullName || 'Unnamed'}{s.email ? ` — ${s.email}` : ''}
+                      {s.fullName || t('newApplication.unnamedStudent')}{s.email ? ` — ${s.email}` : ''}
                     </option>
                   ))}
                 </select>
               </Field>
             ) : (
               <div className="form-grid">
-                <Field id="firstName" label="First name">
+                <Field id="firstName" label={t('newApplication.firstNameLabel')}>
                   <input value={form.firstName} onChange={set('firstName')} autoComplete="given-name" />
                 </Field>
-                <Field id="lastName" label="Last name" required error={touched ? errors.lastName : null}>
+                <Field id="lastName" label={t('newApplication.lastNameLabel')} required error={touched ? errors.lastName : null}>
                   <input value={form.lastName} onChange={set('lastName')} autoComplete="family-name" />
                 </Field>
                 <Field
                   id="email"
-                  label="Email"
+                  label={t('newApplication.emailLabel')}
                   required
                   error={touched ? errors.email : null}
-                  hint="If a student already exists with this email, that record is reused rather than duplicated."
+                  hint={t('newApplication.emailHint')}
                 >
                   <input type="email" value={form.email} onChange={set('email')} autoComplete="email" />
                 </Field>
@@ -160,11 +162,11 @@ export default function NewApplication() {
           </fieldset>
 
           <fieldset className="fieldset">
-            <legend>Programme and intake</legend>
+            <legend>{t('newApplication.programmeIntakeLegend')}</legend>
             <div className="form-grid">
-              <Field id="programmeId" label="Programme" required error={touched ? errors.programmeId : null}>
+              <Field id="programmeId" label={t('newApplication.programmeLabel')} required error={touched ? errors.programmeId : null}>
                 <select value={form.programmeId} onChange={set('programmeId')}>
-                  <option value="">Choose a programme…</option>
+                  <option value="">{t('newApplication.programmePlaceholder')}</option>
                   {(programmes.data || []).map((p) => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
@@ -173,16 +175,16 @@ export default function NewApplication() {
 
               <Field
                 id="intakeId"
-                label="Intake"
+                label={t('newApplication.intakeLabel')}
                 hint={form.programmeId
-                  ? 'Only intakes belonging to the chosen programme are listed.'
-                  : 'Choose a programme first.'}
+                  ? t('newApplication.intakeHintFiltered')
+                  : t('newApplication.intakeHintChooseProgramme')}
               >
                 <select value={form.intakeId} onChange={set('intakeId')} disabled={!form.programmeId}>
-                  <option value="">No intake yet</option>
+                  <option value="">{t('newApplication.intakeNoneYet')}</option>
                   {intakesForProgramme.map((i) => (
                     <option key={i.id} value={i.id}>
-                      {i.name}{i.full ? ' — full' : i.placesRemaining !== null ? ` — ${i.placesRemaining} places left` : ''}
+                      {i.name}{i.full ? t('newApplication.intakeFullSuffix') : i.placesRemaining !== null ? t('newApplication.intakePlacesLeftSuffix', { count: i.placesRemaining }) : ''}
                     </option>
                   ))}
                 </select>
@@ -191,18 +193,18 @@ export default function NewApplication() {
           </fieldset>
 
           <fieldset className="fieldset">
-            <legend>Details</legend>
+            <legend>{t('newApplication.detailsLegend')}</legend>
             <div className="form-grid">
-              <Field id="applicationDate" label="Application date" hint="Defaults to today.">
+              <Field id="applicationDate" label={t('newApplication.applicationDateLabel')} hint={t('newApplication.applicationDateHint')}>
                 <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.applicationDate} onChange={set('applicationDate')} />
               </Field>
-              <Field id="closingDate" label="Expected decision date">
+              <Field id="closingDate" label={t('newApplication.closingDateLabel')}>
                 <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.closingDate} onChange={set('closingDate')} />
               </Field>
-              <Field id="tuitionFee" label="Tuition fee">
+              <Field id="tuitionFee" label={t('newApplication.tuitionFeeLabel')}>
                 <input type="number" min="0" step="1" value={form.tuitionFee} onChange={set('tuitionFee')} />
               </Field>
-              <Field id="studyMode" label="Preferred study mode">
+              <Field id="studyMode" label={t('newApplication.studyModeLabel')}>
                 <input value={form.studyMode} onChange={set('studyMode')} />
               </Field>
             </div>
@@ -211,7 +213,7 @@ export default function NewApplication() {
           <FormError error={action.error ? friendlyError(action.error) : null} />
           <FormActions
             busy={action.busy}
-            submitLabel="Create application"
+            submitLabel={t('newApplication.submitLabel')}
             onCancel={() => navigate('/applications')}
           />
         </form>

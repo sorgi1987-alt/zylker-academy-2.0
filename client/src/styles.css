@@ -106,6 +106,14 @@ a{color:var(--brand-2)}
 .nav-toggle{display:none;color:var(--ink-2)}
 .env-badge{border:1px solid transparent}
 
+/* ---------- language toggle ---------- */
+.lang-toggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-shrink:0}
+.lang-toggle-opt{border:0;background:none;color:var(--ink-3);font-size:12px;font-weight:700;
+  padding:6px 10px;cursor:pointer;letter-spacing:.3px}
+.lang-toggle-opt+.lang-toggle-opt{border-left:1px solid var(--line)}
+.lang-toggle-opt.active{background:var(--brand);color:#fff}
+.lang-toggle-opt:not(.active):hover{background:var(--brand-soft)}
+
 .avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;
   border-radius:50%;background:var(--brand);color:#fff;font-size:12px;font-weight:700;flex-shrink:0}
 .user-btn{padding:5px 10px 5px 6px}
@@ -335,7 +343,8 @@ input[type=search]{flex:1;min-width:220px}
 .login-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 16px;
   background:linear-gradient(180deg,var(--brand-soft) 0%,var(--bg) 45%)}
 .login-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
-  box-shadow:var(--shadow);padding:28px;width:100%;max-width:460px;margin:0 auto}
+  box-shadow:var(--shadow);padding:28px;width:100%;max-width:460px;margin:0 auto;position:relative}
+.login-card .lang-toggle{position:absolute;top:18px;right:18px}
 .login-head{margin-bottom:14px}
 .login-head .brand{margin:0;font-size:22px}
 .login-head .brand-sub{margin:2px 0 0;color:var(--ink-3);font-size:14px}
@@ -417,6 +426,8 @@ input[type=search]{flex:1;min-width:220px}
 .attn-count{font-size:22px;font-weight:700;letter-spacing:-.4px;min-width:44px;text-align:right;
   font-variant-numeric:tabular-nums}
 .attn-clear{padding:26px 18px;text-align:center;color:var(--ink-3);font-size:14px}
+.attn-toggle{width:100%;border-radius:0;border:0;border-top:1px solid var(--line-soft);
+  padding:11px 18px;text-align:center}
 
 /* --- stage tracker --- */
 .track{list-style:none;display:flex;gap:6px;margin:0;padding:0;flex-wrap:wrap}

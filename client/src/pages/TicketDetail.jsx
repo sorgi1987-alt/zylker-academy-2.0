@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, SourceBadge, ReadOnlyBadge, fmtDate
 } from '../components/Ui.jsx';
@@ -11,25 +12,26 @@ import {
  * support record, and the backend has no route that would accept one.
  */
 export default function TicketDetail() {
+  const t = useT();
   const { id } = useParams();
   const state = useApi((o) => api.ticket(id, o), [id]);
 
   return (
-    <Async state={state} empty={{ title: 'Ticket not found' }} emptyWhen={(d) => !d}>
-      {(t) => (
+    <Async state={state} empty={{ title: t('ticketDetail.notFound') }} emptyWhen={(d) => !d}>
+      {(tk) => (
         <>
           <div className="page-head">
-            <h1>{t.subject || `Ticket ${t.ticketNumber || t.id}`}</h1>
+            <h1>{tk.subject || t('ticketDetail.fallbackHeading', { number: tk.ticketNumber || tk.id })}</h1>
             <p>
-              <Pill value={t.status} />{' '}
-              {t.overdue && <span className="pill stop">Overdue</span>}{' '}
-              <span className="muted">{t.priority}</span>
+              <Pill value={tk.status} />{' '}
+              {tk.overdue && <span className="pill stop">{t('ticketDetail.overdue')}</span>}{' '}
+              <span className="muted">{tk.priority}</span>
             </p>
             <div className="head-actions">
-              <Link className="btn" to="/tickets">Back to Support</Link>
-              {t.webUrl && (
-                <a className="btn" href={t.webUrl} target="_blank" rel="noreferrer noopener">
-                  Open in Zoho Desk
+              <Link className="btn" to="/tickets">{t('ticketDetail.backToSupport')}</Link>
+              {tk.webUrl && (
+                <a className="btn" href={tk.webUrl} target="_blank" rel="noreferrer noopener">
+                  {t('ticketDetail.openInDesk')}
                 </a>
               )}
             </div>
@@ -37,32 +39,32 @@ export default function TicketDetail() {
 
           <div className="grid g-2">
             <Card
-              title="Ticket"
+              title={t('ticketDetail.cardTicket')}
               action={<div className="head-actions"><SourceBadge source="desk" /><ReadOnlyBadge system="Zoho Desk" /></div>}
             >
               <dl className="dl">
-                <dt>Ticket number</dt><dd className="mono">{t.ticketNumber || '—'}</dd>
-                <dt>Status</dt><dd><Pill value={t.status} /></dd>
-                <dt>Priority</dt><dd>{t.priority || '—'}</dd>
-                <dt>Category</dt><dd>{t.category || '—'}</dd>
-                <dt>Contact email</dt><dd>{t.email || '—'}</dd>
+                <dt>{t('ticketDetail.field.ticketNumber')}</dt><dd className="mono">{tk.ticketNumber || '—'}</dd>
+                <dt>{t('ticketDetail.field.status')}</dt><dd><Pill value={tk.status} /></dd>
+                <dt>{t('ticketDetail.field.priority')}</dt><dd>{tk.priority || '—'}</dd>
+                <dt>{t('ticketDetail.field.category')}</dt><dd>{tk.category || '—'}</dd>
+                <dt>{t('ticketDetail.field.contactEmail')}</dt><dd>{tk.email || '—'}</dd>
               </dl>
             </Card>
 
-            <Card title="Dates" action={<SourceBadge source="desk" />}>
+            <Card title={t('ticketDetail.cardDates')} action={<SourceBadge source="desk" />}>
               <dl className="dl">
-                <dt>Created</dt><dd>{fmtDate(t.createdTime)}</dd>
-                <dt>Last modified</dt><dd>{fmtDate(t.modifiedTime)}</dd>
-                <dt>Due</dt><dd>{t.dueDate ? fmtDate(t.dueDate) : '—'}</dd>
-                <dt>Closed</dt><dd>{t.closedTime ? fmtDate(t.closedTime) : '—'}</dd>
-                <dt>Thread messages</dt><dd className="mono">{t.threadCount ?? '—'}</dd>
+                <dt>{t('ticketDetail.field.created')}</dt><dd>{fmtDate(tk.createdTime)}</dd>
+                <dt>{t('ticketDetail.field.lastModified')}</dt><dd>{fmtDate(tk.modifiedTime)}</dd>
+                <dt>{t('ticketDetail.field.due')}</dt><dd>{tk.dueDate ? fmtDate(tk.dueDate) : '—'}</dd>
+                <dt>{t('ticketDetail.field.closed')}</dt><dd>{tk.closedTime ? fmtDate(tk.closedTime) : '—'}</dd>
+                <dt>{t('ticketDetail.field.threadMessages')}</dt><dd className="mono">{tk.threadCount ?? '—'}</dd>
               </dl>
             </Card>
           </div>
 
-          {t.description && (
-            <Card title="Description" action={<SourceBadge source="desk" />}>
-              <p className="muted">{t.description}</p>
+          {tk.description && (
+            <Card title={t('ticketDetail.cardDescription')} action={<SourceBadge source="desk" />}>
+              <p className="muted">{tk.description}</p>
             </Card>
           )}
         </>

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../AuthContext.jsx';
 import * as catalystAuth from '../catalystAuth.js';
+import { useT } from '../i18n/I18nContext.jsx';
+import LanguageToggle from '../i18n/LanguageToggle.jsx';
 
 const SIGNIN_ELEMENT_ID = 'catalyst-signin';
 
@@ -37,6 +39,7 @@ const PHASE = {
 };
 
 export default function Login() {
+  const t = useT();
   const { recheck, signOut, error: sessionError, status, STATUS } = useAuth();
   const [phase, setPhase] = useState(PHASE.CHECKING);
   const [detail, setDetail] = useState(null);
@@ -105,67 +108,56 @@ export default function Login() {
   return (
     <div className="login-shell">
       <main className="login-card">
+        <LanguageToggle />
         <header className="login-head">
           <p className="brand">Zylker Academy</p>
-          <p className="brand-sub">Education Management Portal</p>
+          <p className="brand-sub">{t('login.brandSub')}</p>
         </header>
 
         {phase === PHASE.SERVER_REFUSED ? (
           <>
             <p className="login-intro">
-              You are signed in to Catalyst as{' '}
-              <strong>{browserUser?.email_id || browserUser?.email || 'this account'}</strong>,
-              but the application could not verify that session.
+              {t('login.serverRefused.before')}{' '}
+              <strong>{browserUser?.email_id || browserUser?.email || t('login.serverRefused.thisAccount')}</strong>
+              {t('login.serverRefused.after')}
             </p>
             <div className="state err" role="alert">
-              <h3>Your session could not be verified</h3>
-              <p>
-                The sign-in itself worked. The server rejected the session when the
-                application asked it to identify you, so no data has been loaded.
-              </p>
+              <h3>{t('login.serverRefused.title')}</h3>
+              <p>{t('login.serverRefused.body')}</p>
               <div className="head-actions">
-                <button type="button" className="btn primary" onClick={recheck}>Try again</button>
-                <button type="button" className="btn" onClick={signOut}>Sign out</button>
+                <button type="button" className="btn primary" onClick={recheck}>{t('common.tryAgain')}</button>
+                <button type="button" className="btn" onClick={signOut}>{t('common.signOut')}</button>
               </div>
             </div>
-            <p className="note">
-              If this persists, it is a server-side configuration problem rather than
-              anything to do with your account or password.
-            </p>
+            <p className="note">{t('login.serverRefused.note')}</p>
           </>
         ) : (
           <>
-            <p className="login-intro">
-              Manage students, applications, programmes, intakes and enrolments.
-              Sign in with your Zylker Academy staff account to continue.
-            </p>
+            <p className="login-intro">{t('login.intro')}</p>
 
             {/* Catalyst renders its sign-in form into this element. */}
             <div id={SIGNIN_ELEMENT_ID} className="login-embed" aria-live="polite" />
 
             {phase === PHASE.CHECKING && (
-              <p className="muted login-status" role="status">Checking your session…</p>
+              <p className="muted login-status" role="status">{t('login.checkingSession')}</p>
             )}
 
             {phase === PHASE.FORM_FAILED && (
               <div className="state err" role="alert">
-                <h3>The sign-in form could not be loaded</h3>
-                <p>{detail || 'The sign-in service did not respond.'}</p>
+                <h3>{t('login.formFailed.title')}</h3>
+                <p>{detail || t('login.formFailed.fallbackDetail')}</p>
                 <button type="button" className="btn" onClick={() => window.location.reload()}>
-                  Reload the page
+                  {t('login.formFailed.reload')}
                 </button>
               </div>
             )}
 
             {phase === PHASE.SDK_UNAVAILABLE && (
               <div className="state err" role="alert">
-                <h3>Sign-in is unavailable</h3>
-                <p>
-                  The Catalyst sign-in service could not be loaded. Check your connection
-                  and reload the page.
-                </p>
+                <h3>{t('login.sdkUnavailable.title')}</h3>
+                <p>{t('login.sdkUnavailable.body')}</p>
                 <button type="button" className="btn" onClick={() => window.location.reload()}>
-                  Reload the page
+                  {t('login.formFailed.reload')}
                 </button>
               </div>
             )}
@@ -174,23 +166,16 @@ export default function Login() {
                 and says so rather than implying the credentials were wrong. */}
             {status === STATUS.UNAVAILABLE && (
               <div className="state err" role="alert">
-                <h3>The service could not be reached</h3>
-                <p>
-                  {sessionError?.message
-                    || 'Your sign-in could not be verified because the service did not respond.'}
-                </p>
-                <button type="button" className="btn" onClick={recheck}>Try again</button>
+                <h3>{t('login.serviceUnavailable.title')}</h3>
+                <p>{sessionError?.message || t('login.serviceUnavailable.fallbackDetail')}</p>
+                <button type="button" className="btn" onClick={recheck}>{t('common.tryAgain')}</button>
               </div>
             )}
           </>
         )}
 
         <footer className="login-foot">
-          <p className="muted">
-            Student, application and finance data is read live from Zoho CRM and Zoho
-            Books, and learning data from the Catalyst LMS connector. Access is
-            restricted to authorised staff.
-          </p>
+          <p className="muted">{t('login.footer')}</p>
         </footer>
       </main>
     </div>

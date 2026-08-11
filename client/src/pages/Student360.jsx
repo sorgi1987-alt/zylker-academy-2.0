@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApi, useAction } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Progress, SourceBadge, ReadOnlyBadge, DemoDataBadge, RefBadge,
   ConfirmDialog, SectionUnavailable, useToast, fmtDate, fmtMoney
@@ -37,17 +38,19 @@ import { useBreadcrumbLeaf } from '../components/Shell.jsx';
  * recoverable, showing someone else's invoices is not.
  */
 function InvoiceSection({ invoices }) {
+  const t = useT();
+
   if (!invoices) {
     return (
-      <Card title="Invoices">
-        <p className="muted">Your role does not include access to finance data.</p>
+      <Card title={t('student360.invoices.title')}>
+        <p className="muted">{t('student360.invoices.noAccess')}</p>
       </Card>
     );
   }
 
   if (invoices.status === 'not_configured') {
     return (
-      <Card title="Invoices" action={<SourceBadge source="books" />}>
+      <Card title={t('student360.invoices.title')} action={<SourceBadge source="books" />}>
         <p className="muted">{invoices.detail}</p>
       </Card>
     );
@@ -55,7 +58,7 @@ function InvoiceSection({ invoices }) {
 
   if (invoices.status === 'unavailable') {
     return (
-      <Card title="Invoices" action={<SourceBadge source="books" />}>
+      <Card title={t('student360.invoices.title')} action={<SourceBadge source="books" />}>
         <SectionUnavailable system="Zoho Books" detail={invoices.detail} />
       </Card>
     );
@@ -63,9 +66,9 @@ function InvoiceSection({ invoices }) {
 
   if (invoices.status === 'ambiguous') {
     return (
-      <Card title="Invoices" action={<SourceBadge source="books" />}>
+      <Card title={t('student360.invoices.title')} action={<SourceBadge source="books" />}>
         <div className="state" role="status">
-          <h3>The Zoho Books link is ambiguous</h3>
+          <h3>{t('student360.invoices.ambiguousTitle')}</h3>
           <p>{invoices.detail}</p>
           {invoices.match?.candidates?.length > 0 && (
             <ul className="plain-list">
@@ -77,8 +80,7 @@ function InvoiceSection({ invoices }) {
             </ul>
           )}
           <p className="note">
-            No invoices are shown until one customer is linked, so that this student is
-            never shown another customer&rsquo;s finances.
+            {t('student360.invoices.ambiguousNote')}
           </p>
         </div>
       </Card>
@@ -87,28 +89,28 @@ function InvoiceSection({ invoices }) {
 
   if (invoices.status === 'unmatched') {
     return (
-      <Card title="Invoices" action={<SourceBadge source="books" />}>
-        <p className="muted">{invoices.detail || 'No Zoho Books customer is linked to this student.'}</p>
+      <Card title={t('student360.invoices.title')} action={<SourceBadge source="books" />}>
+        <p className="muted">{invoices.detail || t('student360.invoices.noCustomerLinked')}</p>
       </Card>
     );
   }
 
   const matchedOnLabel = invoices.match?.matchedOn === 'crm-field'
-    ? `stored Books customer id (${invoices.match.field})`
-    : 'exact email match';
+    ? t('student360.invoices.matchedOnField', { field: invoices.match.field })
+    : t('student360.invoices.matchedOnEmail');
 
   return (
     <Card
-      title="Invoices"
+      title={t('student360.invoices.title')}
       action={<div className="head-actions"><SourceBadge source="books" /><ReadOnlyBadge system="Zoho Books" /></div>}
     >
       <p className="note">
-        Linked to Zoho Books customer <span className="mono">{invoices.match.customerId}</span> by {matchedOnLabel}.
-        Accounting changes are made in Zoho Books.
+        {t('student360.invoices.linkedBefore')} <span className="mono">{invoices.match.customerId}</span>{' '}
+        {t('student360.invoices.linkedAfter', { matchedOn: matchedOnLabel })}
       </p>
 
       <dl className="dl">
-        <dt>Outstanding balance</dt>
+        <dt>{t('student360.invoices.outstandingBalance')}</dt>
         <dd className="mono">{fmtMoney(invoices.outstandingBalance, invoices.currency, { cents: true })}</dd>
       </dl>
 
@@ -117,12 +119,12 @@ function InvoiceSection({ invoices }) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Invoice</th>
-                <th scope="col">Date</th>
-                <th scope="col">Due</th>
-                <th scope="col">Status</th>
-                <th scope="col">Total</th>
-                <th scope="col">Balance</th>
+                <th scope="col">{t('student360.invoices.table.invoice')}</th>
+                <th scope="col">{t('student360.invoices.table.date')}</th>
+                <th scope="col">{t('student360.invoices.table.due')}</th>
+                <th scope="col">{t('student360.invoices.table.status')}</th>
+                <th scope="col">{t('student360.invoices.table.total')}</th>
+                <th scope="col">{t('student360.invoices.table.balance')}</th>
               </tr>
             </thead>
             <tbody>
@@ -139,12 +141,12 @@ function InvoiceSection({ invoices }) {
             </tbody>
           </table>
         </div>
-      ) : <p className="muted">This customer has no invoices.</p>}
+      ) : <p className="muted">{t('student360.invoices.noInvoices')}</p>}
 
       {invoices.hasMore && (
         <p className="note">
-          Only the most recent invoices are shown here.{' '}
-          <Link to={`/invoices?customerId=${invoices.match.customerId}`}>See all in Finance</Link>.
+          {t('student360.invoices.moreNote')}{' '}
+          <Link to={`/invoices?customerId=${invoices.match.customerId}`}>{t('student360.invoices.seeAllFinance')}</Link>.
         </p>
       )}
     </Card>
@@ -162,17 +164,19 @@ function InvoiceSection({ invoices }) {
  * rather than an empty table that could be mistaken for "no tickets".
  */
 function TicketSection({ tickets }) {
+  const t = useT();
+
   if (!tickets) {
     return (
-      <Card title="Tickets">
-        <p className="muted">Your role does not include access to support data.</p>
+      <Card title={t('student360.tickets.title')}>
+        <p className="muted">{t('student360.tickets.noAccess')}</p>
       </Card>
     );
   }
 
   if (tickets.status === 'not_configured') {
     return (
-      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+      <Card title={t('student360.tickets.title')} action={<SourceBadge source="desk" />}>
         <p className="muted">{tickets.detail}</p>
       </Card>
     );
@@ -180,7 +184,7 @@ function TicketSection({ tickets }) {
 
   if (tickets.status === 'unavailable') {
     return (
-      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+      <Card title={t('student360.tickets.title')} action={<SourceBadge source="desk" />}>
         <SectionUnavailable system="Zoho Desk" detail={tickets.detail} />
       </Card>
     );
@@ -188,9 +192,9 @@ function TicketSection({ tickets }) {
 
   if (tickets.status === 'ambiguous') {
     return (
-      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+      <Card title={t('student360.tickets.title')} action={<SourceBadge source="desk" />}>
         <div className="state" role="status">
-          <h3>The Zoho Desk link is ambiguous</h3>
+          <h3>{t('student360.tickets.ambiguousTitle')}</h3>
           <p>{tickets.detail}</p>
           {tickets.match?.candidates?.length > 0 && (
             <ul className="plain-list">
@@ -202,8 +206,7 @@ function TicketSection({ tickets }) {
             </ul>
           )}
           <p className="note">
-            No tickets are shown until one contact is linked, so that this student is
-            never shown another contact&rsquo;s support history.
+            {t('student360.tickets.ambiguousNote')}
           </p>
         </div>
       </Card>
@@ -212,28 +215,28 @@ function TicketSection({ tickets }) {
 
   if (tickets.status === 'unmatched') {
     return (
-      <Card title="Tickets" action={<SourceBadge source="desk" />}>
-        <p className="muted">{tickets.detail || 'No Zoho Desk contact is linked to this student.'}</p>
+      <Card title={t('student360.tickets.title')} action={<SourceBadge source="desk" />}>
+        <p className="muted">{tickets.detail || t('student360.tickets.noContactLinked')}</p>
       </Card>
     );
   }
 
   const matchedOnLabel = tickets.match?.matchedOn === 'crm-field'
-    ? `stored Desk contact id (${tickets.match.field})`
-    : 'exact email match';
+    ? t('student360.tickets.matchedOnField', { field: tickets.match.field })
+    : t('student360.tickets.matchedOnEmail');
 
   return (
     <Card
-      title="Tickets"
+      title={t('student360.tickets.title')}
       action={<div className="head-actions"><SourceBadge source="desk" /><ReadOnlyBadge system="Zoho Desk" /></div>}
     >
       <p className="note">
-        Linked to Zoho Desk contact <span className="mono">{tickets.match.contactId}</span> by {matchedOnLabel}.
-        Tickets are replied to and closed in Zoho Desk.
+        {t('student360.tickets.linkedBefore')} <span className="mono">{tickets.match.contactId}</span>{' '}
+        {t('student360.tickets.linkedAfter', { matchedOn: matchedOnLabel })}
       </p>
 
       <dl className="dl">
-        <dt>Open tickets</dt>
+        <dt>{t('student360.tickets.openTickets')}</dt>
         <dd className="mono">{tickets.openCount}</dd>
       </dl>
 
@@ -242,35 +245,35 @@ function TicketSection({ tickets }) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Ticket</th>
-                <th scope="col">Subject</th>
-                <th scope="col">Status</th>
-                <th scope="col">Created</th>
-                <th scope="col">Due</th>
+                <th scope="col">{t('student360.tickets.table.ticket')}</th>
+                <th scope="col">{t('student360.tickets.table.subject')}</th>
+                <th scope="col">{t('student360.tickets.table.status')}</th>
+                <th scope="col">{t('student360.tickets.table.created')}</th>
+                <th scope="col">{t('student360.tickets.table.due')}</th>
               </tr>
             </thead>
             <tbody>
-              {tickets.tickets.map((t) => (
-                <tr key={t.id}>
-                  <td><Link to={`/tickets/${t.id}`}>{t.ticketNumber || t.id}</Link></td>
-                  <td>{t.subject || <span className="muted">—</span>}</td>
+              {tickets.tickets.map((tk) => (
+                <tr key={tk.id}>
+                  <td><Link to={`/tickets/${tk.id}`}>{tk.ticketNumber || tk.id}</Link></td>
+                  <td>{tk.subject || <span className="muted">—</span>}</td>
                   <td>
-                    <Pill value={t.status} />
-                    {t.overdue && <div className="muted small">Overdue</div>}
+                    <Pill value={tk.status} />
+                    {tk.overdue && <div className="muted small">{t('student360.tickets.overdue')}</div>}
                   </td>
-                  <td>{fmtDate(t.createdTime)}</td>
-                  <td>{t.dueDate ? fmtDate(t.dueDate) : <span className="muted">—</span>}</td>
+                  <td>{fmtDate(tk.createdTime)}</td>
+                  <td>{tk.dueDate ? fmtDate(tk.dueDate) : <span className="muted">—</span>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      ) : <p className="muted">This contact has no tickets.</p>}
+      ) : <p className="muted">{t('student360.tickets.noTickets')}</p>}
 
       {tickets.hasMore && (
         <p className="note">
-          Only the most recent tickets are shown here.{' '}
-          <Link to={`/tickets?contactId=${tickets.match.contactId}`}>See all in Support</Link>.
+          {t('student360.tickets.moreNote')}{' '}
+          <Link to={`/tickets?contactId=${tickets.match.contactId}`}>{t('student360.tickets.seeAllSupport')}</Link>.
         </p>
       )}
     </Card>
@@ -287,6 +290,7 @@ function TicketSection({ tickets }) {
  * and links to the tab that holds the detail behind each answer.
  */
 function Overview({ d, onTab }) {
+  const t = useT();
   const s = d.student;
   const active = d.enrolments.find((e) => e.status === 'Active') || null;
   const latest = [...d.applications]
@@ -306,37 +310,37 @@ function Overview({ d, onTab }) {
   return (
     <>
       <div className="grid g-2">
-        <Card title="Identity" action={<SourceBadge source="crm" />}>
+        <Card title={t('student360.overview.identity')} action={<SourceBadge source="crm" />}>
           <dl className="dl">
-            <dt>Full name</dt><dd>{s.fullName || '—'}</dd>
-            <dt>Email</dt><dd>{s.email || '—'}</dd>
-            <dt>Student ID</dt><dd className="mono">{s.studentId || '—'}</dd>
-            <dt>Status</dt><dd><Pill value={s.status} /></dd>
-            <dt>External reference</dt><dd className="mono">{s.externalReference || '—'}</dd>
-            <dt>Added</dt><dd>{fmtDate(s.createdTime)}</dd>
-            <dt>Last modified</dt><dd>{fmtDate(s.modifiedTime)}</dd>
+            <dt>{t('student360.overview.fullName')}</dt><dd>{s.fullName || '—'}</dd>
+            <dt>{t('student360.overview.email')}</dt><dd>{s.email || '—'}</dd>
+            <dt>{t('student360.overview.studentId')}</dt><dd className="mono">{s.studentId || '—'}</dd>
+            <dt>{t('student360.overview.status')}</dt><dd><Pill value={s.status} /></dd>
+            <dt>{t('student360.overview.externalReference')}</dt><dd className="mono">{s.externalReference || '—'}</dd>
+            <dt>{t('student360.overview.added')}</dt><dd>{fmtDate(s.createdTime)}</dd>
+            <dt>{t('student360.overview.lastModified')}</dt><dd>{fmtDate(s.modifiedTime)}</dd>
           </dl>
         </Card>
 
-        <Card title="Where they are" action={<SourceBadge source="crm" />}>
+        <Card title={t('student360.overview.whereTheyAre')} action={<SourceBadge source="crm" />}>
           <dl className="dl">
-            <dt>Current programme</dt>
+            <dt>{t('student360.overview.currentProgramme')}</dt>
             <dd>
               {active && active.programme
                 ? <Link to={`/programmes/${active.programme.id}`}>{active.programme.name}</Link>
                 : latest && latest.programme
-                  ? <>{latest.programme.name} <span className="muted">(applied for)</span></>
-                  : <span className="muted">None</span>}
+                  ? <>{latest.programme.name} <span className="muted">{t('student360.overview.appliedFor')}</span></>
+                  : <span className="muted">{t('student360.overview.none')}</span>}
             </dd>
-            <dt>Current intake</dt>
+            <dt>{t('student360.overview.currentIntake')}</dt>
             <dd>
               {active && active.intake
                 ? <Link to={`/intakes/${active.intake.id}`}>{active.intake.name}</Link>
                 : latest && latest.intake
-                  ? <>{latest.intake.name} <span className="muted">(applied for)</span></>
-                  : <span className="muted">None</span>}
+                  ? <>{latest.intake.name} <span className="muted">{t('student360.overview.appliedFor')}</span></>
+                  : <span className="muted">{t('student360.overview.none')}</span>}
             </dd>
-            <dt>Latest application</dt>
+            <dt>{t('student360.overview.latestApplication')}</dt>
             <dd>
               {latest
                 ? (
@@ -345,13 +349,13 @@ function Overview({ d, onTab }) {
                     <Pill value={latest.stage} />
                   </>
                 )
-                : <span className="muted">None</span>}
+                : <span className="muted">{t('student360.overview.none')}</span>}
             </dd>
-            <dt>Active enrolment</dt>
+            <dt>{t('student360.overview.activeEnrolment')}</dt>
             <dd>
               {active
                 ? <Link to={`/enrolments/${active.id}`}>{active.reference || active.id}</Link>
-                : <span className="muted">None</span>}
+                : <span className="muted">{t('student360.overview.none')}</span>}
             </dd>
           </dl>
         </Card>
@@ -359,33 +363,32 @@ function Overview({ d, onTab }) {
 
       <div className="grid g-2">
         <Card
-          title="Learning progress"
+          title={t('student360.overview.learningProgress')}
           action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
         >
           {d.learning.length ? (
             <>
               <dl className="dl">
-                <dt>Average progress</dt>
+                <dt>{t('student360.overview.averageProgress')}</dt>
                 <dd><Progress value={avgProgress} /></dd>
-                <dt>Records</dt>
+                <dt>{t('student360.overview.records')}</dt>
                 <dd className="mono">{d.learning.length}</dd>
-                <dt>Completed</dt>
+                <dt>{t('student360.overview.completed')}</dt>
                 <dd className="mono">{d.learning.filter((l) => l.lmsStatus === 'Completed').length}</dd>
               </dl>
               <button type="button" className="btn" onClick={() => onTab('learning')}>
-                See learning records
+                {t('student360.overview.seeLearningRecords')}
               </button>
             </>
           ) : (
             <p className="muted">
-              No external learning records are mapped to this student, so no progress can be
-              reported here.
+              {t('student360.overview.noLearningRecords')}
             </p>
           )}
         </Card>
 
         <Card
-          title="Finance"
+          title={t('student360.overview.finance')}
           action={<div className="head-actions"><SourceBadge source="books" /><ReadOnlyBadge system="Zoho Books" /></div>}
         >
           {/* A balance is only stated when a Books customer was actually
@@ -394,24 +397,24 @@ function Overview({ d, onTab }) {
           {financeKnown ? (
             <>
               <dl className="dl">
-                <dt>Outstanding balance</dt>
+                <dt>{t('student360.overview.outstandingBalance')}</dt>
                 <dd className="mono">
                   {fmtMoney(d.invoices.outstandingBalance, d.invoices.currency, { cents: true })}
                 </dd>
-                <dt>Invoices</dt>
+                <dt>{t('student360.overview.invoices')}</dt>
                 <dd className="mono">{d.invoices.invoices.length}</dd>
               </dl>
-              <button type="button" className="btn" onClick={() => onTab('finance')}>See invoices</button>
+              <button type="button" className="btn" onClick={() => onTab('finance')}>{t('student360.overview.seeInvoices')}</button>
             </>
           ) : (
             <p className="muted">
               {(d.invoices && d.invoices.detail)
-                || 'No Zoho Books customer is linked to this student, so no balance can be shown.'}
+                || t('student360.overview.noBooksCustomer')}
             </p>
           )}
         </Card>
         <Card
-          title="Support"
+          title={t('student360.overview.support')}
           action={<div className="head-actions"><SourceBadge source="desk" /><ReadOnlyBadge system="Zoho Desk" /></div>}
         >
           {/* An open-ticket count is only stated once a Desk contact was actually
@@ -420,25 +423,25 @@ function Overview({ d, onTab }) {
           {ticketsKnown ? (
             <>
               <dl className="dl">
-                <dt>Open tickets</dt>
+                <dt>{t('student360.overview.openTickets')}</dt>
                 <dd className="mono">{d.tickets.openCount}</dd>
-                <dt>Tickets</dt>
+                <dt>{t('student360.overview.tickets')}</dt>
                 <dd className="mono">{d.tickets.tickets.length}</dd>
               </dl>
-              <button type="button" className="btn" onClick={() => onTab('support')}>See tickets</button>
+              <button type="button" className="btn" onClick={() => onTab('support')}>{t('student360.overview.seeTickets')}</button>
             </>
           ) : (
             <p className="muted">
               {(d.tickets && d.tickets.detail)
-                || 'No Zoho Desk contact is linked to this student, so no tickets can be shown.'}
+                || t('student360.overview.noDeskContact')}
             </p>
           )}
         </Card>
       </div>
 
       <Card
-        title="Recent activity"
-        action={<button type="button" className="btn" onClick={() => onTab('activity')}>All activity</button>}
+        title={t('student360.overview.recentActivity')}
+        action={<button type="button" className="btn" onClick={() => onTab('activity')}>{t('student360.overview.allActivity')}</button>}
       >
         <ActivityLog rows={(d.activity || []).slice(0, 5)} />
       </Card>
@@ -455,6 +458,7 @@ export default function Student360() {
   const navigate = useNavigate();
   const can = useCan();
   const toast = useToast();
+  const t = useT();
   const state = useApi((o) => api.student(id, o), [id]);
   const [confirm, setConfirm] = useState(null);
   const [noting, setNoting] = useState(false);
@@ -479,35 +483,35 @@ export default function Student360() {
     const url = `${window.location.origin}${window.location.pathname}#/students/${id}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast('Link copied.');
+      toast(t('student360.linkCopied'));
     } catch {
       // Clipboard access can be refused; saying so beats a silent no-op.
-      toast('Could not copy. Use the address bar instead.', 'warn');
+      toast(t('student360.linkCopyFailed'), 'warn');
     }
   };
 
   const onArchive = (student) => setConfirm({
-    title: 'Archive this student?',
-    message: 'The student will be marked as Withdrawn in Zoho CRM. Their applications and enrolments are kept.',
-    confirmLabel: 'Archive student',
+    title: t('student360.archive.title'),
+    message: t('student360.archive.message'),
+    confirmLabel: t('student360.archive.confirmLabel'),
     run: async () => {
       const r = await action.run(() => api.archiveStudent(id, { expectedModifiedTime: student.modifiedTime }));
-      if (r) { toast('Student archived.'); setConfirm(null); }
+      if (r) { toast(t('student360.archive.toast')); setConfirm(null); }
     }
   });
 
   const onDelete = () => setConfirm({
-    title: 'Delete this student permanently?',
-    message: 'This cannot be undone. Deletion is refused if any application or enrolment still points at this student.',
-    confirmLabel: 'Delete permanently',
+    title: t('student360.delete.title'),
+    message: t('student360.delete.message'),
+    confirmLabel: t('student360.delete.confirmLabel'),
     run: async () => {
       const r = await action.run(() => api.deleteStudent(id));
-      if (r) { toast('Student deleted.'); navigate('/students', { replace: true }); }
+      if (r) { toast(t('student360.delete.toast')); navigate('/students', { replace: true }); }
     }
   });
 
   return (
-    <Async state={state} empty={{ title: 'Student not found' }} emptyWhen={(d) => !d || !d.student}>
+    <Async state={state} empty={{ title: t('student360.notFound') }} emptyWhen={(d) => !d || !d.student}>
       {(d) => {
         const s = d.student;
         const outstanding = d.invoices && d.invoices.status === 'matched'
@@ -518,20 +522,20 @@ export default function Student360() {
           : null;
 
         const tabs = [
-          { key: 'overview', label: 'Overview' },
-          { key: 'applications', label: 'Applications', count: d.applications.length },
-          { key: 'enrolments', label: 'Enrolments', count: d.enrolments.length },
-          { key: 'learning', label: 'Learning', count: d.learning.length },
+          { key: 'overview', label: t('student360.tabs.overview') },
+          { key: 'applications', label: t('student360.tabs.applications'), count: d.applications.length },
+          { key: 'enrolments', label: t('student360.tabs.enrolments'), count: d.enrolments.length },
+          { key: 'learning', label: t('student360.tabs.learning'), count: d.learning.length },
           // A null count means the source did not answer, which is not zero.
-          { key: 'finance', label: 'Finance', count: outstanding },
-          { key: 'support', label: 'Support', count: openTickets },
-          { key: 'activity', label: 'Activity', count: (d.activity || []).length }
+          { key: 'finance', label: t('student360.tabs.finance'), count: outstanding },
+          { key: 'support', label: t('student360.tabs.support'), count: openTickets },
+          { key: 'activity', label: t('student360.tabs.activity'), count: (d.activity || []).length }
         ];
 
         return (
           <>
             <div className="page-head">
-              <h1>{s.fullName || 'Unnamed student'}</h1>
+              <h1>{s.fullName || t('student360.unnamedStudent')}</h1>
               <p>
                 <Pill value={s.status} />{' '}
                 <RefBadge reference={s.studentId || s.externalReference} />
@@ -539,58 +543,58 @@ export default function Student360() {
               <div className="head-actions">
                 {can('student:write') && (
                   <>
-                    <Link className="btn" to={`/students/${id}/edit`}>Edit</Link>
+                    <Link className="btn" to={`/students/${id}/edit`}>{t('student360.edit')}</Link>
                     {s.status !== 'Withdrawn' && (
-                      <button type="button" className="btn" onClick={() => onArchive(s)}>Archive</button>
+                      <button type="button" className="btn" onClick={() => onArchive(s)}>{t('student360.archiveAction')}</button>
                     )}
                   </>
                 )}
                 {can('application:write') && (
-                  <Link className="btn" to={`/applications/new?studentId=${id}`}>New application</Link>
+                  <Link className="btn" to={`/applications/new?studentId=${id}`}>{t('student360.newApplication')}</Link>
                 )}
                 {can('enrolment:write') && (
-                  <Link className="btn" to={`/enrolments/new?studentId=${id}`}>New enrolment</Link>
+                  <Link className="btn" to={`/enrolments/new?studentId=${id}`}>{t('student360.newEnrolment')}</Link>
                 )}
                 {can('activity:write') && (
-                  <button type="button" className="btn" onClick={() => setNoting(true)}>Add note</button>
+                  <button type="button" className="btn" onClick={() => setNoting(true)}>{t('student360.addNote')}</button>
                 )}
-                <button type="button" className="btn" onClick={copyLink}>Copy link</button>
+                <button type="button" className="btn" onClick={copyLink}>{t('student360.copyLink')}</button>
                 {s.meta && s.meta.crmUrl && (
                   <a className="btn" href={s.meta.crmUrl} target="_blank" rel="noreferrer noopener">
-                    Open in Zoho CRM
+                    {t('student360.openInCrm')}
                   </a>
                 )}
                 {can('student:delete') && (
-                  <button type="button" className="btn danger" onClick={onDelete}>Delete</button>
+                  <button type="button" className="btn danger" onClick={onDelete}>{t('student360.deleteAction')}</button>
                 )}
               </div>
             </div>
 
             {action.error && (
               <div className="state err" role="alert">
-                <h3>That action could not be completed</h3>
+                <h3>{t('student360.actionFailedTitle')}</h3>
                 <p>{friendlyError(action.error)}</p>
               </div>
             )}
 
-            <Tabs tabs={tabs} active={tab} onChange={setTab} label="Student record sections" />
+            <Tabs tabs={tabs} active={tab} onChange={setTab} label={t('student360.tabsLabel')} />
 
             <TabPanel id="overview" active={tab}>
               <Overview d={d} onTab={setTab} />
             </TabPanel>
 
             <TabPanel id="applications" active={tab}>
-              <Card title="Applications" action={<SourceBadge source="crm" />}>
+              <Card title={t('student360.applications.title')} action={<SourceBadge source="crm" />}>
                 {d.applications.length ? (
                   <div className="t-wrap">
                     <table>
                       <thead>
                         <tr>
-                          <th scope="col">Application</th>
-                          <th scope="col">Stage</th>
-                          <th scope="col">Programme</th>
-                          <th scope="col">Intake</th>
-                          <th scope="col">Applied</th>
+                          <th scope="col">{t('student360.applications.table.application')}</th>
+                          <th scope="col">{t('student360.applications.table.stage')}</th>
+                          <th scope="col">{t('student360.applications.table.programme')}</th>
+                          <th scope="col">{t('student360.applications.table.intake')}</th>
+                          <th scope="col">{t('student360.applications.table.applied')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -606,23 +610,23 @@ export default function Student360() {
                       </tbody>
                     </table>
                   </div>
-                ) : <p className="muted">This student has no applications.</p>}
+                ) : <p className="muted">{t('student360.applications.empty')}</p>}
               </Card>
             </TabPanel>
 
             <TabPanel id="enrolments" active={tab}>
-              <Card title="Enrolments" action={<SourceBadge source="crm" />}>
+              <Card title={t('student360.enrolments.title')} action={<SourceBadge source="crm" />}>
                 {d.enrolments.length ? (
                   <div className="t-wrap">
                     <table>
                       <thead>
                         <tr>
-                          <th scope="col">Enrolment</th>
-                          <th scope="col">Status</th>
-                          <th scope="col">Programme</th>
-                          <th scope="col">Intake</th>
-                          <th scope="col">Enrolled</th>
-                          <th scope="col">Progress</th>
+                          <th scope="col">{t('student360.enrolments.table.enrolment')}</th>
+                          <th scope="col">{t('student360.enrolments.table.status')}</th>
+                          <th scope="col">{t('student360.enrolments.table.programme')}</th>
+                          <th scope="col">{t('student360.enrolments.table.intake')}</th>
+                          <th scope="col">{t('student360.enrolments.table.enrolled')}</th>
+                          <th scope="col">{t('student360.enrolments.table.progress')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -641,10 +645,10 @@ export default function Student360() {
                       </tbody>
                     </table>
                   </div>
-                ) : <p className="muted">This student has no enrolments.</p>}
+                ) : <p className="muted">{t('student360.enrolments.empty')}</p>}
               </Card>
 
-              <Card title="Programmes" action={<SourceBadge source="crm" />}>
+              <Card title={t('student360.enrolments.programmesTitle')} action={<SourceBadge source="crm" />}>
                 {d.programmes.length ? (
                   <ul className="plain-list">
                     {d.programmes.map((p) => (
@@ -654,18 +658,18 @@ export default function Student360() {
                       </li>
                     ))}
                   </ul>
-                ) : <p className="muted">No programmes are linked to this student.</p>}
+                ) : <p className="muted">{t('student360.enrolments.noProgrammes')}</p>}
               </Card>
             </TabPanel>
 
             <TabPanel id="learning" active={tab}>
               <Card
-                title="Learning"
+                title={t('student360.learning.title')}
                 action={(
                   <div className="head-actions">
                     <SourceBadge source="lms" />
                     <DemoDataBadge />
-                    <Link className="btn" to="/learning/enrolments">Learning Hub</Link>
+                    <Link className="btn" to="/learning/enrolments">{t('student360.learning.learningHub')}</Link>
                   </div>
                 )}
               >
@@ -674,13 +678,13 @@ export default function Student360() {
                     <table>
                       <thead>
                         <tr>
-                          <th scope="col">Course</th>
-                          <th scope="col">Provider</th>
-                          <th scope="col">Status</th>
-                          <th scope="col">Progress</th>
-                          <th scope="col">Score</th>
-                          <th scope="col">Certificate</th>
-                          <th scope="col">Last activity</th>
+                          <th scope="col">{t('student360.learning.table.course')}</th>
+                          <th scope="col">{t('student360.learning.table.provider')}</th>
+                          <th scope="col">{t('student360.learning.table.status')}</th>
+                          <th scope="col">{t('student360.learning.table.progress')}</th>
+                          <th scope="col">{t('student360.learning.table.score')}</th>
+                          <th scope="col">{t('student360.learning.table.certificate')}</th>
+                          <th scope="col">{t('student360.learning.table.lastActivity')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -700,7 +704,7 @@ export default function Student360() {
                             <td>
                               <Pill value={l.certificateStatus} />
                               {l.certificateUrl && (
-                                <> <a href={l.certificateUrl} target="_blank" rel="noreferrer noopener">View</a></>
+                                <> <a href={l.certificateUrl} target="_blank" rel="noreferrer noopener">{t('student360.learning.viewCertificate')}</a></>
                               )}
                             </td>
                             <td>{l.lastActivityTime ? fmtDate(l.lastActivityTime) : <span className="muted">—</span>}</td>
@@ -711,22 +715,19 @@ export default function Student360() {
                   </div>
                 ) : (
                   <p className="muted">
-                    No external learning records are mapped to this student. A record exists in
-                    the connector only once it has been matched to this CRM contact.
+                    {t('student360.learning.noRecords')}
                   </p>
                 )}
               </Card>
 
-              <Card title="Learner platform identifiers" action={<SourceBadge source="crm" />}>
+              <Card title={t('student360.learning.identifiersTitle')} action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Provider</dt><dd>{s.lms.provider || <span className="muted">—</span>}</dd>
-                  <dt>LMS user id</dt><dd className="mono">{s.lms.userId || <span className="muted">Not linked</span>}</dd>
-                  <dt>Last sync</dt><dd>{s.lms.lastSync ? fmtDate(s.lms.lastSync) : <span className="muted">—</span>}</dd>
+                  <dt>{t('student360.learning.provider')}</dt><dd>{s.lms.provider || <span className="muted">—</span>}</dd>
+                  <dt>{t('student360.learning.lmsUserId')}</dt><dd className="mono">{s.lms.userId || <span className="muted">{t('student360.learning.notLinked')}</span>}</dd>
+                  <dt>{t('student360.learning.lastSync')}</dt><dd>{s.lms.lastSync ? fmtDate(s.lms.lastSync) : <span className="muted">—</span>}</dd>
                 </dl>
                 <p className="note">
-                  These three fields live on the CRM Contact and are set by hand. The
-                  learning records above come from the external LMS connector and are a
-                  separate source — the two can disagree.
+                  {t('student360.learning.identifiersNote')}
                 </p>
               </Card>
             </TabPanel>
@@ -740,7 +741,7 @@ export default function Student360() {
             </TabPanel>
 
             <TabPanel id="activity" active={tab}>
-              <Card title="Activity">
+              <Card title={t('student360.activity.title')}>
                 <ActivityLog rows={d.activity} />
               </Card>
             </TabPanel>

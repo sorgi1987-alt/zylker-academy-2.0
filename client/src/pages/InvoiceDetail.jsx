@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, SourceBadge, ReadOnlyBadge, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
@@ -13,24 +14,25 @@ import {
  * absence is stated rather than rendered as "no payments".
  */
 export default function InvoiceDetail() {
+  const t = useT();
   const { id } = useParams();
   const state = useApi((o) => api.invoice(id, o), [id]);
 
   return (
-    <Async state={state} empty={{ title: 'Invoice not found' }} emptyWhen={(d) => !d}>
+    <Async state={state} empty={{ title: t('invoiceDetail.notFound') }} emptyWhen={(d) => !d}>
       {(inv) => (
         <>
           <div className="page-head">
-            <h1>Invoice {inv.invoiceNumber || inv.id}</h1>
+            <h1>{t('invoiceDetail.heading', { number: inv.invoiceNumber || inv.id })}</h1>
             <p>
               <Pill value={inv.statusLabel} />{' '}
               <span className="muted">{inv.paymentStatus}</span>
             </p>
             <div className="head-actions">
-              <Link className="btn" to="/invoices">Back to Finance</Link>
+              <Link className="btn" to="/invoices">{t('invoiceDetail.backToFinance')}</Link>
               {inv.booksUrl && (
                 <a className="btn" href={inv.booksUrl} target="_blank" rel="noreferrer noopener">
-                  Open in Zoho Books
+                  {t('invoiceDetail.openInBooks')}
                 </a>
               )}
             </div>
@@ -38,45 +40,45 @@ export default function InvoiceDetail() {
 
           <div className="grid g-2">
             <Card
-              title="Invoice"
+              title={t('invoiceDetail.cardInvoice')}
               action={<div className="head-actions"><SourceBadge source="books" /><ReadOnlyBadge system="Zoho Books" /></div>}
             >
               <dl className="dl">
-                <dt>Invoice number</dt><dd className="mono">{inv.invoiceNumber || '—'}</dd>
-                <dt>Reference</dt><dd className="mono">{inv.referenceNumber || '—'}</dd>
-                <dt>Customer</dt><dd>{inv.customerName || '—'}</dd>
-                <dt>Email</dt><dd>{inv.email || '—'}</dd>
-                <dt>Invoice date</dt><dd>{fmtDate(inv.invoiceDate)}</dd>
-                <dt>Due date</dt><dd>{fmtDate(inv.dueDate)}</dd>
-                <dt>Status</dt><dd><Pill value={inv.statusLabel} /></dd>
-                <dt>Payment status</dt><dd>{inv.paymentStatus}</dd>
-                <dt>Currency</dt><dd className="mono">{inv.currency || '—'}</dd>
+                <dt>{t('invoiceDetail.field.invoiceNumber')}</dt><dd className="mono">{inv.invoiceNumber || '—'}</dd>
+                <dt>{t('invoiceDetail.field.reference')}</dt><dd className="mono">{inv.referenceNumber || '—'}</dd>
+                <dt>{t('invoiceDetail.field.customer')}</dt><dd>{inv.customerName || '—'}</dd>
+                <dt>{t('invoiceDetail.field.email')}</dt><dd>{inv.email || '—'}</dd>
+                <dt>{t('invoiceDetail.field.invoiceDate')}</dt><dd>{fmtDate(inv.invoiceDate)}</dd>
+                <dt>{t('invoiceDetail.field.dueDate')}</dt><dd>{fmtDate(inv.dueDate)}</dd>
+                <dt>{t('invoiceDetail.field.status')}</dt><dd><Pill value={inv.statusLabel} /></dd>
+                <dt>{t('invoiceDetail.field.paymentStatus')}</dt><dd>{inv.paymentStatus}</dd>
+                <dt>{t('invoiceDetail.field.currency')}</dt><dd className="mono">{inv.currency || '—'}</dd>
               </dl>
             </Card>
 
-            <Card title="Amounts" action={<SourceBadge source="books" />}>
+            <Card title={t('invoiceDetail.cardAmounts')} action={<SourceBadge source="books" />}>
               <dl className="dl">
-                <dt>Subtotal</dt><dd className="mono">{fmtMoney(inv.subTotal, inv.currency, { cents: true })}</dd>
-                <dt>Tax</dt><dd className="mono">{fmtMoney(inv.tax, inv.currency, { cents: true })}</dd>
-                <dt>Total</dt><dd className="mono"><strong>{fmtMoney(inv.total, inv.currency, { cents: true })}</strong></dd>
-                <dt>Paid</dt><dd className="mono">{fmtMoney(inv.paymentsMade, inv.currency, { cents: true })}</dd>
-                <dt>Credits applied</dt><dd className="mono">{fmtMoney(inv.creditsApplied, inv.currency, { cents: true })}</dd>
-                <dt>Balance due</dt><dd className="mono"><strong>{fmtMoney(inv.balance, inv.currency, { cents: true })}</strong></dd>
+                <dt>{t('invoiceDetail.field.subtotal')}</dt><dd className="mono">{fmtMoney(inv.subTotal, inv.currency, { cents: true })}</dd>
+                <dt>{t('invoiceDetail.field.tax')}</dt><dd className="mono">{fmtMoney(inv.tax, inv.currency, { cents: true })}</dd>
+                <dt>{t('invoiceDetail.field.total')}</dt><dd className="mono"><strong>{fmtMoney(inv.total, inv.currency, { cents: true })}</strong></dd>
+                <dt>{t('invoiceDetail.field.paid')}</dt><dd className="mono">{fmtMoney(inv.paymentsMade, inv.currency, { cents: true })}</dd>
+                <dt>{t('invoiceDetail.field.creditsApplied')}</dt><dd className="mono">{fmtMoney(inv.creditsApplied, inv.currency, { cents: true })}</dd>
+                <dt>{t('invoiceDetail.field.balanceDue')}</dt><dd className="mono"><strong>{fmtMoney(inv.balance, inv.currency, { cents: true })}</strong></dd>
               </dl>
             </Card>
           </div>
 
-          <Card title="Line items" action={<SourceBadge source="books" />}>
+          <Card title={t('invoiceDetail.cardLineItems')} action={<SourceBadge source="books" />}>
             {inv.lineItems.length ? (
               <div className="t-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Item</th>
-                      <th scope="col">Quantity</th>
-                      <th scope="col">Rate</th>
-                      <th scope="col">Tax</th>
-                      <th scope="col">Total</th>
+                      <th scope="col">{t('invoiceDetail.lineItemsTable.item')}</th>
+                      <th scope="col">{t('invoiceDetail.lineItemsTable.quantity')}</th>
+                      <th scope="col">{t('invoiceDetail.lineItemsTable.rate')}</th>
+                      <th scope="col">{t('invoiceDetail.lineItemsTable.tax')}</th>
+                      <th scope="col">{t('invoiceDetail.lineItemsTable.total')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -99,19 +101,19 @@ export default function InvoiceDetail() {
                   </tbody>
                 </table>
               </div>
-            ) : <p className="muted">This invoice has no line items.</p>}
+            ) : <p className="muted">{t('invoiceDetail.noLineItems')}</p>}
           </Card>
 
-          <Card title="Payments" action={<SourceBadge source="books" />}>
+          <Card title={t('invoiceDetail.cardPayments')} action={<SourceBadge source="books" />}>
             {inv.payments.length ? (
               <div className="t-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Date</th>
-                      <th scope="col">Amount</th>
-                      <th scope="col">Method</th>
-                      <th scope="col">Reference</th>
+                      <th scope="col">{t('invoiceDetail.paymentsTable.date')}</th>
+                      <th scope="col">{t('invoiceDetail.paymentsTable.amount')}</th>
+                      <th scope="col">{t('invoiceDetail.paymentsTable.method')}</th>
+                      <th scope="col">{t('invoiceDetail.paymentsTable.reference')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -128,16 +130,15 @@ export default function InvoiceDetail() {
               </div>
             ) : (
               <p className="muted">
-                No payment records were returned for this invoice. If payments exist in
-                Zoho Books, the connection may not carry the scope needed to read them.
+                {t('invoiceDetail.noPayments')}
               </p>
             )}
           </Card>
 
           {(inv.notes || inv.terms) && (
-            <Card title="Notes and terms" action={<SourceBadge source="books" />}>
-              {inv.notes && <><h3>Notes</h3><p className="muted">{inv.notes}</p></>}
-              {inv.terms && <><h3>Terms</h3><p className="muted">{inv.terms}</p></>}
+            <Card title={t('invoiceDetail.cardNotesAndTerms')} action={<SourceBadge source="books" />}>
+              {inv.notes && <><h3>{t('invoiceDetail.notes')}</h3><p className="muted">{inv.notes}</p></>}
+              {inv.terms && <><h3>{t('invoiceDetail.terms')}</h3><p className="muted">{inv.terms}</p></>}
             </Card>
           )}
         </>

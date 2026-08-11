@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useApi, useDebounced } from '../useApi.js';
 import { api } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, ReadOnlyBadge,
   fmtDate
@@ -25,6 +26,7 @@ import {
  * backend exposes no route that would accept one.
  */
 export default function Tickets() {
+  const t = useT();
   const [params] = useSearchParams();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -48,15 +50,12 @@ export default function Tickets() {
   return (
     <>
       <div className="page-head">
-        <h1>Support</h1>
-        <p>
-          Tickets from Zoho Desk. This application reads tickets only — creating,
-          replying to and closing them are done in Zoho Desk.
-        </p>
+        <h1>{t('tickets.pageTitle')}</h1>
+        <p>{t('tickets.pageIntro')}</p>
       </div>
 
       <Card
-        title="Tickets"
+        title={t('tickets.cardTitle')}
         action={(
           <div className="head-actions">
             <SourceBadge source="desk" />
@@ -66,37 +65,37 @@ export default function Tickets() {
       >
         {contactId && (
           <p className="note">
-            Filtered to Zoho Desk contact <span className="mono">{contactId}</span>.{' '}
-            <Link to="/tickets">Show all tickets</Link>.
+            {t('tickets.filteredToContact')} <span className="mono">{contactId}</span>.{' '}
+            <Link to="/tickets">{t('tickets.showAllTickets')}</Link>.
           </p>
         )}
 
         <div className="toolbar">
           <SearchBox
             id="ticket-search"
-            label="Search"
+            label={t('common.search')}
             value={search}
             onChange={changeFilter(setSearch)}
-            placeholder="Subject"
+            placeholder={t('tickets.searchPlaceholder')}
           />
           <FilterSelect
             id="ticket-status-type"
-            label="Status"
+            label={t('tickets.status.label')}
             value={statusType}
             onChange={changeFilter(setStatusType)}
             options={statusTypes}
-            allLabel="All statuses"
+            allLabel={t('tickets.status.all')}
           />
         </div>
 
         <FilterChips
           chips={[
             statusType && {
-              key: 'statusType', label: 'Status', value: statusType,
+              key: 'statusType', label: t('tickets.filters.status'), value: statusType,
               onClear: () => changeFilter(setStatusType)('')
             },
             search && {
-              key: 'search', label: 'Search', value: search,
+              key: 'search', label: t('common.search'), value: search,
               onClear: () => changeFilter(setSearch)('')
             }
           ]}
@@ -106,8 +105,8 @@ export default function Tickets() {
         <Async
           state={state}
           empty={{
-            title: 'No tickets match',
-            message: 'Try a different search term or status.'
+            title: t('tickets.empty.title'),
+            message: t('tickets.empty.message')
           }}
         >
           {(rows, meta) => (
@@ -116,29 +115,29 @@ export default function Tickets() {
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Ticket</th>
-                      <th scope="col">Subject</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Priority</th>
-                      <th scope="col">Created</th>
-                      <th scope="col">Due</th>
+                      <th scope="col">{t('tickets.table.ticket')}</th>
+                      <th scope="col">{t('tickets.table.subject')}</th>
+                      <th scope="col">{t('tickets.table.status')}</th>
+                      <th scope="col">{t('tickets.table.priority')}</th>
+                      <th scope="col">{t('tickets.table.created')}</th>
+                      <th scope="col">{t('tickets.table.due')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((t) => (
-                      <tr key={t.id}>
-                        <td><Link to={`/tickets/${t.id}`}>{t.ticketNumber || t.id}</Link></td>
+                    {rows.map((tk) => (
+                      <tr key={tk.id}>
+                        <td><Link to={`/tickets/${tk.id}`}>{tk.ticketNumber || tk.id}</Link></td>
                         <td>
-                          {t.subject || <span className="muted">—</span>}
-                          {t.email && <div className="muted small">{t.email}</div>}
+                          {tk.subject || <span className="muted">—</span>}
+                          {tk.email && <div className="muted small">{tk.email}</div>}
                         </td>
                         <td>
-                          <Pill value={t.status} />
-                          {t.overdue && <div className="muted small">Overdue</div>}
+                          <Pill value={tk.status} />
+                          {tk.overdue && <div className="muted small">{t('tickets.overdue')}</div>}
                         </td>
-                        <td>{t.priority || <span className="muted">—</span>}</td>
-                        <td>{fmtDate(t.createdTime)}</td>
-                        <td>{t.dueDate ? fmtDate(t.dueDate) : <span className="muted">—</span>}</td>
+                        <td>{tk.priority || <span className="muted">—</span>}</td>
+                        <td>{fmtDate(tk.createdTime)}</td>
+                        <td>{tk.dueDate ? fmtDate(tk.dueDate) : <span className="muted">—</span>}</td>
                       </tr>
                     ))}
                   </tbody>

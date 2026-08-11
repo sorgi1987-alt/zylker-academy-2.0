@@ -5,6 +5,8 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, useCan } from '../AuthContext.jsx';
 import { api } from '../api.js';
 import { useDebounced } from '../useApi.js';
+import { useT } from '../i18n/I18nContext.jsx';
+import LanguageToggle from '../i18n/LanguageToggle.jsx';
 import { Modal } from './Ui.jsx';
 
 /* ============================== icons ================================== */
@@ -42,22 +44,26 @@ const IconChevron = <Icon d={<><path d="m9 6 6 6-6 6" /></>} />;
 /* ========================== navigation model =========================== */
 
 /**
- * One row per destination: path, label, the permission it requires and its
- * icon. The menu is derived from this and the signed-in role, so a link the
- * user cannot use is never rendered. Hiding it is presentation only — the
- * matching backend route refuses the call regardless.
+ * One row per destination: path, translation key, the permission it requires
+ * and its icon. The menu is derived from this and the signed-in role, so a
+ * link the user cannot use is never rendered. Hiding it is presentation only
+ * — the matching backend route refuses the call regardless.
+ *
+ * `labelKey` rather than a literal `label`: this array is module-scope, not a
+ * component, so it cannot call the translation hook itself — components that
+ * render an entry (Sidebar, CreateMenu) resolve the key with `useT()`.
  */
 export const NAV = [
-  { to: '/dashboard', label: 'Dashboard', permission: 'dashboard:read', icon: ICONS.dashboard },
-  { to: '/students', label: 'Students', permission: 'student:read', icon: ICONS.students },
-  { to: '/applications', label: 'Applications', permission: 'application:read', icon: ICONS.applications },
-  { to: '/enrolments', label: 'Enrolments', permission: 'enrolment:read', icon: ICONS.enrolments },
-  { to: '/programmes', label: 'Programmes', permission: 'programme:read', icon: ICONS.programmes },
-  { to: '/intakes', label: 'Intakes', permission: 'intake:read', icon: ICONS.intakes },
-  { to: '/learning/courses', label: 'Learning Hub', permission: 'lms:read', icon: ICONS.learning },
-  { to: '/invoices', label: 'Finance', permission: 'invoice:read', icon: ICONS.finance },
-  { to: '/tickets', label: 'Support', permission: 'ticket:read', icon: ICONS.support },
-  { to: '/integration', label: 'Integration Status', permission: 'integration:read', icon: ICONS.integration }
+  { to: '/dashboard', labelKey: 'nav.dashboard', permission: 'dashboard:read', icon: ICONS.dashboard },
+  { to: '/students', labelKey: 'nav.students', permission: 'student:read', icon: ICONS.students },
+  { to: '/applications', labelKey: 'nav.applications', permission: 'application:read', icon: ICONS.applications },
+  { to: '/enrolments', labelKey: 'nav.enrolments', permission: 'enrolment:read', icon: ICONS.enrolments },
+  { to: '/programmes', labelKey: 'nav.programmes', permission: 'programme:read', icon: ICONS.programmes },
+  { to: '/intakes', labelKey: 'nav.intakes', permission: 'intake:read', icon: ICONS.intakes },
+  { to: '/learning/courses', labelKey: 'nav.learningHub', permission: 'lms:read', icon: ICONS.learning },
+  { to: '/invoices', labelKey: 'nav.finance', permission: 'invoice:read', icon: ICONS.finance },
+  { to: '/tickets', labelKey: 'nav.support', permission: 'ticket:read', icon: ICONS.support },
+  { to: '/integration', labelKey: 'nav.integrationStatus', permission: 'integration:read', icon: ICONS.integration }
 ];
 
 /**
@@ -72,11 +78,11 @@ export const NAV = [
  * nowhere is worse than one that is not there.
  */
 const CREATE_ITEMS = [
-  { to: '/students/new', label: 'New student', permission: 'student:write' },
-  { to: '/applications/new', label: 'New application', permission: 'application:write' },
-  { to: '/enrolments/new', label: 'New enrolment', permission: 'enrolment:write' },
-  { to: '/programmes?new=1', label: 'New programme', permission: 'programme:write' },
-  { to: '/intakes?new=1', label: 'New intake', permission: 'intake:write' }
+  { to: '/students/new', labelKey: 'nav.newStudent', permission: 'student:write' },
+  { to: '/applications/new', labelKey: 'nav.newApplication', permission: 'application:write' },
+  { to: '/enrolments/new', labelKey: 'nav.newEnrolment', permission: 'enrolment:write' },
+  { to: '/programmes?new=1', labelKey: 'nav.newProgramme', permission: 'programme:write' },
+  { to: '/intakes?new=1', labelKey: 'nav.newIntake', permission: 'intake:write' }
 ];
 
 /* ============================ popup plumbing =========================== */
@@ -117,20 +123,21 @@ export function useBreadcrumbLeaf(label) {
   }, [label, setLeaf]);
 }
 
-const SECTION = {
-  dashboard: 'Dashboard',
-  students: 'Students',
-  applications: 'Applications',
-  enrolments: 'Enrolments',
-  programmes: 'Programmes',
-  intakes: 'Intakes',
-  learning: 'Learning Hub',
-  courses: 'Courses',
-  'sync-log': 'Synchronisation log',
-  invoices: 'Finance',
-  integration: 'Integration Status',
-  new: 'New',
-  edit: 'Edit'
+const SECTION_KEY = {
+  dashboard: 'shell.section.dashboard',
+  students: 'shell.section.students',
+  applications: 'shell.section.applications',
+  enrolments: 'shell.section.enrolments',
+  programmes: 'shell.section.programmes',
+  intakes: 'shell.section.intakes',
+  learning: 'shell.section.learning',
+  courses: 'shell.section.courses',
+  'sync-log': 'shell.section.syncLog',
+  invoices: 'shell.section.invoices',
+  tickets: 'shell.section.tickets',
+  integration: 'shell.section.integration',
+  new: 'shell.section.new',
+  edit: 'shell.section.edit'
 };
 
 /**
@@ -139,6 +146,7 @@ const SECTION = {
  * decoration, not navigation.
  */
 function Breadcrumbs({ leaf }) {
+  const t = useT();
   const { pathname } = useLocation();
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length < 2) return null;
@@ -149,13 +157,13 @@ function Breadcrumbs({ leaf }) {
     acc += `/${seg}`;
     const last = i === parts.length - 1;
     const isId = /^\d+$/.test(seg);
-    let label = SECTION[seg] || (isId ? 'Details' : seg.replace(/-/g, ' '));
+    let label = SECTION_KEY[seg] ? t(SECTION_KEY[seg]) : (isId ? t('shell.section.details') : seg.replace(/-/g, ' '));
     if (last && leaf) label = leaf;
     crumbs.push({ to: acc, label, last, isId });
   });
 
   return (
-    <nav className="crumbs" aria-label="Breadcrumb">
+    <nav className="crumbs" aria-label={t('shell.breadcrumbLabel')}>
       <ol>
         {crumbs.map((c) => (
           <li key={c.to}>
@@ -182,6 +190,7 @@ const MIN_QUERY = 2;
  * arrow keys, and each one links straight to its record.
  */
 function GlobalSearch() {
+  const t = useT();
   const [term, setTerm] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -257,7 +266,7 @@ function GlobalSearch() {
 
   return (
     <div className="gsearch" ref={boxRef}>
-      <label className="sr-only" htmlFor="global-search">Search students, applications, enrolments, programmes and intakes</label>
+      <label className="sr-only" htmlFor="global-search">{t('shell.search.srLabel')}</label>
       <span className="gsearch-ic" aria-hidden="true">{IconSearch}</span>
       <input
         id="global-search"
@@ -269,7 +278,7 @@ function GlobalSearch() {
         aria-controls="global-search-results"
         aria-autocomplete="list"
         aria-activedescendant={showPanel && flat[active] ? `gs-opt-${active}` : undefined}
-        placeholder="Search records…"
+        placeholder={t('shell.search.placeholder')}
         value={term}
         onChange={(e) => { setTerm(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
@@ -279,22 +288,22 @@ function GlobalSearch() {
 
       {showPanel && (
         <div className="gsearch-pop" id="global-search-results" role="listbox"
-          aria-label="Search results">
+          aria-label={t('shell.search.resultsLabel')}>
           {state.status === 'short' && (
-            <p className="gsearch-msg">Type at least {MIN_QUERY} characters.</p>
+            <p className="gsearch-msg">{t('shell.search.minChars', { min: MIN_QUERY })}</p>
           )}
           {state.status === 'loading' && (
-            <p className="gsearch-msg" role="status">Searching…</p>
+            <p className="gsearch-msg" role="status">{t('shell.search.searching')}</p>
           )}
           {state.status === 'error' && (
             <p className="gsearch-msg err" role="alert">
               {state.error && state.error.status === 403
-                ? 'Your role does not allow searching these records.'
-                : (state.error && state.error.message) || 'The search could not be completed.'}
+                ? t('shell.search.forbidden')
+                : (state.error && state.error.message) || t('shell.search.failed')}
             </p>
           )}
           {state.status === 'ready' && !flat.length && (
-            <p className="gsearch-msg">No records match “{debounced.trim()}”.</p>
+            <p className="gsearch-msg">{t('shell.search.noMatches', { term: debounced.trim() })}</p>
           )}
           {state.status === 'ready' && state.groups.map((g) => (
             // A listbox may only contain options and groups, so the heading is
@@ -303,7 +312,7 @@ function GlobalSearch() {
               <p className="gsearch-h" role="presentation">
                 {g.label}
                 {g.total > g.items.length && (
-                  <span className="muted"> · showing {g.items.length} of {g.total}</span>
+                  <span className="muted"> · {t('shell.search.showingOf', { shown: g.items.length, total: g.total })}</span>
                 )}
               </p>
               {g.items.map((item) => {
@@ -340,6 +349,7 @@ function GlobalSearch() {
 
 /** The Create button. Renders nothing at all for a role that may create nothing. */
 function CreateMenu() {
+  const t = useT();
   const can = useCan();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -351,13 +361,13 @@ function CreateMenu() {
     <div className="pop-wrap" ref={ref}>
       <button type="button" className="btn primary hdr-btn" aria-haspopup="menu"
         aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        {IconPlus}<span className="btn-label">Create</span>
+        {IconPlus}<span className="btn-label">{t('shell.create.button')}</span>
       </button>
       {open && (
-        <div className="pop" role="menu" aria-label="Create">
+        <div className="pop" role="menu" aria-label={t('shell.create.menuLabel')}>
           {items.map((i) => (
             <Link key={i.to} to={i.to} role="menuitem" className="pop-item" onClick={close}>
-              {i.label}
+              {t(i.labelKey)}
             </Link>
           ))}
         </div>
@@ -370,23 +380,22 @@ function CreateMenu() {
 
 /** Plain statement of what this application reads, writes and only pretends to. */
 function AboutDialog({ onClose, environment }) {
+  const t = useT();
   return (
-    <Modal title="About Zylker Academy" onClose={onClose}>
+    <Modal title={t('shell.about.title')} onClose={onClose}>
       <dl className="dl compact">
-        <dt>Environment</dt>
-        <dd>{environment ? environment.label : 'Unknown'}</dd>
-        <dt>Students, Applications, Programmes, Intakes, Enrolments</dt>
-        <dd>Read and written in Zoho CRM.</dd>
-        <dt>Invoices</dt>
-        <dd>Read from Zoho Books. This application makes no accounting change; corrections are made in Zoho Books.</dd>
-        <dt>Learning Hub</dt>
-        <dd>
-          A demonstration dataset held in the Catalyst Data Store. Provider names are
-          labels on those rows — no request is made to Moodle, Canvas, TrainerCentral
-          or any other learning platform. The mapping to CRM and the push into it are real.
-        </dd>
-        <dt>Access</dt>
-        <dd>Every route requires a Catalyst session, and every backend endpoint re-checks your role independently of this interface.</dd>
+        <dt>{t('shell.about.environment')}</dt>
+        <dd>{environment ? environment.label : t('shell.about.unknownEnvironment')}</dd>
+        <dt>{t('shell.about.crmModulesTerm')}</dt>
+        <dd>{t('shell.about.crmModulesDesc')}</dd>
+        <dt>{t('shell.about.invoicesTerm')}</dt>
+        <dd>{t('shell.about.invoicesDesc')}</dd>
+        <dt>{t('shell.about.ticketsTerm')}</dt>
+        <dd>{t('shell.about.ticketsDesc')}</dd>
+        <dt>{t('shell.about.learningHubTerm')}</dt>
+        <dd>{t('shell.about.learningHubDesc')}</dd>
+        <dt>{t('shell.about.accessTerm')}</dt>
+        <dd>{t('shell.about.accessDesc')}</dd>
       </dl>
     </Modal>
   );
@@ -395,6 +404,7 @@ function AboutDialog({ onClose, environment }) {
 /* ================================ header ============================== */
 
 function UserMenu() {
+  const t = useT();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
@@ -412,13 +422,13 @@ function UserMenu() {
         </span>
       </button>
       {open && (
-        <div className="pop right" role="menu" aria-label="Account">
+        <div className="pop right" role="menu" aria-label={t('shell.userMenu.accountLabel')}>
           <div className="pop-id">
             <strong>{user.name}</strong>
             <span className="muted">{user.email}</span>
             <span className="pill info">{user.roleLabel}</span>
           </div>
-          <button type="button" role="menuitem" className="pop-item" onClick={signOut}>Sign out</button>
+          <button type="button" role="menuitem" className="pop-item" onClick={signOut}>{t('common.signOut')}</button>
         </div>
       )}
     </div>
@@ -426,6 +436,7 @@ function UserMenu() {
 }
 
 function Header({ onOpenNav, leaf }) {
+  const t = useT();
   const { environment } = useAuth();
   const [about, setAbout] = useState(false);
   const dev = environment && environment.name !== 'production';
@@ -433,7 +444,7 @@ function Header({ onOpenNav, leaf }) {
   return (
     <header className="app-header">
       <button type="button" className="icon-btn nav-toggle" onClick={onOpenNav}
-        aria-label="Open navigation menu">{IconMenu}</button>
+        aria-label={t('shell.openNavigationMenu')}>{IconMenu}</button>
 
       <div className="app-header-lead">
         <Breadcrumbs leaf={leaf} />
@@ -444,12 +455,13 @@ function Header({ onOpenNav, leaf }) {
       <div className="app-header-actions">
         {environment && (
           <span className={`pill ${dev ? 'warn' : 'ok'} env-badge`}
-            title={`This interface is talking to the ${environment.label.toLowerCase()} backend`}>
+            title={t('shell.envBadgeTitle', { env: environment.label.toLowerCase() })}>
             {environment.label}
           </span>
         )}
         <CreateMenu />
-        <button type="button" className="btn hdr-btn" onClick={() => setAbout(true)}>Help</button>
+        <button type="button" className="btn hdr-btn" onClick={() => setAbout(true)}>{t('shell.help')}</button>
+        <LanguageToggle />
         <UserMenu />
       </div>
 
@@ -461,6 +473,7 @@ function Header({ onOpenNav, leaf }) {
 /* =============================== sidebar ============================== */
 
 function Sidebar({ links, collapsed, onToggleCollapse, mobileOpen, onCloseMobile }) {
+  const t = useT();
   const { user } = useAuth();
   const ref = useRef(null);
 
@@ -480,17 +493,17 @@ function Sidebar({ links, collapsed, onToggleCollapse, mobileOpen, onCloseMobile
       {mobileOpen && <div className="nav-scrim" onClick={onCloseMobile} aria-hidden="true" />}
       <nav
         className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' open' : ''}`}
-        aria-label="Main navigation"
+        aria-label={t('shell.mainNavigation')}
         ref={ref}
       >
         <div className="sidebar-top">
           <div className="sidebar-brand">
             <p className="brand">{collapsed ? 'ZA' : 'Zylker Academy'}</p>
-            {!collapsed && <p className="brand-sub">Education Management</p>}
+            {!collapsed && <p className="brand-sub">{t('shell.brandSub')}</p>}
           </div>
           <button type="button" className="icon-btn collapse-btn" onClick={onToggleCollapse}
-            aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-            title={collapsed ? 'Expand navigation' : 'Collapse navigation'}>
+            aria-label={collapsed ? t('shell.expandNavigation') : t('shell.collapseNavigation')}
+            title={collapsed ? t('shell.expandNavigation') : t('shell.collapseNavigation')}>
             <span className={collapsed ? 'flip' : undefined}>{IconChevron}</span>
           </button>
         </div>
@@ -502,21 +515,20 @@ function Sidebar({ links, collapsed, onToggleCollapse, mobileOpen, onCloseMobile
               to={l.to}
               // A collapsed rail shows icons only, so the label has to survive
               // somewhere the pointer and the screen reader can both reach it.
-              title={collapsed ? l.label : undefined}
-              aria-label={collapsed ? l.label : undefined}
+              title={collapsed ? t(l.labelKey) : undefined}
+              aria-label={collapsed ? t(l.labelKey) : undefined}
               onClick={onCloseMobile}
               className={({ isActive }) => (isActive ? 'active' : undefined)}
             >
               <span className="nav-ic" aria-hidden="true">{l.icon}</span>
-              <span className="nav-label">{l.label}</span>
+              <span className="nav-label">{t(l.labelKey)}</span>
             </NavLink>
           ))}
         </div>
 
         {!collapsed && (
           <div className="sidebar-foot">
-            Signed in as <strong>{user.name}</strong> ({user.roleLabel}).
-            Zoho Books is read-only. Learning data is a demonstration dataset in Catalyst.
+            {t('shell.sidebarFoot', { name: user.name, role: user.roleLabel })}
           </div>
         )}
       </nav>
@@ -533,6 +545,7 @@ function Sidebar({ links, collapsed, onToggleCollapse, mobileOpen, onCloseMobile
  * sharing a browser profile do not inherit each other's layout.
  */
 export function Shell({ links, children }) {
+  const t = useT();
   const { user } = useAuth();
   const key = `zylker:${user && user.id}:navCollapsed`;
   const [collapsed, setCollapsed] = useState(() => {
@@ -559,7 +572,7 @@ export function Shell({ links, children }) {
       <div className={`layout${collapsed ? ' nav-collapsed' : ''}`}>
         {/* First stop for a keyboard user, so nine navigation links can be
             passed over on every page. */}
-        <a className="skip-link" href="#main-content">Skip to main content</a>
+        <a className="skip-link" href="#main-content">{t('shell.skipToContent')}</a>
         <Sidebar
           links={links}
           collapsed={collapsed}

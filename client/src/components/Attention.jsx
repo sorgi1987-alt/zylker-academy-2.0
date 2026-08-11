@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import { Card, Loading, ErrorState, fmtDate, fmtMoney } from './Ui.jsx';
 
 /**
@@ -16,47 +17,54 @@ import { Card, Loading, ErrorState, fmtDate, fmtMoney } from './Ui.jsx';
  * everyone reading this.
  */
 
-const SEVERITY_LABEL = {
-  critical: 'Critical',
-  warning: 'Warning',
-  information: 'For information'
-};
+/** camelCase(item.key), e.g. 'tickets-overdue' -> 'ticketsOverdue'. */
+const toCamel = (key) => key.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
-function agePhrase(days) {
+function agePhrase(t, days) {
   if (days === null || days === undefined) return null;
-  if (days < 0) return `in ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`;
-  if (days === 0) return 'today';
-  if (days === 1) return '1 day ago';
-  return `${days} days ago`;
+  if (days < 0) {
+    return Math.abs(days) === 1 ? t('common.attention.age.inOneDay') : t('common.attention.age.inDays', { days: Math.abs(days) });
+  }
+  if (days === 0) return t('common.attention.age.today');
+  if (days === 1) return t('common.attention.age.oneDayAgo');
+  return t('common.attention.age.daysAgo', { days });
 }
 
 function Item({ item }) {
-  const age = item.oldest ? agePhrase(item.oldest.days) : null;
+  const t = useT();
+  const age = item.oldest ? agePhrase(t, item.oldest.days) : null;
+  // Falls back to the server's own English title/category if this item key has
+  // no client-side translation yet — never a blank row.
+  const byKey = t(`common.attention.byKey.${toCamel(item.key)}.title`);
+  const title = byKey === `common.attention.byKey.${toCamel(item.key)}.title` ? item.title : byKey;
+  const categoryKey = `common.attention.byKey.${toCamel(item.key)}.category`;
+  const categoryVal = t(categoryKey);
+  const category = categoryVal === categoryKey ? item.category : categoryVal;
 
   return (
     <Link className="attn-item" to={item.to}>
       <span className={`attn-sev ${item.severity}`} aria-hidden="true" />
       <span className="attn-body">
         <span className="attn-h">
-          <strong>{item.title}</strong>
+          <strong>{title}</strong>
           <span className={`pill ${item.severity === 'critical' ? 'stop' : item.severity === 'warning' ? 'warn' : 'info'}`}>
-            {SEVERITY_LABEL[item.severity] || item.severity}
+            {t(`common.attention.severity.${item.severity}`) || item.severity}
           </span>
-          <span className="muted small">{item.category}</span>
-          {item.partial && <span className="pill mute">Partial</span>}
+          <span className="muted small">{category}</span>
+          {item.partial && <span className="pill mute">{t('common.attention.partial')}</span>}
         </span>
 
         <p className="attn-why">{item.explanation}</p>
 
         {item.amount !== undefined && item.amount !== null && (
           <p className="attn-oldest">
-            Balance outstanding: <strong>{fmtMoney(item.amount, item.currency, { cents: true })}</strong>
+            {t('common.attention.balanceOutstanding')} <strong>{fmtMoney(item.amount, item.currency, { cents: true })}</strong>
           </p>
         )}
 
         {item.oldest && (
           <p className="attn-oldest">
-            Longest waiting: <strong>{item.oldest.label}</strong>
+            {t('common.attention.longestWaiting')} <strong>{item.oldest.label}</strong>
             {item.oldest.date && <> · {fmtDate(item.oldest.date)}</>}
             {age && <> ({age})</>}
           </p>
@@ -66,15 +74,22 @@ function Item({ item }) {
       {/* An "unavailable" row has no meaningful count; showing 0 would read as
           "nothing to do", which is the opposite of what it means. */}
       {item.unavailable
-        ? <span className="attn-count muted" aria-label="Not available">—</span>
+        ? <span className="attn-count muted" aria-label={t('common.notAvailable')}>—</span>
         : <span className="attn-count mono">{item.count}</span>}
     </Link>
   );
 }
 
+// Beyond this many items the queue is truncated with a "Show all" toggle —
+// the queue is already sorted critical-first, so what's cut off is always
+// the least urgent, not an arbitrary slice.
+const COLLAPSED_LIMIT = 5;
+
 export default function AttentionPanel() {
+  const t = useT();
   const state = useApi((o) => api.attention(o), []);
   const data = state.data;
+  const [expanded, setExpanded] = useState(false);
 
   const action = (
     <button
@@ -83,15 +98,15 @@ export default function AttentionPanel() {
       onClick={state.reload}
       disabled={state.status === 'loading'}
     >
-      {state.status === 'loading' ? 'Refreshing…' : 'Refresh'}
+      {state.status === 'loading' ? t('common.attention.refreshing') : t('common.attention.refresh')}
     </button>
   );
 
   return (
-    <Card title="Needs attention" action={action} pad={false}>
+    <Card title={t('common.attention.cardTitle')} action={action} pad={false}>
       {state.status === 'loading' && (
         <div style={{ padding: '16px 18px' }}>
-          <Loading rows={3} label="Working out what needs attention" />
+          <Loading rows={3} label={t('common.attention.loadingLabel')} />
         </div>
       )}
 
@@ -102,13 +117,17 @@ export default function AttentionPanel() {
       {state.status === 'ready' && data && (
         data.items.length ? (
           <div className="attn">
-            {data.items.map((i) => <Item key={i.key} item={i} />)}
+            {(expanded ? data.items : data.items.slice(0, COLLAPSED_LIMIT)).map((i) => (
+              <Item key={i.key} item={i} />
+            ))}
+            {data.items.length > COLLAPSED_LIMIT && (
+              <button type="button" className="btn attn-toggle" onClick={() => setExpanded((v) => !v)}>
+                {expanded ? t('common.attention.showFewer') : t('common.attention.showAll', { count: data.items.length })}
+              </button>
+            )}
           </div>
         ) : (
-          <p className="attn-clear">
-            Nothing is waiting. Applications, intakes, learning records and invoices
-            are all within their thresholds.
-          </p>
+          <p className="attn-clear">{t('common.attention.allClear')}</p>
         )
       )}
     </Card>

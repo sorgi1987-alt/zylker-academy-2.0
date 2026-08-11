@@ -9,6 +9,7 @@ import {
 } from '../components/Ui.jsx';
 import { friendlyError } from '../components/Form.jsx';
 import LearningNav from '../components/LearningNav.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 
 /**
  * The external course catalogue.
@@ -20,6 +21,7 @@ import LearningNav from '../components/LearningNav.jsx';
  * be mapped and unsynced, and saying so is the point of the screen.
  */
 export default function LearningCourses() {
+  const t = useT();
   const can = useCan();
   const toast = useToast();
   const [params] = useSearchParams();
@@ -40,12 +42,11 @@ export default function LearningCourses() {
     const r = await action.run(() => api.bulkSyncLmsCourses({ idempotencyKey: newIdempotencyKey() }));
     if (r) {
       const s = r.data;
-      toast(
-        `Bulk sync finished: ${s.succeeded} of ${s.attempted} synced` +
-        `${s.failed ? `, ${s.failed} failed` : ''}` +
-        `${s.skipped ? `, ${s.skipped} skipped as unmapped` : ''}.`,
-        s.failed ? 'warn' : 'ok'
-      );
+      let msg = t('learningCourses.bulkSyncResult', { succeeded: s.succeeded, attempted: s.attempted });
+      if (s.failed) msg += t('learningCourses.bulkSyncFailedSuffix', { failed: s.failed });
+      if (s.skipped) msg += t('learningCourses.bulkSyncSkippedSuffix', { skipped: s.skipped });
+      msg += '.';
+      toast(msg, s.failed ? 'warn' : 'ok');
       setConfirmBulk(false);
     }
   };
@@ -53,24 +54,21 @@ export default function LearningCourses() {
   return (
     <>
       <div className="page-head">
-        <h1>Learning Hub</h1>
-        <p>
-          Courses held by the external LMS connector, and the CRM Programme each one
-          is mapped to.
-        </p>
+        <h1>{t('learningCourses.pageTitle')}</h1>
+        <p>{t('learningCourses.pageIntro')}</p>
       </div>
 
       <LearningNav />
 
       <Card
-        title="External courses"
+        title={t('learningCourses.cardTitle')}
         action={(
           <div className="head-actions">
             <SourceBadge source="lms" />
             <DemoDataBadge />
             {can('lms:bulk-sync') && (
               <button type="button" className="btn" onClick={() => setConfirmBulk(true)}>
-                Sync all mapped courses
+                {t('learningCourses.syncAllButton')}
               </button>
             )}
           </div>
@@ -78,7 +76,7 @@ export default function LearningCourses() {
       >
         {action.error && (
           <div className="state err" role="alert">
-            <h3>That action could not be completed</h3>
+            <h3>{t('learningCourses.actionErrorTitle')}</h3>
             <p>{friendlyError(action.error)}</p>
           </div>
         )}
@@ -86,52 +84,52 @@ export default function LearningCourses() {
         <div className="toolbar">
           <SearchBox
             id="lms-course-search"
-            label="Search"
+            label={t('learningCourses.searchLabel')}
             value={list.search}
             onChange={list.setSearch}
-            placeholder="Course name, external id, instructor or category"
+            placeholder={t('learningCourses.searchPlaceholder')}
           />
           <FilterSelect
             id="lms-course-provider"
-            label="Provider"
+            label={t('learningCourses.providerLabel')}
             value={list.filters.provider || ''}
             onChange={(v) => list.setFilter('provider', v)}
             options={meta.providers || []}
-            allLabel="All providers"
+            allLabel={t('learningCourses.allProviders')}
           />
           <FilterSelect
             id="lms-course-mapping"
-            label="Mapping"
+            label={t('learningCourses.mappingLabel')}
             value={list.filters.mappingStatus || ''}
             onChange={(v) => list.setFilter('mappingStatus', v)}
             options={meta.mappingStatuses || []}
-            allLabel="Any"
+            allLabel={t('learningCourses.any')}
           />
           <FilterSelect
             id="lms-course-sync"
-            label="Sync"
+            label={t('learningCourses.syncLabel')}
             value={list.filters.syncStatus || ''}
             onChange={(v) => list.setFilter('syncStatus', v)}
             options={meta.syncStatuses || []}
-            allLabel="Any"
+            allLabel={t('learningCourses.any')}
           />
         </div>
 
-        <Async state={list} empty={{ title: 'No courses match', message: 'Try clearing a filter.' }}>
+        <Async state={list} empty={{ title: t('learningCourses.emptyTitle'), message: t('learningCourses.emptyMessage') }}>
           {(rows, m) => (
             <>
               <div className="t-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Course</th>
-                      <th scope="col">Provider</th>
-                      <th scope="col">External id</th>
-                      <th scope="col">Delivery</th>
-                      <th scope="col">CRM programme</th>
-                      <th scope="col">Mapping</th>
-                      <th scope="col">Sync</th>
-                      <th scope="col">Last sync</th>
+                      <th scope="col">{t('learningCourses.table.course')}</th>
+                      <th scope="col">{t('learningCourses.table.provider')}</th>
+                      <th scope="col">{t('learningCourses.table.externalId')}</th>
+                      <th scope="col">{t('learningCourses.table.delivery')}</th>
+                      <th scope="col">{t('learningCourses.table.crmProgramme')}</th>
+                      <th scope="col">{t('learningCourses.table.mapping')}</th>
+                      <th scope="col">{t('learningCourses.table.sync')}</th>
+                      <th scope="col">{t('learningCourses.table.lastSync')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -139,7 +137,7 @@ export default function LearningCourses() {
                       <tr key={c.id}>
                         <td>
                           <Link to={`/learning/courses/${c.id}`}>{c.name}</Link>
-                          {c.archived && <span className="pill mute">Archived</span>}
+                          {c.archived && <span className="pill mute">{t('learningCourses.archived')}</span>}
                         </td>
                         <td>{c.provider}</td>
                         <td className="mono">{c.externalCourseId}</td>
@@ -147,11 +145,11 @@ export default function LearningCourses() {
                         <td>
                           {c.crmProgramme
                             ? <Link to={`/programmes/${c.crmProgramme.id}`}>{c.crmProgramme.name}</Link>
-                            : <span className="muted">Not mapped</span>}
+                            : <span className="muted">{t('learningCourses.notMapped')}</span>}
                         </td>
                         <td><Pill value={c.mappingStatus} /></td>
                         <td><Pill value={c.syncStatus} /></td>
-                        <td>{c.lastSyncTime ? fmtDate(c.lastSyncTime) : <span className="muted">Never</span>}</td>
+                        <td>{c.lastSyncTime ? fmtDate(c.lastSyncTime) : <span className="muted">{t('learningCourses.never')}</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -159,9 +157,7 @@ export default function LearningCourses() {
               </div>
 
               <p className="note">
-                Provider names are source labels on rows in the Catalyst Data Store. No
-                request is made to Moodle, Canvas, TrainerCentral or any SCORM host. The
-                mapping to CRM and the push into it are real authenticated writes.
+                {t('learningCourses.provenanceNote')}
               </p>
 
               <Pagination
@@ -178,9 +174,9 @@ export default function LearningCourses() {
 
       {confirmBulk && (
         <ConfirmDialog
-          title="Synchronise every mapped course?"
-          message="Each mapped course pushes its provider, external course id and course URL onto its CRM Programme. Courses that are not mapped are skipped. Every course is attempted independently, so one failure does not stop the rest."
-          confirmLabel="Sync all mapped"
+          title={t('learningCourses.confirmBulk.title')}
+          message={t('learningCourses.confirmBulk.message')}
+          confirmLabel={t('learningCourses.confirmBulk.confirmLabel')}
           danger={false}
           busy={action.busy}
           onConfirm={onBulkSync}

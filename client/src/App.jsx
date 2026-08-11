@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth, useCan, STATUS } from './AuthContext.jsx';
+import { useT } from './i18n/I18nContext.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Students from './pages/Students.jsx';
@@ -40,16 +41,22 @@ import { Shell, NAV } from './components/Shell.jsx';
  * component did.
  */
 function Guarded({ permission, children }) {
+  const t = useT();
   const can = useCan();
   if (permission && !can(permission)) {
     return (
       <div className="state" role="alert">
-        <h3>You do not have access to this area</h3>
-        <p>Your role does not include permission to view this. Ask an administrator if you need it.</p>
+        <h3>{t('app.noAccessTitle')}</h3>
+        <p>{t('app.noAccessDetail')}</p>
       </div>
     );
   }
   return children;
+}
+
+function NotFound() {
+  const t = useT();
+  return <div className="state"><h3>{t('app.notFoundTitle')}</h3><p>{t('app.notFoundDetail')}</p></div>;
 }
 
 /* --------------------------------- shell --------------------------------- */
@@ -116,7 +123,7 @@ function AppShell() {
 
           <Route path="/integration" element={<Guarded permission="integration:read"><IntegrationStatus /></Guarded>} />
 
-          <Route path="*" element={<div className="state"><h3>Page not found</h3><p>Use the navigation to continue.</p></div>} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
     </Shell>
   );
@@ -130,6 +137,7 @@ function AppShell() {
  * else is mounted, so no page-level data fetch can run before sign-in succeeds.
  */
 export default function App() {
+  const t = useT();
   const { status } = useAuth();
 
   if (status === STATUS.CHECKING) {
@@ -137,8 +145,8 @@ export default function App() {
       <div className="layout-plain">
         <div className="login-card">
           <p className="brand">Zylker Academy</p>
-          <p className="brand-sub">Education Management Portal</p>
-          <Loading rows={3} label="Checking your session" />
+          <p className="brand-sub">{t('login.brandSub')}</p>
+          <Loading rows={3} label={t('app.checkingSession')} />
         </div>
       </div>
     );

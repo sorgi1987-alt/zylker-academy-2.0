@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, newIdempotencyKey } from '../api.js';
 import { useApi, useAction } from '../useApi.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import { Card, Loading, ErrorState, useToast } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, EMAIL_RE, friendlyError } from '../components/Form.jsx';
 
+// Live CRM status values, also sent back as the studentStatus payload — left
+// untranslated (see Students.jsx).
 const STATUSES = ['Applicant', 'Active', 'Withdrawn', 'Alumni'];
 
 /**
@@ -22,6 +25,7 @@ export default function StudentForm() {
   const isEdit = Boolean(id);
   const navigate = useNavigate();
   const toast = useToast();
+  const t = useT();
 
   const existing = useApi(
     (o) => (isEdit ? api.student(id, o) : Promise.resolve({ data: null, meta: {} })),
@@ -48,8 +52,8 @@ export default function StudentForm() {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const errors = {
-    lastName: !form.lastName.trim() ? 'A last name is required.' : null,
-    email: form.email && !EMAIL_RE.test(form.email.trim()) ? 'Enter a valid email address.' : null
+    lastName: !form.lastName.trim() ? t('studentForm.lastNameRequired') : null,
+    email: form.email && !EMAIL_RE.test(form.email.trim()) ? t('studentForm.emailInvalid') : null
   };
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -72,46 +76,46 @@ export default function StudentForm() {
       : api.createStudent(payload, { idempotencyKey })));
 
     if (result) {
-      toast(isEdit ? 'Student updated.' : 'Student created.');
+      toast(isEdit ? t('studentForm.toastUpdated') : t('studentForm.toastCreated'));
       navigate(`/students/${isEdit ? id : result.data.id}`, { replace: true });
     }
   };
 
-  if (isEdit && existing.status === 'loading') return <Loading rows={5} label="Loading student" />;
+  if (isEdit && existing.status === 'loading') return <Loading rows={5} label={t('studentForm.loadingStudent')} />;
   if (isEdit && existing.status === 'error') return <ErrorState error={existing.error} onRetry={existing.reload} />;
 
   return (
     <>
       <div className="page-head">
-        <h1>{isEdit ? 'Edit student' : 'Add student'}</h1>
+        <h1>{isEdit ? t('studentForm.editTitle') : t('studentForm.addTitle')}</h1>
         <p>
           {isEdit
-            ? 'Changes are written to the linked Zoho CRM contact record.'
-            : 'Creates a contact record in Zoho CRM. Email addresses must be unique.'}
+            ? t('studentForm.editIntro')
+            : t('studentForm.addIntro')}
         </p>
       </div>
 
       <Card>
         <form onSubmit={onSubmit} noValidate>
           <div className="form-grid">
-            <Field id="firstName" label="First name">
+            <Field id="firstName" label={t('studentForm.firstName')}>
               <input value={form.firstName} onChange={set('firstName')} autoComplete="given-name" />
             </Field>
 
-            <Field id="lastName" label="Last name" required error={touched ? errors.lastName : null}>
+            <Field id="lastName" label={t('studentForm.lastName')} required error={touched ? errors.lastName : null}>
               <input value={form.lastName} onChange={set('lastName')} autoComplete="family-name" required />
             </Field>
 
             <Field
               id="email"
-              label="Email"
+              label={t('studentForm.email')}
               error={touched ? errors.email : null}
-              hint="Used to detect duplicate students and to match Zoho Books invoices."
+              hint={t('studentForm.emailHint')}
             >
               <input type="email" value={form.email} onChange={set('email')} autoComplete="email" />
             </Field>
 
-            <Field id="studentStatus" label="Status">
+            <Field id="studentStatus" label={t('studentForm.status')}>
               <select value={form.studentStatus} onChange={set('studentStatus')}>
                 {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -122,7 +126,7 @@ export default function StudentForm() {
 
           <FormActions
             busy={action.busy}
-            submitLabel={isEdit ? 'Save changes' : 'Create student'}
+            submitLabel={isEdit ? t('studentForm.saveChanges') : t('studentForm.createStudent')}
             onCancel={() => navigate(isEdit ? `/students/${id}` : '/students')}
           />
         </form>

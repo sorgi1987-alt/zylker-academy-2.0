@@ -3,57 +3,61 @@ import { Link } from 'react-router-dom';
 import { usePagedList } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, fmtDate
 } from '../components/Ui.jsx';
 
+// Live CRM status values — also used as the ?status= filter param and as
+// Pill's tone-lookup key, so left untranslated.
 const STATUSES = ['Applicant', 'Active', 'Withdrawn', 'Alumni'];
 
 export default function Students() {
+  const t = useT();
   const can = useCan();
   const list = usePagedList(api.students);
 
   return (
     <>
       <div className="page-head">
-        <h1>Students</h1>
-        <p>Student records held in Zoho CRM, with their current application and enrolment.</p>
+        <h1>{t('students.pageTitle')}</h1>
+        <p>{t('students.pageIntro')}</p>
       </div>
 
       <Card
-        title="All students"
+        title={t('students.allStudents')}
         action={(
           <div className="head-actions">
             <SourceBadge source="crm" />
-            {can('student:write') && <Link className="btn primary" to="/students/new">Add student</Link>}
+            {can('student:write') && <Link className="btn primary" to="/students/new">{t('students.addStudent')}</Link>}
           </div>
         )}
       >
         <div className="toolbar">
           <SearchBox
             id="student-search"
-            label="Search"
+            label={t('students.searchLabel')}
             value={list.search}
             onChange={list.setSearch}
-            placeholder="Name, email or student ID"
+            placeholder={t('students.searchPlaceholder')}
           />
           <FilterSelect
             id="student-status"
-            label="Status"
+            label={t('students.statusLabel')}
             value={list.filters.status || ''}
             onChange={(v) => list.setFilter('status', v)}
             options={STATUSES}
-            allLabel="All statuses"
+            allLabel={t('students.allStatuses')}
           />
         </div>
 
         <Async
           state={list}
           empty={{
-            title: 'No students match',
+            title: t('students.empty.title'),
             message: list.search || list.filters.status
-              ? 'Try a different search term or clear the filters.'
-              : 'No student records were returned from CRM.'
+              ? t('students.empty.filtered')
+              : t('students.empty.default')
           }}
         >
           {(rows, meta) => (
@@ -62,19 +66,19 @@ export default function Students() {
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Student ID</th>
-                      <th scope="col">Email</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Programme</th>
-                      <th scope="col">Enrolment</th>
-                      <th scope="col">Added</th>
+                      <th scope="col">{t('students.table.name')}</th>
+                      <th scope="col">{t('students.table.studentId')}</th>
+                      <th scope="col">{t('students.table.email')}</th>
+                      <th scope="col">{t('students.table.status')}</th>
+                      <th scope="col">{t('students.table.programme')}</th>
+                      <th scope="col">{t('students.table.enrolment')}</th>
+                      <th scope="col">{t('students.table.added')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((s) => (
                       <tr key={s.id}>
-                        <td><Link to={`/students/${s.id}`}>{s.fullName || 'Unnamed'}</Link></td>
+                        <td><Link to={`/students/${s.id}`}>{s.fullName || t('students.unnamed')}</Link></td>
                         <td className="mono">{s.studentId || <span className="muted">—</span>}</td>
                         <td>{s.email || <span className="muted">—</span>}</td>
                         <td><Pill value={s.status} /></td>
@@ -89,7 +93,7 @@ export default function Students() {
 
               {meta.capped && (
                 <p className="note">
-                  Showing the most recent {meta.total} records. Narrow the search to see older ones.
+                  {t('students.showingRecent', { total: meta.total })}
                 </p>
               )}
 

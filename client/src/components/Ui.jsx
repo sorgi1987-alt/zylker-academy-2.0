@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useT, getLocale } from '../i18n/I18nContext.jsx';
 
 /* ------------------------------- toasts -------------------------------- */
 
@@ -9,22 +10,23 @@ const ToastCtx = createContext(() => {});
 export const useToast = () => useContext(ToastCtx);
 
 export function ToastProvider({ children }) {
+  const t = useT();
   const [items, setItems] = useState([]);
   const push = useCallback((message, tone = 'ok') => {
     const id = Math.random().toString(36).slice(2);
     setItems((s) => [...s, { id, message, tone }]);
-    setTimeout(() => setItems((s) => s.filter((t) => t.id !== id)), 5000);
+    setTimeout(() => setItems((s) => s.filter((x) => x.id !== id)), 5000);
   }, []);
   return (
     <ToastCtx.Provider value={push}>
       {children}
       {/* aria-live so screen readers announce results of actions */}
       <div className="toast-wrap" role="status" aria-live="polite">
-        {items.map((t) => (
-          <div key={t.id} className={`toast ${t.tone}`}>
-            <span>{t.message}</span>
-            <button type="button" aria-label="Dismiss notification"
-              onClick={() => setItems((s) => s.filter((x) => x.id !== t.id))}>×</button>
+        {items.map((x) => (
+          <div key={x.id} className={`toast ${x.tone}`}>
+            <span>{x.message}</span>
+            <button type="button" aria-label={t('common.dismissNotification')}
+              onClick={() => setItems((s) => s.filter((y) => y.id !== x.id))}>×</button>
           </div>
         ))}
       </div>
@@ -36,6 +38,7 @@ export function ToastProvider({ children }) {
 
 /** Accessible modal: focus moves in, Escape closes, background is inert. */
 export function Modal({ title, onClose, children, wide = false }) {
+  const t = useT();
   const ref = useRef(null);
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
@@ -49,7 +52,9 @@ export function Modal({ title, onClose, children, wide = false }) {
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <div className="modal-h">
           <h2>{title}</h2>
-          <button type="button" className="btn" onClick={onClose} aria-label="Close dialog">Close</button>
+          <button type="button" className="btn" onClick={onClose} aria-label={t('common.closeDialog')}>
+            {t('common.close')}
+          </button>
         </div>
         <div className="modal-b">{children}</div>
       </div>
@@ -58,15 +63,16 @@ export function Modal({ title, onClose, children, wide = false }) {
 }
 
 /** Confirmation gate for destructive actions. */
-export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger = true, busy, onConfirm, onCancel }) {
+export function ConfirmDialog({ title, message, confirmLabel, danger = true, busy, onConfirm, onCancel }) {
+  const t = useT();
   return (
     <Modal title={title} onClose={busy ? () => {} : onCancel}>
       <p style={{ marginTop: 0 }}>{message}</p>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
         <button className={`btn${danger ? ' danger' : ' primary'}`} onClick={onConfirm} disabled={busy}>
-          {busy ? 'Working…' : confirmLabel}
+          {busy ? t('common.working') : (confirmLabel || t('common.confirm'))}
         </button>
-        <button className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button className="btn" onClick={onCancel} disabled={busy}>{t('common.cancel')}</button>
       </div>
     </Modal>
   );
@@ -80,28 +86,32 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirm', danger
  * never mistaken for each other.
  */
 export const SourceBadge = ({ source, title }) => {
+  const t = useT();
   const map = {
-    crm: ['Zoho CRM', 'ok'],
-    lms: ['External LMS', 'info'],
-    'catalyst-lms': ['External LMS', 'info'],
-    catalyst: ['Zoho Catalyst', 'info'],
-    books: ['Zoho Books', 'warn'],
-    desk: ['Zoho Desk', 'warn']
+    crm: [t('common.sourceCrm'), 'ok'],
+    lms: [t('common.sourceLms'), 'info'],
+    'catalyst-lms': [t('common.sourceLms'), 'info'],
+    catalyst: [t('common.sourceCatalyst'), 'info'],
+    books: [t('common.sourceBooks'), 'warn'],
+    desk: [t('common.sourceDesk'), 'warn']
   };
-  const [label, tone] = map[source] || ['Unknown source', 'mute'];
-  return <span className={`pill ${tone}`} title={title || `Data from ${label}`}>{label}</span>;
+  const [label, tone] = map[source] || [t('common.unknownSource'), 'mute'];
+  return <span className={`pill ${tone}`} title={title || t('common.dataFrom', { label })}>{label}</span>;
 };
 
 /**
- * Marks a section this application cannot change. Books is read-only in this
- * phase, and saying so up front is kinder than letting someone hunt for an edit
- * button that does not exist.
+ * Marks a section this application cannot change. Books and Desk are
+ * read-only in this phase, and saying so up front is kinder than letting
+ * someone hunt for an edit button that does not exist.
  */
-export const ReadOnlyBadge = ({ system }) => (
-  <span className="pill mute" title={`${system} is read-only in this application`}>
-    Read-only
-  </span>
-);
+export const ReadOnlyBadge = ({ system }) => {
+  const t = useT();
+  return (
+    <span className="pill mute" title={t('common.readOnlyTitle', { system })}>
+      {t('common.readOnly')}
+    </span>
+  );
+};
 
 /**
  * States that the learning data is a demonstration dataset held in Catalyst.
@@ -111,14 +121,14 @@ export const ReadOnlyBadge = ({ system }) => (
  * Moodle, Canvas, TrainerCentral or any SCORM host. The mapping to CRM and the
  * push into it are real, and the wording separates the two deliberately.
  */
-export const DemoDataBadge = () => (
-  <span
-    className="pill warn"
-    title="Provider names are source labels on rows in the Catalyst Data Store. No request is made to any LMS product."
-  >
-    Demonstration dataset
-  </span>
-);
+export const DemoDataBadge = () => {
+  const t = useT();
+  return (
+    <span className="pill warn" title={t('common.demoDatasetTitle')}>
+      {t('common.demoDataset')}
+    </span>
+  );
+};
 
 /** Renders a record's external reference when it has one. */
 export const RefBadge = ({ reference }) =>
@@ -131,25 +141,32 @@ export const Card = ({ title, action, children, pad = true }) => (
   </section>
 );
 
-export const Loading = ({ rows = 4, label = 'Loading' }) => (
-  <div role="status" aria-live="polite" aria-label={label}>
-    {Array.from({ length: rows }).map((_, i) => (
-      <div className="skel" key={i} style={{ width: `${100 - i * 9}%` }} />
-    ))}
-  </div>
-);
+export const Loading = ({ rows = 4, label }) => {
+  const t = useT();
+  return (
+    <div role="status" aria-live="polite" aria-label={label || t('common.loading')}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div className="skel" key={i} style={{ width: `${100 - i * 9}%` }} />
+      ))}
+    </div>
+  );
+};
 
-export const Empty = ({ title = 'Nothing to show yet', message }) => (
-  <div className="state"><h3>{title}</h3><p>{message}</p></div>
-);
+export const Empty = ({ title, message }) => {
+  const t = useT();
+  return <div className="state"><h3>{title || t('common.nothingToShowYet')}</h3><p>{message}</p></div>;
+};
 
-export const ErrorState = ({ error, onRetry }) => (
-  <div className="state err" role="alert">
-    <h3>This information could not be loaded</h3>
-    <p>{error?.message || 'An unexpected problem occurred.'}</p>
-    {onRetry && <button className="btn" onClick={onRetry}>Try again</button>}
-  </div>
-);
+export const ErrorState = ({ error, onRetry }) => {
+  const t = useT();
+  return (
+    <div className="state err" role="alert">
+      <h3>{t('common.loadError')}</h3>
+      <p>{error?.message || t('common.unexpectedError')}</p>
+      {onRetry && <button className="btn" onClick={onRetry}>{t('common.tryAgain')}</button>}
+    </div>
+  );
+};
 
 /** Wraps any async page section in consistent loading / empty / error states. */
 export const Async = ({ state, empty, children, emptyWhen }) => {
@@ -160,6 +177,11 @@ export const Async = ({ state, empty, children, emptyWhen }) => {
   return children(state.data, state.meta);
 };
 
+// Pill TONE keys are literal values returned by the CRM/Desk/LMS backends
+// (stage names, statuses) and are deliberately NOT translated: the same
+// string is also the tone lookup key here and is sent back to the API as a
+// filter (?status=Active, ?stage=Submitted). Translating the label without a
+// separate value/label split would break one or the other.
 const TONE = {
   Active: 'ok', Completed: 'info', Enrolled: 'ok', Open: 'ok', Synced: 'ok',
   'Open for Applications': 'ok', Running: 'ok', Paid: 'ok',
@@ -186,6 +208,7 @@ export const Pill = ({ value, tone }) => {
  * as "there are none".
  */
 export const Kpi = ({ label, value, unavailable, source, to, partial, format }) => {
+  const t = useT();
   const body = (
     <>
       <div className="label">
@@ -193,10 +216,10 @@ export const Kpi = ({ label, value, unavailable, source, to, partial, format }) 
         {source && <SourceBadge source={source} />}
       </div>
       {unavailable
-        ? <div className="value na" title="This source could not be reached">Not available</div>
+        ? <div className="value na" title={t('common.notAvailableTitle')}>{t('common.notAvailable')}</div>
         : <div className="value mono">{format ? format(value) : (value ?? 0)}</div>}
       {partial && !unavailable && (
-        <div className="field-hint">Partial — more records than could be totalled</div>
+        <div className="field-hint">{t('common.partial')}</div>
       )}
     </>
   );
@@ -209,55 +232,62 @@ export const Kpi = ({ label, value, unavailable, source, to, partial, format }) 
 
 /** Page-through control for a server-paginated list. */
 export const Pagination = ({ page, totalPages, hasMore, total, onPage, busy }) => {
+  const t = useT();
   const knowsTotal = Number.isFinite(totalPages);
   const canPrev = page > 1;
   const canNext = knowsTotal ? page < totalPages : hasMore === true;
   if (!canPrev && !canNext) return null;
   return (
-    <nav className="pager" aria-label="Pagination">
+    <nav className="pager" aria-label={t('common.pagination')}>
       <button type="button" className="btn" disabled={!canPrev || busy} onClick={() => onPage(page - 1)}>
-        Previous
+        {t('common.previous')}
       </button>
       <span className="muted">
         {knowsTotal
-          ? <>Page {page} of {totalPages}{Number.isFinite(total) ? ` · ${total} records` : ''}</>
-          : <>Page {page}</>}
+          ? <>{t('common.pageOf', { page, totalPages })}{Number.isFinite(total) ? ` · ${t('common.recordsCount', { total })}` : ''}</>
+          : <>{t('common.pageOnly', { page })}</>}
       </span>
       <button type="button" className="btn" disabled={!canNext || busy} onClick={() => onPage(page + 1)}>
-        Next
+        {t('common.next')}
       </button>
     </nav>
   );
 };
 
 /** Labelled search box that submits on enter and can be cleared. */
-export const SearchBox = ({ id = 'search', label = 'Search', value, onChange, placeholder }) => (
-  <div className="field search-field">
-    <label htmlFor={id}>{label}</label>
-    <input
-      id={id}
-      type="search"
-      value={value}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-    />
-  </div>
-);
+export const SearchBox = ({ id = 'search', label, value, onChange, placeholder }) => {
+  const t = useT();
+  return (
+    <div className="field search-field">
+      <label htmlFor={id}>{label || t('common.search')}</label>
+      <input
+        id={id}
+        type="search"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+};
 
 /** Select bound to a list of options, with an "all" choice. */
-export const FilterSelect = ({ id, label, value, onChange, options, allLabel = 'All' }) => (
-  <div className="field">
-    <label htmlFor={id}>{label}</label>
-    <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">{allLabel}</option>
-      {options.map((o) => {
-        const val = typeof o === 'string' ? o : o.value;
-        const text = typeof o === 'string' ? o : o.label;
-        return <option key={val} value={val}>{text}</option>;
-      })}
-    </select>
-  </div>
-);
+export const FilterSelect = ({ id, label, value, onChange, options, allLabel }) => {
+  const t = useT();
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{allLabel || t('common.all')}</option>
+        {options.map((o) => {
+          const val = typeof o === 'string' ? o : o.value;
+          const text = typeof o === 'string' ? o : o.label;
+          return <option key={val} value={val}>{text}</option>;
+        })}
+      </select>
+    </div>
+  );
+};
 
 /**
  * Shows which filters are currently narrowing a list, and lets each one be
@@ -269,20 +299,21 @@ export const FilterSelect = ({ id, label, value, onChange, options, allLabel = '
  * one extra row of controls.
  */
 export const FilterChips = ({ chips = [], onClearAll }) => {
+  const t = useT();
   const active = chips.filter(Boolean);
   if (!active.length) return null;
   return (
-    <div className="chips" role="group" aria-label="Active filters">
-      <span className="chips-label">Filtered by</span>
+    <div className="chips" role="group" aria-label={t('common.activeFilters')}>
+      <span className="chips-label">{t('common.filteredBy')}</span>
       {active.map((c) => (
         <span className="chip" key={c.key}>
           <span className="chip-k">{c.label}</span>
           <span className="chip-v">{c.value}</span>
-          <button type="button" onClick={c.onClear} aria-label={`Remove the ${c.label} filter`}>×</button>
+          <button type="button" onClick={c.onClear} aria-label={t('common.removeFilter', { label: c.label })}>×</button>
         </span>
       ))}
       {onClearAll && active.length > 0 && (
-        <button type="button" className="chip-clear" onClick={onClearAll}>Clear all</button>
+        <button type="button" className="chip-clear" onClick={onClearAll}>{t('common.clearAll')}</button>
       )}
     </div>
   );
@@ -290,15 +321,18 @@ export const FilterChips = ({ chips = [], onClearAll }) => {
 
 /**
  * Explains that one integration is unavailable without implying the page failed.
- * Used wherever an LMS or Books section sits beside CRM data that loaded fine.
+ * Used wherever an LMS, Books or Desk section sits beside CRM data that loaded fine.
  */
-export const SectionUnavailable = ({ system, detail, onRetry }) => (
-  <div className="state" role="status">
-    <h3>{system} is unavailable</h3>
-    <p>{detail || `${system} did not respond. The rest of this page is unaffected.`}</p>
-    {onRetry && <button type="button" className="btn" onClick={onRetry}>Try again</button>}
-  </div>
-);
+export const SectionUnavailable = ({ system, detail, onRetry }) => {
+  const t = useT();
+  return (
+    <div className="state" role="status">
+      <h3>{t('common.sourceUnavailable', { system })}</h3>
+      <p>{detail || t('common.sourceUnavailableDetail', { system })}</p>
+      {onRetry && <button type="button" className="btn" onClick={onRetry}>{t('common.tryAgain')}</button>}
+    </div>
+  );
+};
 
 /**
  * Admissions funnel.
@@ -309,9 +343,10 @@ export const SectionUnavailable = ({ system, detail, onRetry }) => (
  * the drop is stated in words beside each bar so it does not have to be
  * eyeballed from the bar lengths.
  */
-export const Funnel = ({ steps = [], emptyText = 'No applications recorded.' }) => {
+export const Funnel = ({ steps = [], emptyText }) => {
+  const t = useT();
   if (!steps.length || !steps[0].count) {
-    return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText}</p>;
+    return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText || t('common.noApplicationsRecorded')}</p>;
   }
   const top = steps[0].count || 1;
   return (
@@ -337,12 +372,13 @@ export const Funnel = ({ steps = [], emptyText = 'No applications recorded.' }) 
 };
 
 /** Bar list of currency amounts, used for invoice ageing. */
-export const MoneyBarList = ({ data, order, currency, emptyText = 'No data yet.' }) => {
+export const MoneyBarList = ({ data, order, currency, emptyText }) => {
+  const t = useT();
   const keys = order || Object.keys(data || {});
   const values = keys.map((k) => Number((data || {})[k] || 0));
   const max = Math.max(...values, 1);
   if (!keys.length || values.every((v) => v === 0)) {
-    return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText}</p>;
+    return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText || t('common.noDataYet')}</p>;
   }
   return (
     <div>
@@ -357,9 +393,10 @@ export const MoneyBarList = ({ data, order, currency, emptyText = 'No data yet.'
   );
 };
 
-export const BarList = ({ data, emptyText = 'No data yet.' }) => {
+export const BarList = ({ data, emptyText }) => {
+  const t = useT();
   const entries = Object.entries(data || {});
-  if (!entries.length) return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText}</p>;
+  if (!entries.length) return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText || t('common.noDataYet')}</p>;
   const max = Math.max(...entries.map(([, v]) => v), 1);
   return (
     <div>
@@ -374,13 +411,16 @@ export const BarList = ({ data, emptyText = 'No data yet.' }) => {
   );
 };
 
-export const ConnDot = ({ label, status, detail }) => (
-  <div className="conn">
-    <span className={`dot ${status === 'connected' ? 'ok' : status === 'unavailable' ? 'stop' : 'mute'}`} />
-    <strong>{label}</strong>
-    <span className="muted">{status === 'connected' ? 'Connected' : detail || 'Unavailable'}</span>
-  </div>
-);
+export const ConnDot = ({ label, status, detail }) => {
+  const t = useT();
+  return (
+    <div className="conn">
+      <span className={`dot ${status === 'connected' ? 'ok' : status === 'unavailable' ? 'stop' : 'mute'}`} />
+      <strong>{label}</strong>
+      <span className="muted">{status === 'connected' ? t('common.connected') : detail || t('common.unavailable')}</span>
+    </div>
+  );
+};
 
 /**
  * Learning progress.
@@ -390,12 +430,13 @@ export const ConnDot = ({ label, status, detail }) => (
  * facts, and an empty bar reads as the second.
  */
 export const Progress = ({ value }) => {
+  const t = useT();
   if (value === null || value === undefined) {
-    return <span className="muted">Not recorded</span>;
+    return <span className="muted">{t('common.notRecorded')}</span>;
   }
   const pct = Math.max(0, Math.min(100, Number(value) || 0));
   return (
-    <span className="prog" role="img" aria-label={`${pct} per cent complete`}>
+    <span className="prog" role="img" aria-label={t('common.percentComplete', { pct })}>
       <span className="prog-track"><span className="prog-fill" style={{ width: `${pct}%` }} /></span>
       <span className="mono prog-num">{pct}%</span>
     </span>
@@ -406,7 +447,7 @@ export const fmtDate = (d) => {
   if (!d) return '—';
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return d;
-  return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return dt.toLocaleDateString(getLocale(), { day: '2-digit', month: 'short', year: 'numeric' });
 };
 /**
  * Formats money in the currency the source system reported. Defaults to EUR
@@ -417,7 +458,7 @@ export const fmtDate = (d) => {
 export const fmtMoney = (n, currency = 'EUR', { cents = false } = {}) => {
   if (n === null || n === undefined || n === '') return '—';
   try {
-    return new Intl.NumberFormat('en-IE', {
+    return new Intl.NumberFormat(getLocale(), {
       style: 'currency',
       currency: currency || 'EUR',
       minimumFractionDigits: cents ? 2 : 0,

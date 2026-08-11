@@ -9,6 +9,7 @@ import {
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
 import SyncLogTable from '../components/SyncLogTable.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 
 /**
  * Links an LMS record to a CRM Student.
@@ -21,6 +22,7 @@ import SyncLogTable from '../components/SyncLogTable.jsx';
  * rather than resolved by picking one.
  */
 function MapStudentDialog({ record, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   // 100 is the server's per-page ceiling; asking for more just returns 100.
   const students = useApi((o) => api.students({ perPage: 100 }, o), []);
@@ -38,18 +40,22 @@ function MapStudentDialog({ record, onClose, onDone }) {
     const r = await action.run(() => api.mapLmsEnrolment(record.id, payload));
     if (r) {
       toast(r.data.mappingStatus === 'Error'
-        ? `Mapping could not be completed: ${r.data.lastSyncMessage}`
-        : 'Learner mapped to a CRM student.',
+        ? t('learningEnrolmentDetail.mapStudentDialog.toastError', { message: r.data.lastSyncMessage })
+        : t('learningEnrolmentDetail.mapStudentDialog.toastMapped'),
       r.data.mappingStatus === 'Error' ? 'warn' : 'ok');
     }
   };
 
   return (
-    <Modal title="Map this learner to a CRM student" onClose={onClose}>
+    <Modal title={t('learningEnrolmentDetail.mapStudentDialog.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
-        <Field id="crmStudentId" label="CRM student" hint="Choosing one here is exact and is tried first.">
+        <Field
+          id="crmStudentId"
+          label={t('learningEnrolmentDetail.mapStudentDialog.crmStudentLabel')}
+          hint={t('learningEnrolmentDetail.mapStudentDialog.crmStudentHint')}
+        >
           <select value={crmStudentId} onChange={(e) => setCrmStudentId(e.target.value)}>
-            <option value="">Match by identifier instead</option>
+            <option value="">{t('learningEnrolmentDetail.mapStudentDialog.matchByIdentifierOption')}</option>
             {loaded.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.fullName || s.email}{s.studentId ? ` · ${s.studentId}` : ''}
@@ -60,18 +66,17 @@ function MapStudentDialog({ record, onClose, onDone }) {
 
         {truncated && (
           <p className="note">
-            Showing the first {loaded.length} of {students.meta.total} students. A student
-            beyond this page can still be matched by email below.
+            {t('learningEnrolmentDetail.mapStudentDialog.truncatedNote', { loaded: loaded.length, total: students.meta.total })}
           </p>
         )}
 
         {!crmStudentId && (
           <Field
             id="studentEmail"
-            label="Student email"
+            label={t('learningEnrolmentDetail.mapStudentDialog.studentEmailLabel')}
             hint={record.crmStudentReference
-              ? `The stored reference ${record.crmStudentReference} is tried first; this email is the fallback.`
-              : 'Matched on an exact address. If two students share it, the record is marked as a mapping error rather than guessed at.'}
+              ? t('learningEnrolmentDetail.mapStudentDialog.studentEmailHintWithRef', { reference: record.crmStudentReference })
+              : t('learningEnrolmentDetail.mapStudentDialog.studentEmailHintNoRef')}
           >
             <input type="email" value={studentEmail} onChange={(e) => setStudentEmail(e.target.value)} />
           </Field>
@@ -80,7 +85,7 @@ function MapStudentDialog({ record, onClose, onDone }) {
         <FormError error={action.error ? friendlyError(action.error) : null} />
         <FormActions
           busy={action.busy}
-          submitLabel="Map student"
+          submitLabel={t('learningEnrolmentDetail.mapStudentDialog.submitButton')}
           onCancel={onClose}
           disabled={!crmStudentId && !studentEmail && !record.crmStudentReference}
         />
@@ -91,6 +96,7 @@ function MapStudentDialog({ record, onClose, onDone }) {
 
 /** Links the record to an existing CRM Enrolment. */
 function LinkEnrolmentDialog({ record, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const enrolments = useApi((o) => api.enrolments({ perPage: 100 }, o), []);
   const [crmEnrolmentId, setCrmEnrolmentId] = useState(record.crmEnrolmentId || '');
@@ -106,19 +112,21 @@ function LinkEnrolmentDialog({ record, onClose, onDone }) {
   const submit = async (e) => {
     e.preventDefault();
     const r = await action.run(() => api.mapLmsEnrolment(record.id, { crmEnrolmentId: crmEnrolmentId || null }));
-    if (r) toast(crmEnrolmentId ? 'Linked to a CRM enrolment.' : 'CRM enrolment link cleared.');
+    if (r) toast(crmEnrolmentId
+      ? t('learningEnrolmentDetail.linkEnrolmentDialog.toastLinked')
+      : t('learningEnrolmentDetail.linkEnrolmentDialog.toastCleared'));
   };
 
   return (
-    <Modal title="Link to a CRM enrolment" onClose={onClose}>
+    <Modal title={t('learningEnrolmentDetail.linkEnrolmentDialog.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <Field
           id="crmEnrolmentId"
-          label="CRM enrolment"
-          hint="Leave blank to clear the link. Only enrolments belonging to the mapped student are listed."
+          label={t('learningEnrolmentDetail.linkEnrolmentDialog.crmEnrolmentLabel')}
+          hint={t('learningEnrolmentDetail.linkEnrolmentDialog.crmEnrolmentHint')}
         >
           <select value={crmEnrolmentId} onChange={(e) => setCrmEnrolmentId(e.target.value)}>
-            <option value="">Not linked</option>
+            <option value="">{t('learningEnrolmentDetail.linkEnrolmentDialog.notLinkedOption')}</option>
             {options.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.reference || e.externalReference || e.id}
@@ -136,12 +144,16 @@ function LinkEnrolmentDialog({ record, onClose, onDone }) {
         {!options.length && enrolments.status === 'ready' && (
           <p className="note">
             {truncated
-              ? `No match in the first ${loaded.length} of ${enrolments.meta.total} enrolments. This student may have one beyond that page, so it is not safe to assume there is none.`
-              : 'This student has no CRM enrolments. Create one from this record instead, if your role allows it.'}
+              ? t('learningEnrolmentDetail.linkEnrolmentDialog.noMatchTruncated', { loaded: loaded.length, total: enrolments.meta.total })
+              : t('learningEnrolmentDetail.linkEnrolmentDialog.noEnrolments')}
           </p>
         )}
         <FormError error={action.error ? friendlyError(action.error) : null} />
-        <FormActions busy={action.busy} submitLabel="Save link" onCancel={onClose} />
+        <FormActions
+          busy={action.busy}
+          submitLabel={t('learningEnrolmentDetail.linkEnrolmentDialog.submitButton')}
+          onCancel={onClose}
+        />
       </form>
     </Modal>
   );
@@ -155,6 +167,7 @@ function LinkEnrolmentDialog({ record, onClose, onDone }) {
  * has to be chosen, and the server rejects one belonging to another programme.
  */
 function CreateCrmEnrolmentDialog({ record, course, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const intakes = useApi((o) => api.intakes({ perPage: 100 }, o), []);
   const [intakeId, setIntakeId] = useState('');
@@ -170,54 +183,59 @@ function CreateCrmEnrolmentDialog({ record, course, onClose, onDone }) {
     e.preventDefault();
     const r = await action.run(() =>
       api.createCrmEnrolmentForLms(record.id, { intakeId }, { idempotencyKey: newIdempotencyKey() }));
-    if (r) toast(r.data.created ? 'CRM enrolment created and linked.' : r.data.reason);
+    if (r) toast(r.data.created ? t('learningEnrolmentDetail.createEnrolmentDialog.toastCreated') : r.data.reason);
   };
 
   return (
-    <Modal title="Create the CRM enrolment" onClose={onClose}>
+    <Modal title={t('learningEnrolmentDetail.createEnrolmentDialog.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <dl className="dl">
-          <dt>Student</dt>
+          <dt>{t('learningEnrolmentDetail.createEnrolmentDialog.studentLabel')}</dt>
           <dd>{record.crmStudentReference || record.crmStudentId}</dd>
-          <dt>Programme</dt>
+          <dt>{t('learningEnrolmentDetail.createEnrolmentDialog.programmeLabel')}</dt>
           <dd>
             {course && course.crmProgrammeReference
               ? course.crmProgrammeReference
-              : <span className="muted">Taken from the mapped course</span>}
+              : <span className="muted">{t('learningEnrolmentDetail.createEnrolmentDialog.programmeFromCourse')}</span>}
           </dd>
         </dl>
         <Field
           id="intakeId"
-          label="Intake"
+          label={t('learningEnrolmentDetail.createEnrolmentDialog.intakeLabel')}
           required
-          hint="Only intakes on the mapped course's programme are listed. An intake from another programme is refused by the server."
+          hint={t('learningEnrolmentDetail.createEnrolmentDialog.intakeHint')}
         >
           <select value={intakeId} onChange={(e) => setIntakeId(e.target.value)} required>
-            <option value="">Choose an intake</option>
+            <option value="">{t('learningEnrolmentDetail.createEnrolmentDialog.chooseIntakeOption')}</option>
             {options.map((i) => (
-              <option key={i.id} value={i.id}>{i.name}{i.startDate ? ` · starts ${i.startDate}` : ''}</option>
+              <option key={i.id} value={i.id}>
+                {i.name}{i.startDate ? ` · ${t('learningEnrolmentDetail.createEnrolmentDialog.startsPrefix', { date: i.startDate })}` : ''}
+              </option>
             ))}
           </select>
         </Field>
         {truncated && (
           <p className="note">
-            Showing intakes from the first {loaded.length} of {intakes.meta.total} records.
-            An intake beyond that page will not appear here.
+            {t('learningEnrolmentDetail.createEnrolmentDialog.truncatedNote', { loaded: loaded.length, total: intakes.meta.total })}
           </p>
         )}
         <p className="note">
-          If a CRM enrolment already exists for this student, programme and intake, it is
-          linked rather than duplicated — so repeating this action cannot create a second
-          enrolment.
+          {t('learningEnrolmentDetail.createEnrolmentDialog.dedupeNote')}
         </p>
         <FormError error={action.error ? friendlyError(action.error) : null} />
-        <FormActions busy={action.busy} submitLabel="Create enrolment" onCancel={onClose} disabled={!intakeId} />
+        <FormActions
+          busy={action.busy}
+          submitLabel={t('learningEnrolmentDetail.createEnrolmentDialog.submitButton')}
+          onCancel={onClose}
+          disabled={!intakeId}
+        />
       </form>
     </Modal>
   );
 }
 
 export default function LearningEnrolmentDetail() {
+  const t = useT();
   const { id } = useParams();
   const can = useCan();
   const toast = useToast();
@@ -227,19 +245,19 @@ export default function LearningEnrolmentDetail() {
   const action = useAction(async () => { await state.reload(); });
 
   return (
-    <Async state={state} empty={{ title: 'Learner record not found' }} emptyWhen={(d) => !d || !d.enrolment}>
+    <Async state={state} empty={{ title: t('learningEnrolmentDetail.notFoundTitle') }} emptyWhen={(d) => !d || !d.enrolment}>
       {(d) => {
         const e = d.enrolment;
 
         const onSync = () => setConfirm({
-          title: 'Push this progress to CRM?',
-          message: 'The linked CRM Enrolment has its LMS provider, LMS enrolment id, progress percentage, last sync date and sync status overwritten with the values held here.',
-          confirmLabel: 'Sync to CRM',
+          title: t('learningEnrolmentDetail.syncConfirm.title'),
+          message: t('learningEnrolmentDetail.syncConfirm.message'),
+          confirmLabel: t('learningEnrolmentDetail.syncConfirm.confirmLabel'),
           danger: false,
           run: async () => {
             const r = await action.run(() => api.syncLmsEnrolment(e.id, { idempotencyKey: newIdempotencyKey() }));
             if (r) {
-              toast(`Synced. Fields written: ${(r.data.crmFieldsWritten || []).join(', ')}.`);
+              toast(t('learningEnrolmentDetail.toastSynced', { fields: (r.data.crmFieldsWritten || []).join(', ') }));
               setConfirm(null);
             }
           }
@@ -255,124 +273,125 @@ export default function LearningEnrolmentDetail() {
                 {d.course && <> · <Link to={`/learning/courses/${d.course.id}`}>{d.course.name}</Link></>}
               </p>
               <div className="head-actions">
-                <Link className="btn" to="/learning/enrolments">All learners</Link>
+                <Link className="btn" to="/learning/enrolments">{t('learningEnrolmentDetail.allLearnersLink')}</Link>
                 {can('lms:map') && (
                   <>
                     <button type="button" className="btn" onClick={() => setDialog('student')}>
-                      {e.crmStudentId ? 'Change student' : 'Map student'}
+                      {e.crmStudentId ? t('learningEnrolmentDetail.changeStudentButton') : t('learningEnrolmentDetail.mapStudentButton')}
                     </button>
                     <button type="button" className="btn" onClick={() => setDialog('enrolment')}>
-                      {e.crmEnrolmentId ? 'Change CRM enrolment' : 'Link CRM enrolment'}
+                      {e.crmEnrolmentId ? t('learningEnrolmentDetail.changeCrmEnrolmentButton') : t('learningEnrolmentDetail.linkCrmEnrolmentButton')}
                     </button>
                   </>
                 )}
                 {can('lms:create-crm-enrolment') && e.crmStudentId && !e.crmEnrolmentId && (
                   <button type="button" className="btn" onClick={() => setDialog('create')}>
-                    Create CRM enrolment
+                    {t('learningEnrolmentDetail.createCrmEnrolmentButton')}
                   </button>
                 )}
                 {can('lms:sync') && e.crmEnrolmentId && (
-                  <button type="button" className="btn" onClick={onSync}>Sync to CRM</button>
+                  <button type="button" className="btn" onClick={onSync}>{t('learningEnrolmentDetail.syncToCrmButton')}</button>
                 )}
               </div>
             </div>
 
             {action.error && (
               <div className="state err" role="alert">
-                <h3>That action could not be completed</h3>
+                <h3>{t('learningEnrolmentDetail.actionErrorTitle')}</h3>
                 <p>{friendlyError(action.error)}</p>
               </div>
             )}
 
             {e.mappingStatus === 'Error' && (
               <div className="state err" role="alert">
-                <h3>This record could not be mapped</h3>
-                <p>{e.lastSyncMessage || 'The mapping was attempted and did not resolve to a single CRM student.'}</p>
+                <h3>{t('learningEnrolmentDetail.mappingErrorTitle')}</h3>
+                <p>{e.lastSyncMessage || t('learningEnrolmentDetail.mappingErrorFallback')}</p>
               </div>
             )}
 
             <div className="grid g-2">
               <Card
-                title="Learning record"
+                title={t('learningEnrolmentDetail.recordCard.title')}
                 action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
               >
                 <dl className="dl">
-                  <dt>Provider</dt><dd>{e.provider}</dd>
-                  <dt>External enrolment id</dt><dd className="mono">{e.externalEnrolmentId}</dd>
-                  <dt>External learner id</dt>
+                  <dt>{t('learningEnrolmentDetail.recordCard.provider')}</dt><dd>{e.provider}</dd>
+                  <dt>{t('learningEnrolmentDetail.recordCard.externalEnrolmentId')}</dt><dd className="mono">{e.externalEnrolmentId}</dd>
+                  <dt>{t('learningEnrolmentDetail.recordCard.externalLearnerId')}</dt>
                   <dd className="mono">{e.externalLearnerId || <span className="muted">—</span>}</dd>
-                  <dt>Course</dt>
+                  <dt>{t('learningEnrolmentDetail.recordCard.course')}</dt>
                   <dd>
                     {d.course
                       ? <Link to={`/learning/courses/${d.course.id}`}>{d.course.name}</Link>
-                      : <span className="muted">No course matches {e.externalCourseId || 'this record'}</span>}
+                      : <span className="muted">
+                          {t('learningEnrolmentDetail.recordCard.noCourseMatch', {
+                            reference: e.externalCourseId || t('learningEnrolmentDetail.recordCard.thisRecordFallback')
+                          })}
+                        </span>}
                   </dd>
-                  <dt>Status</dt><dd><Pill value={e.lmsStatus} /></dd>
-                  <dt>Progress</dt><dd><Progress value={e.progressPercentage} /></dd>
-                  <dt>Assessment score</dt>
+                  <dt>{t('learningEnrolmentDetail.recordCard.status')}</dt><dd><Pill value={e.lmsStatus} /></dd>
+                  <dt>{t('learningEnrolmentDetail.recordCard.progress')}</dt><dd><Progress value={e.progressPercentage} /></dd>
+                  <dt>{t('learningEnrolmentDetail.recordCard.assessmentScore')}</dt>
                   <dd className="mono">
-                    {e.assessmentScore === null ? <span className="muted">Not recorded</span> : e.assessmentScore}
+                    {e.assessmentScore === null ? <span className="muted">{t('common.notRecorded')}</span> : e.assessmentScore}
                   </dd>
-                  <dt>Started</dt><dd>{e.startedDate ? fmtDate(e.startedDate) : <span className="muted">—</span>}</dd>
-                  <dt>Last activity</dt>
+                  <dt>{t('learningEnrolmentDetail.recordCard.started')}</dt><dd>{e.startedDate ? fmtDate(e.startedDate) : <span className="muted">—</span>}</dd>
+                  <dt>{t('learningEnrolmentDetail.recordCard.lastActivity')}</dt>
                   <dd>{e.lastActivityTime ? fmtDate(e.lastActivityTime) : <span className="muted">—</span>}</dd>
-                  <dt>Completed</dt>
+                  <dt>{t('learningEnrolmentDetail.recordCard.completed')}</dt>
                   <dd>{e.completionDate ? fmtDate(e.completionDate) : <span className="muted">—</span>}</dd>
-                  <dt>Certificate</dt>
+                  <dt>{t('learningEnrolmentDetail.recordCard.certificate')}</dt>
                   <dd>
                     <Pill value={e.certificateStatus} />
                     {e.certificateUrl && (
-                      <> <a href={e.certificateUrl} target="_blank" rel="noreferrer noopener">View</a></>
+                      <> <a href={e.certificateUrl} target="_blank" rel="noreferrer noopener">{t('learningEnrolmentDetail.recordCard.viewLink')}</a></>
                     )}
                   </dd>
                 </dl>
               </Card>
 
-              <Card title="CRM mapping and synchronisation" action={<SourceBadge source="crm" />}>
+              <Card title={t('learningEnrolmentDetail.crmCard.title')} action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Mapping</dt><dd><Pill value={e.mappingStatus} /></dd>
-                  <dt>CRM student</dt>
+                  <dt>{t('learningEnrolmentDetail.crmCard.mapping')}</dt><dd><Pill value={e.mappingStatus} /></dd>
+                  <dt>{t('learningEnrolmentDetail.crmCard.crmStudent')}</dt>
                   <dd>
                     {d.crmStudent
                       ? <Link to={`/students/${d.crmStudent.id}`}>{d.crmStudent.fullName || d.crmStudent.email}</Link>
-                      : <span className="muted">Not mapped</span>}
+                      : <span className="muted">{t('learningEnrolmentDetail.crmCard.notMapped')}</span>}
                   </dd>
-                  <dt>Student reference</dt>
+                  <dt>{t('learningEnrolmentDetail.crmCard.studentReference')}</dt>
                   <dd className="mono">{e.crmStudentReference || <span className="muted">—</span>}</dd>
-                  <dt>CRM enrolment</dt>
+                  <dt>{t('learningEnrolmentDetail.crmCard.crmEnrolment')}</dt>
                   <dd>
                     {d.crmEnrolment
                       ? <Link to={`/enrolments/${d.crmEnrolment.id}`}>
                           {d.crmEnrolment.reference || d.crmEnrolment.externalReference || d.crmEnrolment.id}
                         </Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('learningEnrolmentDetail.crmCard.notLinked')}</span>}
                   </dd>
-                  <dt>Sync status</dt><dd><Pill value={e.syncStatus} /></dd>
-                  <dt>Last sync</dt>
-                  <dd>{e.lastSyncTime ? fmtDate(e.lastSyncTime) : <span className="muted">Never</span>}</dd>
-                  <dt>Last message</dt><dd>{e.lastSyncMessage || <span className="muted">—</span>}</dd>
+                  <dt>{t('learningEnrolmentDetail.crmCard.syncStatus')}</dt><dd><Pill value={e.syncStatus} /></dd>
+                  <dt>{t('learningEnrolmentDetail.crmCard.lastSync')}</dt>
+                  <dd>{e.lastSyncTime ? fmtDate(e.lastSyncTime) : <span className="muted">{t('learningEnrolmentDetail.crmCard.never')}</span>}</dd>
+                  <dt>{t('learningEnrolmentDetail.crmCard.lastMessage')}</dt><dd>{e.lastSyncMessage || <span className="muted">—</span>}</dd>
                 </dl>
                 <p className="note">
-                  A sync writes {(d.crmFieldsWritten || []).join(', ')} on the CRM Enrolment.
+                  {t('learningEnrolmentDetail.crmCard.writesNote', { fields: (d.crmFieldsWritten || []).join(', ') })}
                 </p>
               </Card>
             </div>
 
             {d.fieldsHeldInCatalyst && d.fieldsHeldInCatalyst.length > 0 && (
-              <Card title="Values held in Catalyst rather than CRM" action={<SourceBadge source="catalyst" />}>
+              <Card title={t('learningEnrolmentDetail.catalystCard.title')} action={<SourceBadge source="catalyst" />}>
                 <p className="muted">
-                  These fields do not exist on the CRM Enrolments module, so a sync cannot
-                  write them. They are stored in the Catalyst Data Store and shown from
-                  there. Adding them to CRM is a metadata change, deliberately not made
-                  automatically by this application.
+                  {t('learningEnrolmentDetail.catalystCard.note')}
                 </p>
                 <div className="t-wrap">
                   <table>
                     <thead>
                       <tr>
-                        <th scope="col">Module</th>
-                        <th scope="col">Suggested field</th>
-                        <th scope="col">Type</th>
+                        <th scope="col">{t('learningEnrolmentDetail.catalystCard.table.module')}</th>
+                        <th scope="col">{t('learningEnrolmentDetail.catalystCard.table.suggestedField')}</th>
+                        <th scope="col">{t('learningEnrolmentDetail.catalystCard.table.type')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -389,8 +408,8 @@ export default function LearningEnrolmentDetail() {
               </Card>
             )}
 
-            <Card title="Synchronisation history for this record">
-              <SyncLogTable rows={d.syncLog} emptyText="This record has not been synchronised yet." />
+            <Card title={t('learningEnrolmentDetail.syncHistoryCard.title')}>
+              <SyncLogTable rows={d.syncLog} emptyText={t('learningEnrolmentDetail.syncHistoryCard.empty')} />
             </Card>
 
             {dialog === 'student' && (

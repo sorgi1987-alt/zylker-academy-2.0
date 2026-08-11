@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAction } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
+import { useT } from '../i18n/I18nContext.jsx';
 import { Card, Modal, SourceBadge, useToast, fmtDate } from './Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from './Form.jsx';
 
@@ -17,13 +18,14 @@ import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from
 /* ------------------------------ stage tracker ----------------------------- */
 
 function StageTracker({ workflow }) {
+  const t = useT();
   const { stageOrder, currentStage, completedStages, exitStages } = workflow;
   const done = new Set(completedStages);
   const isExit = exitStages.includes(currentStage);
 
   return (
     <>
-      <ol className="track" aria-label="Admissions pipeline">
+      <ol className="track" aria-label={t('common.workflow.pipelineLabel')}>
         {stageOrder.map((s) => {
           const state = s === currentStage ? 'now' : done.has(s) ? 'done' : 'todo';
           return (
@@ -31,9 +33,7 @@ function StageTracker({ workflow }) {
               <span className="track-dot" aria-hidden="true">{state === 'done' ? '✓' : ''}</span>
               <span className="track-label">{s}</span>
               {/* Colour alone is not information for everyone reading this. */}
-              <span className="track-state">
-                {state === 'now' ? 'Current' : state === 'done' ? 'Passed' : 'Not reached'}
-              </span>
+              <span className="track-state">{t(`common.workflow.stepState.${state}`)}</span>
             </li>
           );
         })}
@@ -41,8 +41,7 @@ function StageTracker({ workflow }) {
 
       {isExit && (
         <p className="note" style={{ marginTop: 12 }}>
-          This application left the pipeline at <strong>{currentStage}</strong>. The steps
-          above show the process, not this application's position in it.
+          {t('common.workflow.leftPipeline', { stage: currentStage })}
         </p>
       )}
     </>
@@ -62,6 +61,7 @@ function StageTracker({ workflow }) {
  * boundary.
  */
 function TransitionDialog({ application, target, workflow, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const [idempotencyKey, setKey] = useState(newIdempotencyKey);
   const [form, setForm] = useState({
@@ -92,10 +92,10 @@ function TransitionDialog({ application, target, workflow, onClose, onDone }) {
     if (r) {
       toast(
         r.data.enrolmentCreated
-          ? 'Stage changed and an enrolment was created.'
+          ? t('common.workflow.transitionedWithEnrolment')
           : r.data.enrolment
-            ? 'Stage changed. The existing enrolment was reused.'
-            : 'Stage changed.'
+            ? t('common.workflow.transitionedReusedEnrolment')
+            : t('common.workflow.transitioned')
       );
       // A fresh key, so a later transition is not treated as a replay of this one.
       setKey(newIdempotencyKey());
@@ -104,36 +104,36 @@ function TransitionDialog({ application, target, workflow, onClose, onDone }) {
   };
 
   return (
-    <Modal title={`Move to ${target}`} onClose={onClose}>
+    <Modal title={t('common.workflow.moveTo', { target })} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <p style={{ marginTop: 0 }}>
-          The stage will change to <strong>{target}</strong> in Zoho CRM.
-          {enrolling && ' An enrolment is created if one does not already exist; repeating this will not create a second.'}
+          {t('common.workflow.stageWillChange', { target })}
+          {enrolling && t('common.workflow.enrolmentNote')}
         </p>
 
         {wantsDecisionDate && (
-          <Field id="decisionDate" label="Decision date"
-            hint="Written to the Decision Date field. Left blank, today's date is used.">
+          <Field id="decisionDate" label={t('common.workflow.decisionDateLabel')}
+            hint={t('common.workflow.decisionDateHint')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX}
               value={form.decisionDate} onChange={set('decisionDate')} />
           </Field>
         )}
 
         {wantsDocuments && (
-          <Field id="documentsStatus" label="Documents required"
-            hint="Written to the Documents Status field on the application.">
+          <Field id="documentsStatus" label={t('common.workflow.documentsRequiredLabel')}
+            hint={t('common.workflow.documentsRequiredHint')}>
             <input value={form.documentsStatus} onChange={set('documentsStatus')}
-              placeholder="e.g. Passport, transcript" />
+              placeholder={t('common.workflow.documentsPlaceholder')} />
           </Field>
         )}
 
-        <Field id="comment" label="Comment"
-          hint="Recorded in this application's activity trail, attributed to you. The Application module has no comment field, so this is not written onto the CRM record.">
+        <Field id="comment" label={t('common.workflow.commentLabel')}
+          hint={t('common.workflow.commentHint')}>
           <textarea rows={3} value={form.comment} onChange={set('comment')} />
         </Field>
 
         <FormError error={action.error ? friendlyError(action.error) : null} />
-        <FormActions busy={action.busy} submitLabel={`Move to ${target}`} onCancel={onClose} />
+        <FormActions busy={action.busy} submitLabel={t('common.workflow.moveTo', { target })} onCancel={onClose} />
       </form>
     </Modal>
   );
@@ -142,6 +142,7 @@ function TransitionDialog({ application, target, workflow, onClose, onDone }) {
 /* --------------------------------- panel ---------------------------------- */
 
 export default function WorkflowPanel({ application, workflow, enrolment, canTransition, onDone }) {
+  const t = useT();
   const [target, setTarget] = useState(null);
   if (!workflow) return null;
 
@@ -153,14 +154,14 @@ export default function WorkflowPanel({ application, workflow, enrolment, canTra
 
   return (
     <Card
-      title="Admissions workflow"
+      title={t('common.workflow.cardTitle')}
       action={<SourceBadge source="crm" />}
     >
       <StageTracker workflow={workflow} />
 
       {workflow.intakeUsage && (
         <p className="field-hint" style={{ marginTop: 10 }}>
-          Linked intake: {workflow.intakeUsage.used} of {workflow.intakeUsage.capacity} places taken.
+          {t('common.workflow.linkedIntake', { used: workflow.intakeUsage.used, capacity: workflow.intakeUsage.capacity })}
         </p>
       )}
 
@@ -174,11 +175,11 @@ export default function WorkflowPanel({ application, workflow, enrolment, canTra
         <div style={{ marginTop: 14 }}>
           {workflow.isTerminal ? (
             <p className="muted small" style={{ margin: 0 }}>
-              This application is at a final stage and cannot be moved further.
+              {t('common.workflow.terminalStage')}
             </p>
           ) : (
             <>
-              <p className="field-hint" style={{ margin: '0 0 8px' }}>Available next actions</p>
+              <p className="field-hint" style={{ margin: '0 0 8px' }}>{t('common.workflow.availableActions')}</p>
               <div className="head-actions">
                 {workflow.allowed.map((s) => {
                   const blocks = blockersFor(s);
@@ -192,7 +193,7 @@ export default function WorkflowPanel({ application, workflow, enrolment, canTra
                       title={disabled ? blocks[0].reason : undefined}
                       onClick={() => setTarget(s)}
                     >
-                      Move to {s}
+                      {t('common.workflow.moveTo', { target: s })}
                     </button>
                   );
                 })}
@@ -204,7 +205,7 @@ export default function WorkflowPanel({ application, workflow, enrolment, canTra
                 <ul className="blocked-list">
                   {hard.map((b) => (
                     <li key={`${b.stage}-${b.reason}`}>
-                      <strong>{b.stage}</strong> is blocked: {b.reason}
+                      {t('common.workflow.blockedStage', { stage: b.stage, reason: b.reason })}
                     </li>
                   ))}
                 </ul>
@@ -214,7 +215,7 @@ export default function WorkflowPanel({ application, workflow, enrolment, canTra
 
           {workflow.blocked.length > 0 && (
             <details className="why">
-              <summary>Why are the other stages not offered?</summary>
+              <summary>{t('common.workflow.whyNotOffered')}</summary>
               <ul className="blocked-list">
                 {workflow.blocked.map((b) => (
                   <li key={b.stage}><strong>{b.stage}</strong> — {b.reason}</li>
@@ -225,14 +226,15 @@ export default function WorkflowPanel({ application, workflow, enrolment, canTra
         </div>
       ) : (
         <p className="muted small" style={{ marginTop: 14 }}>
-          Your role can view this workflow but not change the stage.
+          {t('common.workflow.viewOnly')}
         </p>
       )}
 
       {enrolment && (
         <p className="field-hint" style={{ marginTop: 12 }}>
-          Enrolment <Link to={`/enrolments/${enrolment.id}`}>{enrolment.reference || enrolment.id}</Link>
-          {enrolment.enrolmentDate ? ` · created ${fmtDate(enrolment.enrolmentDate)}` : ''}
+          {t('common.workflow.enrolmentLabel')}{' '}
+          <Link to={`/enrolments/${enrolment.id}`}>{enrolment.reference || enrolment.id}</Link>
+          {enrolment.enrolmentDate ? ` · ${t('common.workflow.enrolmentCreated', { date: fmtDate(enrolment.enrolmentDate) })}` : ''}
         </p>
       )}
 

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useApi, useAction } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Progress, SourceBadge, ReadOnlyBadge, DemoDataBadge, ConfirmDialog,
   Modal, useToast, fmtDate, fmtMoney
@@ -13,6 +14,7 @@ import { Warnings, NoteDialog } from '../components/Record.jsx';
 import { useBreadcrumbLeaf } from '../components/Shell.jsx';
 
 function EditDialog({ enrolment, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   const [form, setForm] = useState({
     financeStatus: enrolment.financeStatus || '',
@@ -30,34 +32,32 @@ function EditDialog({ enrolment, onClose, onDone }) {
     const r = await action.run(() => api.updateEnrolment(enrolment.id, {
       ...form, expectedModifiedTime: enrolment.modifiedTime
     }));
-    if (r) toast('Enrolment updated.');
+    if (r) toast(t('enrolmentDetail.editDialog.updated'));
   };
 
   return (
-    <Modal title="Edit enrolment" onClose={onClose}>
+    <Modal title={t('enrolmentDetail.editDialog.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
-          <Field id="financeStatus" label="Finance status">
+          <Field id="financeStatus" label={t('enrolmentDetail.editDialog.financeStatus')}>
             <input value={form.financeStatus} onChange={set('financeStatus')} />
           </Field>
-          <Field id="startDate" label="Start date">
+          <Field id="startDate" label={t('enrolmentDetail.editDialog.startDate')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.startDate} onChange={set('startDate')} />
           </Field>
-          <Field id="completionDate" label="Completion date">
+          <Field id="completionDate" label={t('enrolmentDetail.editDialog.completionDate')}>
             <input type="date" min={DATE_MIN} max={DATE_MAX} value={form.completionDate} onChange={set('completionDate')} />
           </Field>
         </div>
         <label className="checkbox-row">
           <input type="checkbox" checked={form.certificateIssued} onChange={set('certificateIssued')} />
-          Certificate issued
+          {t('enrolmentDetail.editDialog.certificateIssued')}
         </label>
         <p className="note">
-          Progress and the LMS identifiers are not editable here. They are written onto
-          this record by the external LMS connector, and a value typed in by hand would
-          be overwritten by the next synchronisation.
+          {t('enrolmentDetail.editDialog.note')}
         </p>
         <FormError error={action.error ? friendlyError(action.error) : null} />
-        <FormActions busy={action.busy} submitLabel="Save changes" onCancel={onClose} />
+        <FormActions busy={action.busy} submitLabel={t('enrolmentDetail.editDialog.saveChanges')} onCancel={onClose} />
       </form>
     </Modal>
   );
@@ -74,6 +74,7 @@ function EditDialog({ enrolment, onClose, onDone }) {
  * a per-enrolment total that Books does not model.
  */
 function InvoiceCard({ invoices, financeStatus }) {
+  const t = useT();
   if (!invoices) return null;   // caller lacks invoice:read, or Books is off
 
   const header = (
@@ -83,21 +84,22 @@ function InvoiceCard({ invoices, financeStatus }) {
     </div>
   );
 
+  const financeTitle = t('enrolmentDetail.finance.cardTitle');
+
   if (invoices.status === 'not_configured' || invoices.status === 'unavailable') {
     return (
-      <Card title="Finance" action={header}>
-        <p className="muted">{invoices.detail || 'Zoho Books could not be reached.'}</p>
+      <Card title={financeTitle} action={header}>
+        <p className="muted">{invoices.detail || t('enrolmentDetail.finance.booksUnreachable')}</p>
       </Card>
     );
   }
 
   if (invoices.status === 'ambiguous') {
     return (
-      <Card title="Finance" action={header}>
+      <Card title={financeTitle} action={header}>
         <p className="muted">{invoices.detail}</p>
         <p className="note">
-          No invoices are shown while the Zoho Books link is ambiguous, so this student is
-          never shown another customer&rsquo;s finances.
+          {t('enrolmentDetail.finance.ambiguousNote')}
         </p>
       </Card>
     );
@@ -105,8 +107,8 @@ function InvoiceCard({ invoices, financeStatus }) {
 
   if (invoices.status === 'unmatched') {
     return (
-      <Card title="Finance" action={header}>
-        <p className="muted">{invoices.detail || 'No Zoho Books customer is linked to this student.'}</p>
+      <Card title={financeTitle} action={header}>
+        <p className="muted">{invoices.detail || t('enrolmentDetail.finance.noCustomerLinked')}</p>
       </Card>
     );
   }
@@ -119,29 +121,35 @@ function InvoiceCard({ invoices, financeStatus }) {
   const contradicted = invoices.invoices.length > 0
     && /not invoiced/i.test(String(financeStatus || ''));
 
+  const disagreeMessage = t(
+    invoices.invoices.length === 1
+      ? 'enrolmentDetail.finance.disagreeMessageOne'
+      : 'enrolmentDetail.finance.disagreeMessageOther',
+    {
+      financeStatus,
+      count: invoices.invoices.length,
+      paidNote: paid.length ? t('enrolmentDetail.finance.paidNote', { count: paid.length }) : ''
+    }
+  );
+
   return (
-    <Card title="Finance" action={header}>
+    <Card title={financeTitle} action={header}>
       {contradicted && (
         <div className="state" role="status">
-          <h3>CRM and Zoho Books disagree</h3>
+          <h3>{t('enrolmentDetail.finance.disagreeTitle')}</h3>
           <p>
-            The enrolment&rsquo;s finance status in CRM reads &ldquo;{financeStatus}&rdquo;, but
-            Zoho Books holds {invoices.invoices.length} invoice
-            {invoices.invoices.length === 1 ? '' : 's'} for this student
-            {paid.length ? `, ${paid.length} of them paid` : ''}. That CRM field is
-            maintained by hand and nothing updates it from Books — edit the enrolment to
-            bring it into line.
+            {disagreeMessage}
           </p>
         </div>
       )}
 
       <dl className="dl">
-        <dt>Outstanding balance</dt>
+        <dt>{t('enrolmentDetail.finance.outstandingBalance')}</dt>
         <dd className="mono">{fmtMoney(invoices.outstandingBalance, invoices.currency, { cents: true })}</dd>
-        <dt>Invoices</dt>
+        <dt>{t('enrolmentDetail.finance.invoices')}</dt>
         <dd className="mono">
           {invoices.invoices.length}
-          {outstanding.length ? ` (${outstanding.length} outstanding)` : ''}
+          {outstanding.length ? ` ${t('enrolmentDetail.finance.outstandingCount', { count: outstanding.length })}` : ''}
         </dd>
       </dl>
 
@@ -150,11 +158,11 @@ function InvoiceCard({ invoices, financeStatus }) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Invoice</th>
-                <th scope="col">Date</th>
-                <th scope="col">Status</th>
-                <th scope="col">Total</th>
-                <th scope="col">Balance</th>
+                <th scope="col">{t('enrolmentDetail.finance.table.invoice')}</th>
+                <th scope="col">{t('enrolmentDetail.finance.table.date')}</th>
+                <th scope="col">{t('enrolmentDetail.finance.table.status')}</th>
+                <th scope="col">{t('enrolmentDetail.finance.table.total')}</th>
+                <th scope="col">{t('enrolmentDetail.finance.table.balance')}</th>
               </tr>
             </thead>
             <tbody>
@@ -170,17 +178,17 @@ function InvoiceCard({ invoices, financeStatus }) {
             </tbody>
           </table>
         </div>
-      ) : <p className="muted">This customer has no invoices in Zoho Books.</p>}
+      ) : <p className="muted">{t('enrolmentDetail.finance.noInvoices')}</p>}
 
       <p className="note">
-        Invoices in Zoho Books belong to a customer, not to an individual enrolment,
-        so these are all invoices for this student.
+        {t('enrolmentDetail.finance.note')}
       </p>
     </Card>
   );
 }
 
 export default function EnrolmentDetail() {
+  const t = useT();
   const { id } = useParams();
   const navigate = useNavigate();
   const can = useCan();
@@ -195,78 +203,78 @@ export default function EnrolmentDetail() {
   useBreadcrumbLeaf(loaded ? (loaded.reference || loaded.externalReference || null) : null);
 
   return (
-    <Async state={state} empty={{ title: 'Enrolment not found' }} emptyWhen={(d) => !d || !d.enrolment}>
+    <Async state={state} empty={{ title: t('enrolmentDetail.notFound') }} emptyWhen={(d) => !d || !d.enrolment}>
       {(d) => {
         const e = d.enrolment;
 
         const onComplete = () => setConfirm({
-          title: 'Mark this enrolment complete?',
-          message: 'The status becomes Completed and a completion date is recorded. If this is the student’s only active enrolment, they become an alumnus.',
-          confirmLabel: 'Complete enrolment',
+          title: t('enrolmentDetail.confirm.completeTitle'),
+          message: t('enrolmentDetail.confirm.completeMessage'),
+          confirmLabel: t('enrolmentDetail.confirm.completeConfirmLabel'),
           danger: false,
           run: async () => {
             const r = await action.run(() => api.completeEnrolment(id, { expectedModifiedTime: e.modifiedTime }));
-            if (r) { toast('Enrolment completed.'); setConfirm(null); }
+            if (r) { toast(t('enrolmentDetail.confirm.completedToast')); setConfirm(null); }
           }
         });
 
         const onCancel = () => setConfirm({
-          title: 'Cancel this enrolment?',
-          message: 'The status becomes Cancelled in Zoho CRM. The record is kept and its place is released.',
-          confirmLabel: 'Cancel enrolment',
+          title: t('enrolmentDetail.confirm.cancelTitle'),
+          message: t('enrolmentDetail.confirm.cancelMessage'),
+          confirmLabel: t('enrolmentDetail.confirm.cancelConfirmLabel'),
           run: async () => {
             const r = await action.run(() => api.archiveEnrolment(id, { expectedModifiedTime: e.modifiedTime }));
-            if (r) { toast('Enrolment cancelled.'); setConfirm(null); }
+            if (r) { toast(t('enrolmentDetail.confirm.cancelledToast')); setConfirm(null); }
           }
         });
 
         const onActivate = () => setConfirm({
-          title: 'Reactivate this enrolment?',
-          message: 'The status returns to Active in Zoho CRM. This consumes a place on the intake again.',
-          confirmLabel: 'Reactivate',
+          title: t('enrolmentDetail.confirm.reactivateTitle'),
+          message: t('enrolmentDetail.confirm.reactivateMessage'),
+          confirmLabel: t('enrolmentDetail.confirm.reactivateConfirmLabel'),
           danger: false,
           run: async () => {
             const r = await action.run(() => api.updateEnrolment(id, {
               enrolmentStatus: 'Active', expectedModifiedTime: e.modifiedTime
             }));
-            if (r) { toast('Enrolment reactivated.'); setConfirm(null); }
+            if (r) { toast(t('enrolmentDetail.confirm.reactivatedToast')); setConfirm(null); }
           }
         });
 
         const onDelete = () => setConfirm({
-          title: 'Delete this enrolment permanently?',
-          message: 'This cannot be undone. Consider cancelling instead, which keeps the record.',
-          confirmLabel: 'Delete permanently',
+          title: t('enrolmentDetail.confirm.deleteTitle'),
+          message: t('enrolmentDetail.confirm.deleteMessage'),
+          confirmLabel: t('enrolmentDetail.confirm.deleteConfirmLabel'),
           run: async () => {
             const r = await action.run(() => api.deleteEnrolment(id));
-            if (r) { toast('Enrolment deleted.'); navigate('/enrolments', { replace: true }); }
+            if (r) { toast(t('enrolmentDetail.confirm.deletedToast')); navigate('/enrolments', { replace: true }); }
           }
         });
 
         return (
           <>
             <div className="page-head">
-              <h1>{e.reference || e.externalReference || 'Enrolment'}</h1>
+              <h1>{e.reference || e.externalReference || t('enrolmentDetail.fallbackTitle')}</h1>
               <p><Pill value={e.status} /></p>
               <div className="head-actions">
                 {can('enrolment:write') && (
                   <>
-                    <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
+                    <button type="button" className="btn" onClick={() => setEditing(true)}>{t('enrolmentDetail.edit')}</button>
                     {e.status === 'Active' && (
                       <>
-                        <button type="button" className="btn" onClick={onComplete}>Complete</button>
-                        <button type="button" className="btn" onClick={onCancel}>Cancel enrolment</button>
+                        <button type="button" className="btn" onClick={onComplete}>{t('enrolmentDetail.complete')}</button>
+                        <button type="button" className="btn" onClick={onCancel}>{t('enrolmentDetail.cancelEnrolment')}</button>
                       </>
                     )}
                     {/* Reinstating a cancelled enrolment. Completed is not
                         reopened here: that would rewrite an outcome. */}
                     {e.status === 'Cancelled' && (
-                      <button type="button" className="btn" onClick={onActivate}>Reactivate</button>
+                      <button type="button" className="btn" onClick={onActivate}>{t('enrolmentDetail.reactivate')}</button>
                     )}
                   </>
                 )}
                 {can('activity:write') && (
-                  <button type="button" className="btn" onClick={() => setNoting(true)}>Add note</button>
+                  <button type="button" className="btn" onClick={() => setNoting(true)}>{t('enrolmentDetail.addNote')}</button>
                 )}
                 {/* Only offered when a Books customer was actually resolved:
                     a link to an empty customer filter would show every
@@ -276,18 +284,18 @@ export default function EnrolmentDetail() {
                     className="btn"
                     to={`/invoices?customerId=${encodeURIComponent(d.invoices.match.customerId)}`}
                   >
-                    Invoices
+                    {t('enrolmentDetail.invoicesLink')}
                   </Link>
                 )}
                 {can('enrolment:delete') && (
-                  <button type="button" className="btn danger" onClick={onDelete}>Delete</button>
+                  <button type="button" className="btn danger" onClick={onDelete}>{t('enrolmentDetail.delete')}</button>
                 )}
               </div>
             </div>
 
             {action.error && (
               <div className="state err" role="alert">
-                <h3>That action could not be completed</h3>
+                <h3>{t('enrolmentDetail.actionFailedTitle')}</h3>
                 <p>{friendlyError(action.error)}</p>
               </div>
             )}
@@ -297,72 +305,75 @@ export default function EnrolmentDetail() {
             <Warnings items={d.warnings} />
 
             <div className="grid g-2">
-              <Card title="Enrolment details" action={<SourceBadge source="crm" />}>
+              <Card title={t('enrolmentDetail.details.cardTitle')} action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Reference</dt><dd className="mono">{e.externalReference || '—'}</dd>
-                  <dt>Status</dt><dd><Pill value={e.status} /></dd>
-                  <dt>Enrolled</dt><dd>{fmtDate(e.enrolmentDate)}</dd>
-                  <dt>Start date</dt><dd>{fmtDate(e.startDate)}</dd>
-                  <dt>Completion date</dt><dd>{fmtDate(e.completionDate)}</dd>
-                  <dt>Finance status</dt>
+                  <dt>{t('enrolmentDetail.details.reference')}</dt><dd className="mono">{e.externalReference || '—'}</dd>
+                  <dt>{t('enrolmentDetail.details.status')}</dt><dd><Pill value={e.status} /></dd>
+                  <dt>{t('enrolmentDetail.details.enrolled')}</dt><dd>{fmtDate(e.enrolmentDate)}</dd>
+                  <dt>{t('enrolmentDetail.details.startDate')}</dt><dd>{fmtDate(e.startDate)}</dd>
+                  <dt>{t('enrolmentDetail.details.completionDate')}</dt><dd>{fmtDate(e.completionDate)}</dd>
+                  <dt>{t('enrolmentDetail.details.financeStatus')}</dt>
                   <dd>
                     {e.financeStatus || '—'}
-                    <span className="field-hint"> Set by hand in CRM — not from Zoho Books.</span>
+                    <span className="field-hint"> {t('enrolmentDetail.details.financeStatusHint')}</span>
                   </dd>
-                  <dt>Certificate issued</dt><dd>{e.certificateIssued ? 'Yes' : 'No'}</dd>
-                  <dt>Last modified</dt><dd>{fmtDate(e.modifiedTime)}</dd>
+                  <dt>{t('enrolmentDetail.details.certificateIssued')}</dt>
+                  <dd>{e.certificateIssued ? t('enrolmentDetail.details.yes') : t('enrolmentDetail.details.no')}</dd>
+                  <dt>{t('enrolmentDetail.details.lastModified')}</dt><dd>{fmtDate(e.modifiedTime)}</dd>
                 </dl>
               </Card>
 
-              <Card title="Related records" action={<SourceBadge source="crm" />}>
+              <Card title={t('enrolmentDetail.related.cardTitle')} action={<SourceBadge source="crm" />}>
                 <dl className="dl">
-                  <dt>Student</dt>
+                  <dt>{t('enrolmentDetail.related.student')}</dt>
                   <dd>
                     {d.student
                       ? <Link to={`/students/${d.student.id}`}>{d.student.fullName || d.student.email}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('enrolmentDetail.related.notLinked')}</span>}
                   </dd>
-                  <dt>Programme</dt>
+                  <dt>{t('enrolmentDetail.related.programme')}</dt>
                   <dd>
                     {d.programme
                       ? <Link to={`/programmes/${d.programme.id}`}>{d.programme.name}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('enrolmentDetail.related.notLinked')}</span>}
                   </dd>
-                  <dt>Intake</dt>
+                  <dt>{t('enrolmentDetail.related.intake')}</dt>
                   <dd>
                     {d.intake
                       ? <Link to={`/intakes/${d.intake.id}`}>{d.intake.name}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('enrolmentDetail.related.notLinked')}</span>}
                   </dd>
-                  <dt>Application</dt>
+                  <dt>{t('enrolmentDetail.related.application')}</dt>
                   <dd>
                     {d.application
                       ? <Link to={`/applications/${d.application.id}`}>{d.application.name || d.application.applicationId}</Link>
-                      : <span className="muted">Not linked</span>}
+                      : <span className="muted">{t('enrolmentDetail.related.notLinked')}</span>}
                   </dd>
                 </dl>
               </Card>
             </div>
 
             <Card
-              title="External LMS"
+              title={t('enrolmentDetail.lms.cardTitle')}
               action={(
                 <div className="head-actions">
                   <SourceBadge source="lms" />
                   <DemoDataBadge />
-                  <Link className="btn" to="/learning/enrolments">Learning Hub</Link>
+                  <Link className="btn" to="/learning/enrolments">{t('enrolmentDetail.lms.learningHub')}</Link>
                 </div>
               )}
             >
               <dl className="dl">
-                <dt>Mapped course</dt>
+                <dt>{t('enrolmentDetail.lms.mappedCourse')}</dt>
                 <dd>
                   {d.lmsCourse
                     ? <Link to={`/learning/courses/${d.lmsCourse.id}`}>
                         {d.lmsCourse.name} <span className="muted">({d.lmsCourse.provider})</span>
                       </Link>
                     : <span className="muted">
-                        No LMS course is mapped to {d.programme ? 'this programme' : 'a programme for this enrolment'}
+                        {d.programme
+                          ? t('enrolmentDetail.lms.noCourseMappedToProgramme')
+                          : t('enrolmentDetail.lms.noCourseMappedGeneric')}
                       </span>}
                 </dd>
               </dl>
@@ -372,13 +383,13 @@ export default function EnrolmentDetail() {
                   <table>
                     <thead>
                       <tr>
-                        <th scope="col">External enrolment</th>
-                        <th scope="col">Course</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Progress</th>
-                        <th scope="col">Certificate</th>
-                        <th scope="col">Sync</th>
-                        <th scope="col">Last sync</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.externalEnrolment')}</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.course')}</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.status')}</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.progress')}</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.certificate')}</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.sync')}</th>
+                        <th scope="col">{t('enrolmentDetail.lms.table.lastSync')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -390,7 +401,7 @@ export default function EnrolmentDetail() {
                           <td><Progress value={l.progressPercentage} /></td>
                           <td><Pill value={l.certificateStatus} /></td>
                           <td><Pill value={l.syncStatus} /></td>
-                          <td>{l.lastSyncTime ? fmtDate(l.lastSyncTime) : <span className="muted">Never</span>}</td>
+                          <td>{l.lastSyncTime ? fmtDate(l.lastSyncTime) : <span className="muted">{t('enrolmentDetail.lms.never')}</span>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -398,34 +409,30 @@ export default function EnrolmentDetail() {
                 </div>
               ) : (
                 <p className="muted">
-                  No external learning record is linked to this enrolment. Link one from the
-                  Learning Hub, where the record can also be mapped to the student first.
+                  {t('enrolmentDetail.lms.noRecordLinked')}
                 </p>
               )}
 
-              <h3 style={{ fontSize: 14, margin: '18px 0 8px' }}>Values held on this CRM record</h3>
+              <h3 style={{ fontSize: 14, margin: '18px 0 8px' }}>{t('enrolmentDetail.lms.valuesHeldTitle')}</h3>
               <dl className="dl">
-                <dt>LMS enrolment id</dt>
+                <dt>{t('enrolmentDetail.lms.lmsEnrolmentId')}</dt>
                 <dd className="mono">{e.lms.enrolmentId || <span className="muted">—</span>}</dd>
-                <dt>Progress</dt>
+                <dt>{t('enrolmentDetail.lms.progress')}</dt>
                 <dd className="mono">
                   {e.lms.progressPercentage === null ? <span className="muted">—</span> : `${e.lms.progressPercentage}%`}
                 </dd>
-                <dt>Sync status</dt><dd><Pill value={e.lms.syncStatus} /></dd>
-                <dt>Last sync</dt>
+                <dt>{t('enrolmentDetail.lms.syncStatus')}</dt><dd><Pill value={e.lms.syncStatus} /></dd>
+                <dt>{t('enrolmentDetail.lms.lastSync')}</dt>
                 <dd>{e.lms.lastSync ? fmtDate(e.lms.lastSync) : <span className="muted">—</span>}</dd>
               </dl>
               <p className="note">
-                The CRM fields above are what the connector last wrote here. If they differ
-                from the table, this enrolment has not been synchronised since the LMS record
-                changed — the two are shown separately rather than merged so that the drift
-                is visible.
+                {t('enrolmentDetail.lms.note')}
               </p>
             </Card>
 
             <InvoiceCard invoices={d.invoices} financeStatus={e.financeStatus} />
 
-            <Card title="Activity">
+            <Card title={t('enrolmentDetail.activityCardTitle')}>
               <ActivityLog rows={d.activity} />
             </Card>
 

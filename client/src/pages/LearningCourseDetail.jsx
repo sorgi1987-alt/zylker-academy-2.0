@@ -9,6 +9,7 @@ import {
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
 import SyncLogTable from '../components/SyncLogTable.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 
 /**
  * Chooses the CRM Programme a course maps to, or clears the mapping.
@@ -18,6 +19,7 @@ import SyncLogTable from '../components/SyncLogTable.jsx';
  * being wrong — the server re-reads the programme for the same reason.
  */
 function MapDialog({ course, onClose, onDone }) {
+  const t = useT();
   const toast = useToast();
   // 100 is the server's per-page ceiling. Asking for more silently returns 100,
   // which is how a truncated list gets mistaken for a complete one.
@@ -30,19 +32,19 @@ function MapDialog({ course, onClose, onDone }) {
   const submit = async (e) => {
     e.preventDefault();
     const r = await action.run(() => api.mapLmsCourse(course.id, { programmeId: programmeId || null }));
-    if (r) toast(programmeId ? 'Course mapped to a CRM programme.' : 'Mapping cleared.');
+    if (r) toast(programmeId ? t('learningCourseDetail.mapDialog.toastMapped') : t('learningCourseDetail.mapDialog.toastCleared'));
   };
 
   return (
-    <Modal title="Map to a CRM programme" onClose={onClose}>
+    <Modal title={t('learningCourseDetail.mapDialog.title')} onClose={onClose}>
       <form onSubmit={submit} noValidate>
         <Field
           id="programmeId"
-          label="CRM programme"
-          hint="Leave blank to clear the mapping. Remapping sets the sync status back to Pending, because a previous push no longer describes this course."
+          label={t('learningCourseDetail.mapDialog.programmeLabel')}
+          hint={t('learningCourseDetail.mapDialog.programmeHint')}
         >
           <select value={programmeId} onChange={(e) => setProgrammeId(e.target.value)}>
-            <option value="">Not mapped</option>
+            <option value="">{t('learningCourseDetail.mapDialog.notMappedOption')}</option>
             {loaded.map((p) => (
               <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>
             ))}
@@ -50,19 +52,18 @@ function MapDialog({ course, onClose, onDone }) {
         </Field>
         {truncated && (
           <p className="note">
-            Showing the first {loaded.length} of {programmes.meta.total} programmes. If the
-            one you want is not listed, it is beyond this page rather than absent.
+            {t('learningCourseDetail.mapDialog.truncatedNote', { loaded: loaded.length, total: programmes.meta.total })}
           </p>
         )}
         {programmes.status === 'error' && (
           <p className="field-error" role="alert">
-            The CRM programme list could not be loaded, so no mapping can be chosen right now.
+            {t('learningCourseDetail.mapDialog.listError')}
           </p>
         )}
         <FormError error={action.error ? friendlyError(action.error) : null} />
         <FormActions
           busy={action.busy}
-          submitLabel="Save mapping"
+          submitLabel={t('learningCourseDetail.mapDialog.saveButton')}
           onCancel={onClose}
           disabled={programmes.status === 'loading'}
         />
@@ -72,6 +73,7 @@ function MapDialog({ course, onClose, onDone }) {
 }
 
 export default function LearningCourseDetail() {
+  const t = useT();
   const { id } = useParams();
   const can = useCan();
   const toast = useToast();
@@ -81,31 +83,31 @@ export default function LearningCourseDetail() {
   const action = useAction(async () => { await state.reload(); });
 
   return (
-    <Async state={state} empty={{ title: 'Course not found' }} emptyWhen={(d) => !d || !d.course}>
+    <Async state={state} empty={{ title: t('learningCourseDetail.notFoundTitle') }} emptyWhen={(d) => !d || !d.course}>
       {(d) => {
         const c = d.course;
 
         const onSync = () => setConfirm({
-          title: 'Push this course to CRM?',
-          message: `The CRM Programme's LMS provider, external course id and course URL are overwritten with this course's values. Programme name, fee, status and every other academic field are left untouched.`,
-          confirmLabel: 'Sync to CRM',
+          title: t('learningCourseDetail.syncConfirm.title'),
+          message: t('learningCourseDetail.syncConfirm.message'),
+          confirmLabel: t('learningCourseDetail.syncConfirm.confirmLabel'),
           danger: false,
           run: async () => {
             const r = await action.run(() => api.syncLmsCourse(c.id, { idempotencyKey: newIdempotencyKey() }));
             if (r) {
-              toast(`Synced. Fields written: ${(r.data.crmFieldsWritten || []).join(', ')}.`);
+              toast(t('learningCourseDetail.toastSynced', { fields: (r.data.crmFieldsWritten || []).join(', ') }));
               setConfirm(null);
             }
           }
         });
 
         const onArchive = () => setConfirm({
-          title: 'Archive this course?',
-          message: 'It is hidden from the default catalogue view but kept, along with its mapping and history.',
-          confirmLabel: 'Archive course',
+          title: t('learningCourseDetail.archiveConfirm.title'),
+          message: t('learningCourseDetail.archiveConfirm.message'),
+          confirmLabel: t('learningCourseDetail.archiveConfirm.confirmLabel'),
           run: async () => {
             const r = await action.run(() => api.archiveLmsCourse(c.id));
-            if (r) { toast('Course archived.'); setConfirm(null); }
+            if (r) { toast(t('learningCourseDetail.toastArchived')); setConfirm(null); }
           }
         });
 
@@ -117,50 +119,52 @@ export default function LearningCourseDetail() {
                 <Pill value={c.publicationStatus} />{' '}
                 <span className="muted">{c.provider}</span>{' '}
                 <span className="mono muted">{c.externalCourseId}</span>
-                {c.archived && <span className="pill mute">Archived</span>}
+                {c.archived && <span className="pill mute">{t('learningCourseDetail.archived')}</span>}
               </p>
               <div className="head-actions">
-                <Link className="btn" to="/learning/courses">All courses</Link>
+                <Link className="btn" to="/learning/courses">{t('learningCourseDetail.allCoursesLink')}</Link>
                 {can('lms:map') && (
                   <button type="button" className="btn" onClick={() => setMapping(true)}>
-                    {c.crmProgrammeId ? 'Change mapping' : 'Map to programme'}
+                    {c.crmProgrammeId ? t('learningCourseDetail.changeMappingButton') : t('learningCourseDetail.mapToProgrammeButton')}
                   </button>
                 )}
                 {can('lms:sync') && c.mappingStatus === 'Mapped' && (
-                  <button type="button" className="btn" onClick={onSync}>Sync to CRM</button>
+                  <button type="button" className="btn" onClick={onSync}>{t('learningCourseDetail.syncToCrmButton')}</button>
                 )}
                 {can('lms:write') && !c.archived && (
-                  <button type="button" className="btn" onClick={onArchive}>Archive</button>
+                  <button type="button" className="btn" onClick={onArchive}>{t('learningCourseDetail.archiveButton')}</button>
                 )}
               </div>
             </div>
 
             {action.error && (
               <div className="state err" role="alert">
-                <h3>That action could not be completed</h3>
+                <h3>{t('learningCourseDetail.actionErrorTitle')}</h3>
                 <p>{friendlyError(action.error)}</p>
               </div>
             )}
 
             <div className="grid g-2">
               <Card
-                title="Course"
+                title={t('learningCourseDetail.courseCard.title')}
                 action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
               >
                 <dl className="dl">
-                  <dt>Provider</dt><dd>{c.provider}</dd>
-                  <dt>External course id</dt><dd className="mono">{c.externalCourseId}</dd>
-                  <dt>Delivery type</dt><dd>{c.deliveryType || <span className="muted">—</span>}</dd>
-                  <dt>Instructor</dt><dd>{c.instructor || <span className="muted">—</span>}</dd>
-                  <dt>Duration</dt>
+                  <dt>{t('learningCourseDetail.courseCard.provider')}</dt><dd>{c.provider}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.externalCourseId')}</dt><dd className="mono">{c.externalCourseId}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.deliveryType')}</dt><dd>{c.deliveryType || <span className="muted">—</span>}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.instructor')}</dt><dd>{c.instructor || <span className="muted">—</span>}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.duration')}</dt>
                   <dd className="mono">
-                    {c.durationHours === null ? <span className="muted">Not recorded</span> : `${c.durationHours} hours`}
+                    {c.durationHours === null
+                      ? <span className="muted">{t('common.notRecorded')}</span>
+                      : t('learningCourseDetail.courseCard.durationHours', { hours: c.durationHours })}
                   </dd>
-                  <dt>Level</dt><dd>{c.level || <span className="muted">—</span>}</dd>
-                  <dt>Category</dt><dd>{c.category || <span className="muted">—</span>}</dd>
-                  <dt>Language</dt><dd>{c.language || <span className="muted">—</span>}</dd>
-                  <dt>Publication</dt><dd><Pill value={c.publicationStatus} /></dd>
-                  <dt>Course URL</dt>
+                  <dt>{t('learningCourseDetail.courseCard.level')}</dt><dd>{c.level || <span className="muted">—</span>}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.category')}</dt><dd>{c.category || <span className="muted">—</span>}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.language')}</dt><dd>{c.language || <span className="muted">—</span>}</dd>
+                  <dt>{t('learningCourseDetail.courseCard.publication')}</dt><dd><Pill value={c.publicationStatus} /></dd>
+                  <dt>{t('learningCourseDetail.courseCard.courseUrl')}</dt>
                   <dd>
                     {c.url
                       ? <a href={c.url} target="_blank" rel="noreferrer noopener">{c.url}</a>
@@ -171,35 +175,33 @@ export default function LearningCourseDetail() {
               </Card>
 
               <Card
-                title="CRM mapping and synchronisation"
+                title={t('learningCourseDetail.crmCard.title')}
                 action={<div className="head-actions"><SourceBadge source="crm" /></div>}
               >
                 <dl className="dl">
-                  <dt>Mapping</dt><dd><Pill value={c.mappingStatus} /></dd>
-                  <dt>CRM programme</dt>
+                  <dt>{t('learningCourseDetail.crmCard.mapping')}</dt><dd><Pill value={c.mappingStatus} /></dd>
+                  <dt>{t('learningCourseDetail.crmCard.crmProgramme')}</dt>
                   <dd>
                     {d.crmProgramme
                       ? <Link to={`/programmes/${d.crmProgramme.id}`}>{d.crmProgramme.name}</Link>
-                      : <span className="muted">Not mapped</span>}
+                      : <span className="muted">{t('learningCourseDetail.crmCard.notMapped')}</span>}
                   </dd>
-                  <dt>Programme reference</dt>
+                  <dt>{t('learningCourseDetail.crmCard.programmeReference')}</dt>
                   <dd className="mono">{c.crmProgrammeReference || <span className="muted">—</span>}</dd>
-                  <dt>Sync status</dt><dd><Pill value={c.syncStatus} /></dd>
-                  <dt>Last sync</dt>
-                  <dd>{c.lastSyncTime ? fmtDate(c.lastSyncTime) : <span className="muted">Never</span>}</dd>
-                  <dt>Last message</dt>
+                  <dt>{t('learningCourseDetail.crmCard.syncStatus')}</dt><dd><Pill value={c.syncStatus} /></dd>
+                  <dt>{t('learningCourseDetail.crmCard.lastSync')}</dt>
+                  <dd>{c.lastSyncTime ? fmtDate(c.lastSyncTime) : <span className="muted">{t('learningCourseDetail.crmCard.never')}</span>}</dd>
+                  <dt>{t('learningCourseDetail.crmCard.lastMessage')}</dt>
                   <dd>{c.lastSyncMessage || <span className="muted">—</span>}</dd>
                 </dl>
                 <p className="note">
-                  A sync writes only {(d.crmFieldsWritten || []).join(', ')} on the CRM
-                  Programme. Academic fields are owned by CRM and are never overwritten by
-                  the connector.
+                  {t('learningCourseDetail.crmCard.writesNote', { fields: (d.crmFieldsWritten || []).join(', ') })}
                 </p>
               </Card>
             </div>
 
             <Card
-              title="Learners on this course"
+              title={t('learningCourseDetail.learnersCard.title')}
               action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
             >
               {d.enrolments.length ? (
@@ -207,12 +209,12 @@ export default function LearningCourseDetail() {
                   <table>
                     <thead>
                       <tr>
-                        <th scope="col">External enrolment</th>
-                        <th scope="col">Learner id</th>
-                        <th scope="col">CRM student</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Progress</th>
-                        <th scope="col">Certificate</th>
+                        <th scope="col">{t('learningCourseDetail.learnersCard.table.externalEnrolment')}</th>
+                        <th scope="col">{t('learningCourseDetail.learnersCard.table.learnerId')}</th>
+                        <th scope="col">{t('learningCourseDetail.learnersCard.table.crmStudent')}</th>
+                        <th scope="col">{t('learningCourseDetail.learnersCard.table.status')}</th>
+                        <th scope="col">{t('learningCourseDetail.learnersCard.table.progress')}</th>
+                        <th scope="col">{t('learningCourseDetail.learnersCard.table.certificate')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -223,7 +225,7 @@ export default function LearningCourseDetail() {
                           <td>
                             {e.crmStudentId
                               ? <Link to={`/students/${e.crmStudentId}`}>{e.crmStudentReference || e.crmStudentId}</Link>
-                              : <span className="muted">Not mapped</span>}
+                              : <span className="muted">{t('learningCourseDetail.learnersCard.notMapped')}</span>}
                           </td>
                           <td><Pill value={e.lmsStatus} /></td>
                           <td><Progress value={e.progressPercentage} /></td>
@@ -233,11 +235,11 @@ export default function LearningCourseDetail() {
                     </tbody>
                   </table>
                 </div>
-              ) : <p className="muted">No learners are recorded against this course.</p>}
+              ) : <p className="muted">{t('learningCourseDetail.learnersCard.empty')}</p>}
             </Card>
 
-            <Card title="Synchronisation history for this course">
-              <SyncLogTable rows={d.syncLog} emptyText="This course has not been synchronised yet." />
+            <Card title={t('learningCourseDetail.syncHistoryCard.title')}>
+              <SyncLogTable rows={d.syncLog} emptyText={t('learningCourseDetail.syncHistoryCard.empty')} />
             </Card>
 
             {mapping && (

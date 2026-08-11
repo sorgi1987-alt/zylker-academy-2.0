@@ -3,18 +3,21 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
+import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, fmtDate
 } from '../components/Ui.jsx';
 
-const MAPPED_OPTIONS = [
-  { value: 'no', label: 'Not mapped to the LMS' },
-  { value: 'yes', label: 'Mapped to the LMS' }
-];
-
 export default function Enrolments() {
+  const t = useT();
   const can = useCan();
   const [params] = useSearchParams();
+
+  const MAPPED_OPTIONS = [
+    { value: 'no', label: t('enrolments.mappedOptions.no') },
+    { value: 'yes', label: t('enrolments.mappedOptions.yes') }
+  ];
+
   // Every filter a dashboard card or attention item can arrive with is seeded
   // from the URL, so the destination shows the subset the card promised.
   const list = usePagedList(api.enrolments, {
@@ -31,17 +34,17 @@ export default function Enrolments() {
   return (
     <>
       <div className="page-head">
-        <h1>Enrolments</h1>
-        <p>Enrolment records in Zoho CRM, linking a student to a programme and intake.</p>
+        <h1>{t('enrolments.pageTitle')}</h1>
+        <p>{t('enrolments.pageIntro')}</p>
       </div>
 
       <Card
-        title="All enrolments"
+        title={t('enrolments.allEnrolments')}
         action={(
           <div className="head-actions">
             <SourceBadge source="crm" />
             {can('enrolment:write') && (
-              <Link className="btn primary" to="/enrolments/new">New enrolment</Link>
+              <Link className="btn primary" to="/enrolments/new">{t('enrolments.newEnrolment')}</Link>
             )}
           </div>
         )}
@@ -49,66 +52,66 @@ export default function Enrolments() {
         <div className="toolbar">
           <SearchBox
             id="enrolment-search"
-            label="Search"
+            label={t('common.search')}
             value={list.search}
             onChange={list.setSearch}
-            placeholder="Student name, email or reference"
+            placeholder={t('enrolments.searchPlaceholder')}
           />
           <FilterSelect
             id="enrolment-status"
-            label="Status"
+            label={t('enrolments.status')}
             value={list.filters.status || ''}
             onChange={(v) => list.setFilter('status', v)}
             options={statuses}
-            allLabel="All statuses"
+            allLabel={t('enrolments.allStatuses')}
           />
           <FilterSelect
             id="enrolment-lms-mapped"
-            label="LMS mapping"
+            label={t('enrolments.lmsMapping')}
             value={list.filters.lmsMapped || ''}
             onChange={(v) => list.setFilter('lmsMapped', v)}
             options={MAPPED_OPTIONS}
-            allLabel="Any"
+            allLabel={t('enrolments.any')}
           />
         </div>
 
         <FilterChips
           chips={[
             list.filters.status && {
-              key: 'status', label: 'Status', value: list.filters.status,
+              key: 'status', label: t('enrolments.status'), value: list.filters.status,
               onClear: () => list.setFilter('status', '')
             },
             list.filters.lmsMapped && {
-              key: 'lmsMapped', label: 'LMS mapping', value: mappedLabel(list.filters.lmsMapped),
+              key: 'lmsMapped', label: t('enrolments.lmsMapping'), value: mappedLabel(list.filters.lmsMapped),
               onClear: () => list.setFilter('lmsMapped', '')
             },
             list.filters.syncStatus && {
-              key: 'syncStatus', label: 'Last sync', value: list.filters.syncStatus,
+              key: 'syncStatus', label: t('enrolments.lastSync'), value: list.filters.syncStatus,
               onClear: () => list.setFilter('syncStatus', '')
             },
             list.search && {
-              key: 'search', label: 'Search', value: list.search,
+              key: 'search', label: t('common.search'), value: list.search,
               onClear: () => list.setSearch('')
             }
           ]}
           onClearAll={list.clearFilters}
         />
 
-        <Async state={list} empty={{ title: 'No enrolments match' }}>
+        <Async state={list} empty={{ title: t('enrolments.noMatch') }}>
           {(rows, meta) => (
             <>
               <div className="t-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th scope="col">Reference</th>
-                      <th scope="col">Student</th>
-                      <th scope="col">Programme</th>
-                      <th scope="col">Intake</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Enrolled</th>
-                      <th scope="col">Progress</th>
-                      <th scope="col">LMS sync</th>
+                      <th scope="col">{t('enrolments.table.reference')}</th>
+                      <th scope="col">{t('enrolments.table.student')}</th>
+                      <th scope="col">{t('enrolments.table.programme')}</th>
+                      <th scope="col">{t('enrolments.table.intake')}</th>
+                      <th scope="col">{t('enrolments.table.status')}</th>
+                      <th scope="col">{t('enrolments.table.enrolled')}</th>
+                      <th scope="col">{t('enrolments.table.progress')}</th>
+                      <th scope="col">{t('enrolments.table.lmsSync')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -135,9 +138,7 @@ export default function Enrolments() {
               </div>
 
               <p className="note">
-                Progress and sync status are the values the external LMS connector last
-                wrote onto each CRM enrolment. Open the Learning Hub to see the current
-                position held by the connector, which may be newer.
+                {t('enrolments.syncNote')}
               </p>
 
               <Pagination
