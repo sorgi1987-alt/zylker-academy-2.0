@@ -396,6 +396,11 @@ input[type=search]{flex:1;min-width:220px}
 .head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .page-head .head-actions{margin-top:10px}
 .card-h .head-actions{justify-content:flex-end}
+/* .btn's base margin-top:14px exists for a button sitting below a form field
+   or paragraph — it's wrong here, where buttons sit beside pills/badges in a
+   single row, and it was pushing every button ~7px lower than its siblings
+   (their vertical centers, not just their tops, ended up different). */
+.head-actions .btn{margin-top:0}
 
 /* --- KPI cards that link somewhere --- */
 .kpi-link{text-decoration:none;color:inherit;transition:border-color .12s,transform .12s}
