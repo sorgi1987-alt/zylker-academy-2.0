@@ -200,6 +200,15 @@ a{color:var(--brand-2)}
 /* Stacked blocks need air between them. Applied to adjacent siblings only, so
    no page gains a trailing gap at the bottom. */
 .grid+.grid,.grid+.card,.card+.card,.card+.grid{margin-top:16px}
+/* ...but NOT when the sibling relationship is two cards sitting side by side
+   as items inside the same grid (every KPI row, every g-2/g-3 card grid):
+   .card+.card above only meant "one card block stacked under another down
+   the page" — it can't distinguish that from "the next card in this row",
+   and matched both. The grid's own `gap` already spaces items apart, so this
+   was double-spacing every card but the first in a row, pushing cards 2..n
+   down by 16px relative to card 1. Reset it back to 0 specifically for
+   direct grid children. */
+.grid>.card{margin-top:0}
 
 .kpi{padding:16px 18px}
 .kpi .label{display:flex;flex-direction:column;gap:6px}
