@@ -30,6 +30,7 @@ const ICONS = {
   intakes: <Icon d={<><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>} />,
   learning: <Icon d={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>} />,
   finance: <Icon d={<><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" /></>} />,
+  support: <Icon d={<><path d="M4 13a8 8 0 0 1 16 0" /><path d="M4 13v4a2 2 0 0 0 2 2h1v-6H5a1 1 0 0 0-1 1z" /><path d="M20 13v4a2 2 0 0 1-2 2h-1v-6h1a1 1 0 0 1 1 1z" /><path d="M14 19a2 2 0 0 1-2 2h-1" /></>} />,
   integration: <Icon d={<><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.2 10.9 15.8 7.1M8.2 13.1l7.6 3.8" /></>} />
 };
 
@@ -55,6 +56,7 @@ export const NAV = [
   { to: '/intakes', label: 'Intakes', permission: 'intake:read', icon: ICONS.intakes },
   { to: '/learning/courses', label: 'Learning Hub', permission: 'lms:read', icon: ICONS.learning },
   { to: '/invoices', label: 'Finance', permission: 'invoice:read', icon: ICONS.finance },
+  { to: '/tickets', label: 'Support', permission: 'ticket:read', icon: ICONS.support },
   { to: '/integration', label: 'Integration Status', permission: 'integration:read', icon: ICONS.integration }
 ];
 

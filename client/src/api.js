@@ -202,6 +202,11 @@ export const api = {
   invoices: (params, o) => get(`/api/invoices${qs(params)}`, o),
   invoice: (id, o) => get(`/api/invoices/${encodeURIComponent(id)}`, o),
 
+  /* Zoho Desk — read only */
+  tickets: (params, o) => get(`/api/tickets${qs(params)}`, o),
+  ticket: (id, o) => get(`/api/tickets/${encodeURIComponent(id)}`, o),
+  studentTickets: (id, o) => get(`/api/students/${encodeURIComponent(id)}/tickets`, o),
+
   /* audit */
   activity: (params, o) => get(`/api/activity${qs(params)}`, o),
   /*

@@ -76,6 +76,25 @@ module.exports = {
     // large Books org cannot make the dashboard time out.
     maxAggregatePages: Number(process.env.ZOHO_BOOKS_MAX_PAGES || 10)
   },
+  desk: {
+    // EU Desk API domain, matching the data centre of the rest of the estate.
+    baseUrl: process.env.ZOHO_DESK_BASE_URL || 'https://desk.zoho.eu/api/v1',
+    // Web console origin. Not used to build ticket links — Desk's API already
+    // returns a working `webUrl` per ticket — but kept for the integration
+    // status page and for a future feature that needs it.
+    appUrl: process.env.ZOHO_DESK_APP_URL || 'https://desk.zoho.eu',
+    // Zoho Desk's own organisation id. Distinct from ZOHO_BOOKS_ORG_ID and
+    // sent as an `orgId` HEADER on every Desk call (Desk does not accept it as
+    // a query parameter). No fallback guess: a wrong id would query another
+    // Desk org's tickets rather than fail loudly.
+    organizationId: process.env.ZOHO_DESK_ORG_ID || null,
+    connector: process.env.DESK_CONNECTOR || 'zylker_desk',
+    connection: process.env.DESK_CONNECTION || 'zylker_desk',
+    pageSize: Math.min(Number(process.env.ZOHO_DESK_PAGE_SIZE || 25), 100),
+    // Ceiling on pages walked when aggregating totals for the dashboard, so a
+    // large Desk portal cannot make the dashboard time out.
+    maxAggregatePages: Number(process.env.ZOHO_DESK_MAX_PAGES || 10)
+  },
   http: {
     timeoutMs: Number(process.env.UPSTREAM_TIMEOUT_MS || 12000)
   },

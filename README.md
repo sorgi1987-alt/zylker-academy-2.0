@@ -2,7 +2,8 @@
 
 An authenticated staff portal for managing students, applications, programmes,
 intakes and enrolments, backed by Zoho CRM, with an external LMS connector held
-in the Catalyst Data Store and read-only views of Zoho Books invoices.
+in the Catalyst Data Store and read-only views of Zoho Books invoices and Zoho
+Desk support tickets.
 
 **Catalyst project:** `Zylker-Academy` · id `11922000000014048` · org `20117369913` · EU DC
 **Project domain:** `https://zylker-academy-20117369913.development.catalystserverless.eu`
@@ -23,7 +24,8 @@ Catalyst Advanced I/O function `zylker_api`
   │  OAuth resolved per request from Catalyst Connections
   ├──►  Zoho CRM    www.zohoapis.eu/crm/v8      read + write
   ├──►  Catalyst Data Store  lms_courses, lms_enrolments, lms_sync_log
-  └──►  Zoho Books  www.zohoapis.eu/books/v3    read only
+  ├──►  Zoho Books  www.zohoapis.eu/books/v3    read only
+  └──►  Zoho Desk   desk.zoho.eu/api/v1         read only
 ```
 
 The browser calls only `/server/zylker_api/api/*` on its own origin. Every Zoho
@@ -119,7 +121,7 @@ code change.
 ## Running the tests
 
 ```bash
-cd functions/zylker_api && npm test      # 23 offline tests, no Catalyst session needed
+cd functions/zylker_api && npm test      # 54 offline tests, no Catalyst session needed
 cd client && npm run build               # production build
 ```
 
@@ -138,6 +140,7 @@ functions/zylker_api/
   auth.js          requireAuth / requirePermission, rate limit, idempotency, audit
   writes.js        CRM write handlers and their invariants
   books.js         Zoho Books, read only
+  desk.js          Zoho Desk, read only
   zoho.js          Catalyst Connections, CRM/Learn clients, error redaction
   normalise.js     CRM record → client shape, Learn course matching
   references.js    server-minted external references
@@ -150,5 +153,5 @@ client/src/
   api.js           the only place that talks to the backend
   App.jsx          auth gate, navigation, permission-guarded routes
   pages/           Login, Dashboard, Students, Applications, Programmes,
-                   Intakes, Enrolments, Courses, Finance, Integration Status
+                   Intakes, Enrolments, Courses, Finance, Support, Integration Status
 ```

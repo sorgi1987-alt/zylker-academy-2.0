@@ -66,6 +66,8 @@ const STAGE = {
  * @param {object?}  input.lmsStatus     connector status, or null when unavailable
  * @param {object?}  input.booksTotals   invoice totals, or null when unavailable or unconfigured
  * @param {string?}  input.booksState    'ok' | 'unavailable' | 'not_configured'
+ * @param {object?}  input.deskTotals    ticket totals, or null when unavailable or unconfigured
+ * @param {string?}  input.deskState     'ok' | 'unavailable' | 'not_configured'
  * @param {number}   input.now           epoch ms, injected so the rules are testable
  */
 function build({
@@ -76,6 +78,8 @@ function build({
   lmsStatus = null,
   booksTotals = null,
   booksState = 'ok',
+  deskTotals = null,
+  deskState = 'ok',
   now = Date.now()
 } = {}) {
   const items = [];
@@ -314,6 +318,47 @@ function build({
         date: o.dueDate,
         days: o.daysOverdue,
         to: `/invoices/${o.id}`
+      } : null
+    });
+  }
+
+  /* --------------------------------- desk -------------------------------- */
+
+  if (deskState === 'not_configured') {
+    // Not an incident. A deployment with no Desk connector configured is a
+    // valid configuration and should not raise a permanent warning.
+  } else if (deskState !== 'ok' || !deskTotals) {
+    push({
+      key: 'desk-unavailable',
+      category: 'Support',
+      title: 'Tickets could not be checked',
+      explanation: 'Zoho Desk did not respond, so overdue tickets are not included below.',
+      severity: SEV.WARNING,
+      count: 0,
+      unavailable: true,
+      source: 'desk',
+      to: '/integration',
+      oldest: null
+    });
+  } else {
+    const t = deskTotals.oldestOverdue;
+    push({
+      key: 'tickets-overdue',
+      category: 'Support',
+      title: 'Overdue tickets',
+      explanation: deskTotals.truncated
+        ? 'Open tickets past their due date. More tickets exist than could be totalled, so this is a partial figure.'
+        : 'Open tickets past their due date.',
+      severity: SEV.CRITICAL,
+      count: deskTotals.overdueCount || 0,
+      partial: deskTotals.truncated === true,
+      source: 'desk',
+      to: '/tickets?statusType=Open',
+      oldest: t ? {
+        label: t.subject || t.ticketNumber || `Ticket ${t.id}`,
+        date: t.dueDate,
+        days: t.daysOverdue,
+        to: `/tickets/${t.id}`
       } : null
     });
   }

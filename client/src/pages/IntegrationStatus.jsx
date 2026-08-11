@@ -22,8 +22,8 @@ export default function IntegrationStatus() {
       <div className="page-head">
         <h1>Integration status</h1>
         <p>
-          Live connection health for Zoho CRM, the external LMS connector and Zoho Books,
-          and the mapping between them.
+          Live connection health for Zoho CRM, the external LMS connector, Zoho Books
+          and Zoho Desk, and the mapping between them.
         </p>
       </div>
 
@@ -42,11 +42,12 @@ export default function IntegrationStatus() {
                   detail={d.connections.lms.detail}
                 />
                 <ConnDot label="Zoho Books" status={d.connections.books.status} detail={d.connections.books.detail} />
+                <ConnDot label="Zoho Desk" status={d.connections.desk.status} detail={d.connections.desk.detail} />
                 <p className="note">
-                  Zoho CRM is read and written by this application. Zoho Books is read-only.
-                  The LMS connector is a normalised dataset in Catalyst: no request is made
-                  to Moodle, Canvas, TrainerCentral or any SCORM host, and the provider names
-                  are source labels on rows.
+                  Zoho CRM is read and written by this application. Zoho Books and Zoho Desk
+                  are read-only. The LMS connector is a normalised dataset in Catalyst: no
+                  request is made to Moodle, Canvas, TrainerCentral or any SCORM host, and
+                  the provider names are source labels on rows.
                 </p>
               </Card>
 
@@ -84,6 +85,24 @@ export default function IntegrationStatus() {
                   )}
                 </Card>
               </div>
+
+              <Card
+                title="Zoho Desk configuration"
+                action={<div className="head-actions"><SourceBadge source="desk" /><ReadOnlyBadge system="Zoho Desk" /></div>}
+              >
+                <dl className="dl">
+                  <dt>Configured</dt><dd>{d.deskConfig.configured ? 'Yes' : 'No'}</dd>
+                  <dt>Organisation id</dt>
+                  <dd className="mono">{d.deskConfig.organizationId || <span className="muted">Not set</span>}</dd>
+                  <dt>API domain</dt><dd className="mono">{d.deskConfig.baseUrl}</dd>
+                </dl>
+                {!d.deskConfig.configured && (
+                  <p className="note">
+                    Set <span className="mono">ZOHO_DESK_ORG_ID</span> in the Catalyst
+                    environment and create the Desk connection to enable the Support section.
+                  </p>
+                )}
+              </Card>
 
               <Card
                 title="External LMS connector"

@@ -151,6 +151,132 @@ function InvoiceSection({ invoices }) {
   );
 }
 
+/* --------------------------- Zoho Desk section ----------------------------- */
+
+/**
+ * Tickets for this student.
+ *
+ * Same shape and the same reasoning as InvoiceSection: the heading states HOW
+ * the student was linked to a Desk contact, an ambiguous email match shows
+ * nothing rather than guessing, and an outage renders as "not available"
+ * rather than an empty table that could be mistaken for "no tickets".
+ */
+function TicketSection({ tickets }) {
+  if (!tickets) {
+    return (
+      <Card title="Tickets">
+        <p className="muted">Your role does not include access to support data.</p>
+      </Card>
+    );
+  }
+
+  if (tickets.status === 'not_configured') {
+    return (
+      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+        <p className="muted">{tickets.detail}</p>
+      </Card>
+    );
+  }
+
+  if (tickets.status === 'unavailable') {
+    return (
+      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+        <SectionUnavailable system="Zoho Desk" detail={tickets.detail} />
+      </Card>
+    );
+  }
+
+  if (tickets.status === 'ambiguous') {
+    return (
+      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+        <div className="state" role="status">
+          <h3>The Zoho Desk link is ambiguous</h3>
+          <p>{tickets.detail}</p>
+          {tickets.match?.candidates?.length > 0 && (
+            <ul className="plain-list">
+              {tickets.match.candidates.map((c) => (
+                <li key={c.id}>
+                  <strong>{c.name}</strong> <span className="muted">· {c.email} · id {c.id}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="note">
+            No tickets are shown until one contact is linked, so that this student is
+            never shown another contact&rsquo;s support history.
+          </p>
+        </div>
+      </Card>
+    );
+  }
+
+  if (tickets.status === 'unmatched') {
+    return (
+      <Card title="Tickets" action={<SourceBadge source="desk" />}>
+        <p className="muted">{tickets.detail || 'No Zoho Desk contact is linked to this student.'}</p>
+      </Card>
+    );
+  }
+
+  const matchedOnLabel = tickets.match?.matchedOn === 'crm-field'
+    ? `stored Desk contact id (${tickets.match.field})`
+    : 'exact email match';
+
+  return (
+    <Card
+      title="Tickets"
+      action={<div className="head-actions"><SourceBadge source="desk" /><ReadOnlyBadge system="Zoho Desk" /></div>}
+    >
+      <p className="note">
+        Linked to Zoho Desk contact <span className="mono">{tickets.match.contactId}</span> by {matchedOnLabel}.
+        Tickets are replied to and closed in Zoho Desk.
+      </p>
+
+      <dl className="dl">
+        <dt>Open tickets</dt>
+        <dd className="mono">{tickets.openCount}</dd>
+      </dl>
+
+      {tickets.tickets.length ? (
+        <div className="t-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Ticket</th>
+                <th scope="col">Subject</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tickets.tickets.map((t) => (
+                <tr key={t.id}>
+                  <td><Link to={`/tickets/${t.id}`}>{t.ticketNumber || t.id}</Link></td>
+                  <td>{t.subject || <span className="muted">—</span>}</td>
+                  <td>
+                    <Pill value={t.status} />
+                    {t.overdue && <div className="muted small">Overdue</div>}
+                  </td>
+                  <td>{fmtDate(t.createdTime)}</td>
+                  <td>{t.dueDate ? fmtDate(t.dueDate) : <span className="muted">—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="muted">This contact has no tickets.</p>}
+
+      {tickets.hasMore && (
+        <p className="note">
+          Only the most recent tickets are shown here.{' '}
+          <Link to={`/tickets?contactId=${tickets.match.contactId}`}>See all in Support</Link>.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 /* -------------------------------- overview -------------------------------- */
 
 /**
@@ -175,6 +301,7 @@ function Overview({ d, onTab }) {
     : null;
 
   const financeKnown = d.invoices && d.invoices.status === 'matched';
+  const ticketsKnown = d.tickets && d.tickets.status === 'matched';
 
   return (
     <>
@@ -283,6 +410,30 @@ function Overview({ d, onTab }) {
             </p>
           )}
         </Card>
+        <Card
+          title="Support"
+          action={<div className="head-actions"><SourceBadge source="desk" /><ReadOnlyBadge system="Zoho Desk" /></div>}
+        >
+          {/* An open-ticket count is only stated once a Desk contact was actually
+              resolved — "0 open tickets" for an unmatched student would be a
+              claim this application cannot make. */}
+          {ticketsKnown ? (
+            <>
+              <dl className="dl">
+                <dt>Open tickets</dt>
+                <dd className="mono">{d.tickets.openCount}</dd>
+                <dt>Tickets</dt>
+                <dd className="mono">{d.tickets.tickets.length}</dd>
+              </dl>
+              <button type="button" className="btn" onClick={() => onTab('support')}>See tickets</button>
+            </>
+          ) : (
+            <p className="muted">
+              {(d.tickets && d.tickets.detail)
+                || 'No Zoho Desk contact is linked to this student, so no tickets can be shown.'}
+            </p>
+          )}
+        </Card>
       </div>
 
       <Card
@@ -297,7 +448,7 @@ function Overview({ d, onTab }) {
 
 /* -------------------------------- the page -------------------------------- */
 
-const TAB_KEYS = ['overview', 'applications', 'enrolments', 'learning', 'finance', 'activity'];
+const TAB_KEYS = ['overview', 'applications', 'enrolments', 'learning', 'finance', 'support', 'activity'];
 
 export default function Student360() {
   const { id } = useParams();
@@ -362,6 +513,9 @@ export default function Student360() {
         const outstanding = d.invoices && d.invoices.status === 'matched'
           ? d.invoices.invoices.filter((i) => i.outstanding).length
           : null;
+        const openTickets = d.tickets && d.tickets.status === 'matched'
+          ? d.tickets.openCount
+          : null;
 
         const tabs = [
           { key: 'overview', label: 'Overview' },
@@ -370,6 +524,7 @@ export default function Student360() {
           { key: 'learning', label: 'Learning', count: d.learning.length },
           // A null count means the source did not answer, which is not zero.
           { key: 'finance', label: 'Finance', count: outstanding },
+          { key: 'support', label: 'Support', count: openTickets },
           { key: 'activity', label: 'Activity', count: (d.activity || []).length }
         ];
 
@@ -578,6 +733,10 @@ export default function Student360() {
 
             <TabPanel id="finance" active={tab}>
               <InvoiceSection invoices={can('invoice:read') ? d.invoices : null} />
+            </TabPanel>
+
+            <TabPanel id="support" active={tab}>
+              <TicketSection tickets={can('ticket:read') ? d.tickets : null} />
             </TabPanel>
 
             <TabPanel id="activity" active={tab}>

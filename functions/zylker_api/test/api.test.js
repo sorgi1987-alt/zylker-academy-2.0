@@ -77,6 +77,7 @@ test('every route except /api/health rejects an unauthenticated caller', async (
     ['GET', '/api/students/123'], ['GET', '/api/applications'], ['GET', '/api/programmes'],
     ['GET', '/api/intakes'], ['GET', '/api/enrolments'],
     ['GET', '/api/invoices'], ['GET', '/api/invoices/1'], ['GET', '/api/students/1/invoices'],
+    ['GET', '/api/tickets'], ['GET', '/api/tickets/1'], ['GET', '/api/students/1/tickets'],
     ['GET', '/api/integration-status'], ['GET', '/api/activity'], ['GET', '/api/diag'],
     // Global search reads the same CRM modules as the list pages and is no less
     // protected than they are.
@@ -142,6 +143,7 @@ test('the permission matrix grants only what each role should hold', () => {
   assert.equal(can(ROLES.VIEWER, P.STUDENT_WRITE), false);
   assert.equal(can(ROLES.VIEWER, P.APPLICATION_TRANSITION), false);
   assert.equal(can(ROLES.VIEWER, P.INVOICE_READ), false, 'viewer has no finance access');
+  assert.equal(can(ROLES.VIEWER, P.TICKET_READ), true, 'unlike invoices, ticket data is not finance-restricted');
 
   // Admissions owns students and applications, not the delivery structure.
   assert.equal(can(ROLES.ADMISSIONS, P.STUDENT_WRITE), true);

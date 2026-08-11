@@ -75,6 +75,9 @@ const P = {
   LMS_BULK_SYNC: 'lms:bulk-sync',
   LMS_CREATE_CRM_ENROLMENT: 'lms:create-crm-enrolment',
   INVOICE_READ: 'invoice:read',
+  // Zoho Desk tickets. Unlike invoices, ticket data is not finance-sensitive,
+  // so every role reads it via COMMON_READ rather than a dedicated grant list.
+  TICKET_READ: 'ticket:read',
   DASHBOARD_READ: 'dashboard:read',
   INTEGRATION_READ: 'integration:read',
   ACTIVITY_READ: 'activity:read',
@@ -88,7 +91,7 @@ const P = {
 
 /** Everything any authenticated user may read. Keeps the matrix below short. */
 const COMMON_READ = [
-  P.DASHBOARD_READ, P.INTEGRATION_READ, P.ACTIVITY_READ, P.LMS_READ,
+  P.DASHBOARD_READ, P.INTEGRATION_READ, P.ACTIVITY_READ, P.LMS_READ, P.TICKET_READ,
   P.STUDENT_READ, P.APPLICATION_READ, P.PROGRAMME_READ, P.INTAKE_READ, P.ENROLMENT_READ
 ];
 

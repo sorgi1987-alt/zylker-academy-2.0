@@ -85,7 +85,8 @@ export const SourceBadge = ({ source, title }) => {
     lms: ['External LMS', 'info'],
     'catalyst-lms': ['External LMS', 'info'],
     catalyst: ['Zoho Catalyst', 'info'],
-    books: ['Zoho Books', 'warn']
+    books: ['Zoho Books', 'warn'],
+    desk: ['Zoho Desk', 'warn']
   };
   const [label, tone] = map[source] || ['Unknown source', 'mute'];
   return <span className={`pill ${tone}`} title={title || `Data from ${label}`}>{label}</span>;

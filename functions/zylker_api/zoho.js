@@ -198,7 +198,9 @@ async function crmDelete(req, module_, id) {
  */
 async function probe(req) {
   const out = {};
-  for (const [label, name] of [['crm', cfg.crm.connection], ['books', cfg.books.connection]]) {
+  for (const [label, name] of [
+    ['crm', cfg.crm.connection], ['books', cfg.books.connection], ['desk', cfg.desk.connection]
+  ]) {
     try {
       const c = await credentials(req, name);
       out[label] = {

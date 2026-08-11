@@ -113,6 +113,12 @@ export default function Dashboard() {
               />
             </section>
 
+            <h2 className="sec-h">Support</h2>
+            <section className="grid g-kpi">
+              <Kpi label="Open tickets" {...d.kpis.openTickets} to="/tickets" />
+              <Kpi label="Overdue tickets" {...d.kpis.overdueTickets} to="/tickets?statusType=Open" />
+            </section>
+
             <div className="grid g-2">
               <Card
                 title="Admissions funnel"
@@ -157,6 +163,20 @@ export default function Dashboard() {
                     />
                   )
                   : <p className="muted">Zoho Books could not be reached, so this is not available.</p>}
+              </Card>
+
+              <Card
+                title="Tickets by status"
+                action={(
+                  <div className="head-actions">
+                    <SourceBadge source="desk" />
+                    <Link className="btn" to="/tickets">All tickets</Link>
+                  </div>
+                )}
+              >
+                {d.ticketsByStatus
+                  ? <BarList data={d.ticketsByStatus} emptyText="No tickets recorded." />
+                  : <p className="muted">Zoho Desk could not be reached, so this is not available.</p>}
               </Card>
             </div>
 
@@ -255,6 +275,7 @@ export default function Dashboard() {
                   detail={d.connections.lms.detail}
                 />
                 <ConnDot label="Zoho Books" status={d.connections.books.status} detail={d.connections.books.detail} />
+                <ConnDot label="Zoho Desk" status={d.connections.desk.status} detail={d.connections.desk.detail} />
               </Card>
             </div>
           </>

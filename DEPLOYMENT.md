@@ -15,6 +15,7 @@ Console → your project → **Settings → Environment Variables** (Development
 | Variable | Required | Value | Why |
 |---|---|---|---|
 | `ZOHO_BOOKS_ORG_ID` | Yes, for Finance | Your Books organisation id | Never guessed in code. A wrong id silently returns another org's data or an empty list. |
+| `ZOHO_DESK_ORG_ID` | Yes, for Support | Your Desk organisation id | Distinct from the Books org id. Sent as an `orgId` header on every Desk call; never guessed in code. |
 | `ZYLKER_ROLE_MAP` | Optional | `{"sergio.castanares+admissions@zohotest.com":"admissions"}` | Maps an email to one of `administrator`, `admissions`, `academic`, `finance`, `viewer`. |
 | `ZYLKER_DEFAULT_ROLE` | Optional | `viewer` | Role for any authenticated user not in the map. Defaults to `viewer`. |
 | `AUDIT_TABLE` | Optional | `admissions_audit` | Data Store table for the audit trail. |
@@ -53,6 +54,27 @@ and the custom `Intakes` / `Enrolments` modules — plus
 `ZohoCRM.settings.modules.READ` and `ZohoCRM.settings.fields.READ`, which the
 module-label and picklist lookups use.
 
+## 2b. Zoho Desk Catalyst Connection
+
+The project now needs a fourth connection alongside `zylker_zoho` (CRM),
+`zylker_learn` and `zylker_books`.
+
+Console → **Integrations → Catalyst Connectors → New Connection**
+
+- **Connection name:** `zylker_desk` — this exact string, or set `DESK_CONNECTION` to whatever you use.
+- **Service:** Zoho OAuth (EU accounts domain, matching the rest of the estate).
+- **Scopes:**
+  - `Desk.tickets.READ`
+  - `Desk.contacts.READ`
+  - `Desk.basic.READ` *(baseline scope Desk requires for most API calls)*
+
+Read scopes only. The application has no route that writes to Desk, so a write
+scope would grant reach it never uses.
+
+To find the Desk organisation id: Zoho Desk → **Setup → Developer Space**, or
+`GET https://desk.zoho.eu/api/v1/organizations` with a token that has
+`Desk.basic.READ`. It is a different id from `ZOHO_BOOKS_ORG_ID`.
+
 ## 3a. Deploying from GitHub (recommended)
 
 `.github/workflows/deploy.yml` is ready to go. It mirrors the workflow already
@@ -79,7 +101,7 @@ git push -u origin main
 
 | Job | Trigger | Does |
 |---|---|---|
-| `verify` | every push **and** pull request | installs deps, runs the 32 backend tests, builds the client, and greps the bundle for credential-shaped strings |
+| `verify` | every push **and** pull request | installs deps, runs the 54 backend tests, builds the client, and greps the bundle for credential-shaped strings |
 | `deploy` | pushes to `main` only, and only if `verify` passed | bumps the client version, rebuilds, deploys functions + client, then smoke-tests |
 
 Three details worth knowing:
@@ -103,7 +125,7 @@ a production org.
 
 ```bash
 cd ~/Desktop/zylker-academy-app/functions/zylker_api
-npm test                     # 23 offline tests; all should pass
+npm test                     # 54 offline tests; all should pass
 
 cd ~/Desktop/zylker-academy-app/client
 npm install
@@ -185,10 +207,12 @@ logic; these cover the platform.
 17. Finance loads invoices; Next/Previous page through them; open one and confirm line items.
 18. Open the Student 360 for a student with a Books customer → the invoice card states how the link was made ("stored Books customer id" or "exact email match").
 19. Temporarily break Books (clear `ZOHO_BOOKS_ORG_ID`, redeploy) → the dashboard CRM cards still load and the Books cards read "Not available"; Student 360 still renders. Restore it afterwards.
+20. Open the Student 360 Support tab for a student with a Desk contact → the ticket card states how the link was made, and the tab count matches the open-ticket count shown on the Overview tab. Support (`/tickets`) lists and paginates.
+21. Temporarily break Desk (clear `ZOHO_DESK_ORG_ID`, redeploy) → the dashboard and Student 360 still render, the Support KPIs and connection dot read "Not available" / "Unavailable", and nothing else on the page is affected. Restore it afterwards.
 
 **Client bundle**
 
-20. `grep -aiE 'client_secret|refresh_token|access_token|1000\.[a-f0-9]{32}' client/dist/assets/*.js` → no matches. (Verified clean at build time in this session.)
+22. `grep -aiE 'client_secret|refresh_token|access_token|1000\.[a-f0-9]{32}' client/dist/assets/*.js` → no matches. (Verified clean at build time in this session.)
 
 ## 6. Assigning roles later
 
@@ -232,4 +256,15 @@ is decided.
   therefore falls to exact normalised email. The code already reads a stored id
   first and will start using it the day such a field is added, with no code
   change. Adding it is a CRM metadata change and I have not made one.
-- **Learn and Books are read-only** in this phase, by design.
+- **Learn, Books and Desk are read-only** in this phase, by design.
+- **The Support ticket list filters by `statusType`** (Open / Closed / On Hold —
+  Desk's own fixed enum), not by the organisation's custom status labels.
+  Custom status names are not resolved live because doing so would need the
+  `Desk.settings.READ` scope, which the connection deliberately does not carry.
+- **No Desk contact id field exists on CRM Contacts** — this has not been
+  verified against this org's live metadata (unlike the equivalent Books
+  claim above, which was checked directly). Student-to-Desk matching
+  therefore falls to exact normalised email until `Zoho_Desk_Contact_ID` or
+  `Desk_Contact_ID` is confirmed to exist or is added. The code already reads
+  a stored id first and will start using it the day such a field is added,
+  with no code change.

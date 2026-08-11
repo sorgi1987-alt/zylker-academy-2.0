@@ -23,6 +23,8 @@ import LearningEnrolmentDetail from './pages/LearningEnrolmentDetail.jsx';
 import LearningSyncLog from './pages/LearningSyncLog.jsx';
 import Invoices from './pages/Invoices.jsx';
 import InvoiceDetail from './pages/InvoiceDetail.jsx';
+import Tickets from './pages/Tickets.jsx';
+import TicketDetail from './pages/TicketDetail.jsx';
 import IntegrationStatus from './pages/IntegrationStatus.jsx';
 import { Loading } from './components/Ui.jsx';
 import { Shell, NAV } from './components/Shell.jsx';
@@ -108,6 +110,9 @@ function AppShell() {
 
           <Route path="/invoices" element={<Guarded permission="invoice:read"><Invoices /></Guarded>} />
           <Route path="/invoices/:id" element={<Guarded permission="invoice:read"><InvoiceDetail /></Guarded>} />
+
+          <Route path="/tickets" element={<Guarded permission="ticket:read"><Tickets /></Guarded>} />
+          <Route path="/tickets/:id" element={<Guarded permission="ticket:read"><TicketDetail /></Guarded>} />
 
           <Route path="/integration" element={<Guarded permission="integration:read"><IntegrationStatus /></Guarded>} />
 

@@ -18,6 +18,7 @@ const perms = require('./permissions');
 const identity = require('./identity');
 const writes = require('./writes');
 const books = require('./books');
+const desk = require('./desk');
 const lms = require('./lms');
 const attention = require('./attention');
 
@@ -102,6 +103,7 @@ const wrap = (fn) => (req, res) =>
     if (err instanceof writes.AppError) return fail(res, err.status, err.code, err.message);
     if (err instanceof lms.LmsError) return fail(res, err.status, err.code, err.message, 'lms');
     if (err instanceof books.BooksNotConfigured) return fail(res, 503, err.code, err.message, 'books');
+    if (err instanceof desk.DeskNotConfigured) return fail(res, 503, err.code, err.message, 'desk');
     const s = z.safeError(err, err.__service || 'zoho');
     // Never surface the upstream body — it can echo tokens or CRM metadata.
     return fail(res, s.status >= 400 && s.status < 600 ? s.status : 502,
@@ -266,6 +268,69 @@ async function studentInvoices(req, studentRaw, student) {
   } catch (err) {
     return { status: 'unavailable', match: null, invoices: [], outstandingBalance: null,
       detail: z.safeError(err, 'books').detail };
+  }
+}
+
+/* ----------------------- student to Desk matching ----------------------- */
+
+/**
+ * Resolves the Zoho Desk contact for a student, following the same priority
+ * order as resolveBooksCustomer: a stored identifier first, then an exact
+ * normalised email match, and never a name match. An ambiguous email match
+ * shows no tickets rather than guessing which contact is the right one — an
+ * unresolved link is recoverable, showing someone else's support history is
+ * not.
+ */
+const DESK_ID_FIELDS = ['Zoho_Desk_Contact_ID', 'Desk_Contact_ID'];
+
+async function resolveDeskContact(req, studentRaw, student) {
+  for (const f of DESK_ID_FIELDS) {
+    const v = studentRaw && studentRaw[f];
+    if (v) {
+      return { contactId: String(v), matchedOn: 'crm-field', field: f, ambiguous: false, candidates: [] };
+    }
+  }
+
+  if (!student.email) {
+    return { contactId: null, matchedOn: null, ambiguous: false, candidates: [], reason: 'The student record has no email address.' };
+  }
+  const found = await desk.findContactsByEmail(z, req, student.email);
+  if (found.length === 1) {
+    return { contactId: found[0].id, matchedOn: 'email', ambiguous: false, candidates: found };
+  }
+  if (found.length > 1) {
+    return {
+      contactId: null, matchedOn: null, ambiguous: true, candidates: found,
+      reason: `${found.length} Zoho Desk contacts share this email address. Link the correct one before tickets can be shown.`
+    };
+  }
+  return { contactId: null, matchedOn: null, ambiguous: false, candidates: [], reason: 'No Zoho Desk contact matches this email address.' };
+}
+
+/** Desk section for a student. Never throws: an outage must not break the page. */
+async function studentTickets(req, studentRaw, student) {
+  if (!cfg.desk.organizationId) {
+    return { status: 'not_configured', match: null, tickets: [], openCount: null,
+      detail: 'Zoho Desk is not configured for this deployment.' };
+  }
+  try {
+    const match = await resolveDeskContact(req, studentRaw, student);
+    if (!match.contactId) {
+      return { status: match.ambiguous ? 'ambiguous' : 'unmatched', match, tickets: [], openCount: null, detail: match.reason || null };
+    }
+    const r = await desk.listTickets(z, req, { contactId: match.contactId, perPage: 50 });
+    const openCount = r.tickets.filter((t) => t.statusType !== 'Closed').length;
+    return {
+      status: 'matched',
+      match,
+      tickets: r.tickets,
+      openCount,
+      hasMore: r.hasMore,
+      detail: null
+    };
+  } catch (err) {
+    return { status: 'unavailable', match: null, tickets: [], openCount: null,
+      detail: z.safeError(err, 'desk').detail };
   }
 }
 
@@ -453,17 +518,23 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
   // label on the card says which one this is.
   const conversionRate = A.length ? Math.round((enrolledCount / A.length) * 1000) / 10 : null;
 
-  // The LMS connector and Books are settled independently and never rejected,
-  // so a failure in either degrades one card instead of the whole dashboard.
-  const [lmsStatus, booksTotals, booksHealth] = await Promise.all([
+  // The LMS connector, Books and Desk are settled independently and never
+  // rejected, so a failure in any one degrades one card instead of the whole
+  // dashboard.
+  const [lmsStatus, booksTotals, booksHealth, deskTotals, deskHealth] = await Promise.all([
     lms.status(req),
     cfg.books.organizationId
       ? books.invoiceTotals(z, req).catch((err) => ({ error: z.safeError(err, 'books') }))
       : Promise.resolve(null),
-    books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+    books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
+    cfg.desk.organizationId
+      ? desk.ticketTotals(z, req).catch((err) => ({ error: z.safeError(err, 'desk') }))
+      : Promise.resolve(null),
+    desk.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
   ]);
 
   const booksOk = booksTotals && !booksTotals.error;
+  const deskOk = deskTotals && !deskTotals.error;
   const lmsOk = lmsStatus && lmsStatus.status === 'connected' && lmsStatus.counts;
 
   ok(res, {
@@ -532,6 +603,16 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
         currency: booksOk ? booksTotals.currency : null,
         source: 'books', unavailable: !booksOk,
         partial: booksOk ? booksTotals.truncated === true : false
+      },
+      openTickets: {
+        value: deskOk ? deskTotals.openCount : null,
+        source: 'desk', unavailable: !deskOk,
+        partial: deskOk ? deskTotals.truncated === true : false
+      },
+      overdueTickets: {
+        value: deskOk ? deskTotals.overdueCount : null,
+        source: 'desk', unavailable: !deskOk,
+        partial: deskOk ? deskTotals.truncated === true : false
       }
     },
     applicationsByStage: groupBy(A, (a) => a.stage),
@@ -572,6 +653,7 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     // object, when Books did not answer — so the card can say so.
     invoiceAgeing: booksOk ? booksTotals.ageing : null,
     invoiceAgeingCurrency: booksOk ? booksTotals.currency : null,
+    ticketsByStatus: deskOk ? deskTotals.byStatus : null,
     intakeCapacity: capacityWatch.slice(0, 6).map((i) => ({
       id: i.id,
       name: i.name,
@@ -589,7 +671,8 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     connections: {
       crm: { status: 'connected', label: 'Connected' },
       lms: { status: lmsStatus.status, label: lmsStatus.label, detail: lmsStatus.detail || null, demonstrationDataset: true },
-      books: booksHealth
+      books: booksHealth,
+      desk: deskHealth
     }
   });
 });
@@ -618,16 +701,21 @@ R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
     return acc;
   }, {});
 
-  const [lmsStatus, lmsEnrolments, booksTotals] = await Promise.all([
+  const [lmsStatus, lmsEnrolments, booksTotals, deskTotals] = await Promise.all([
     lms.status(req).catch(() => null),
     lms.listEnrolments(req).catch(() => null),
     cfg.books.organizationId
       ? books.invoiceTotals(z, req).catch(() => null)
+      : Promise.resolve(null),
+    cfg.desk.organizationId
+      ? desk.ticketTotals(z, req).catch(() => null)
       : Promise.resolve(null)
   ]);
 
   const booksState = !cfg.books.organizationId ? 'not_configured'
     : booksTotals ? 'ok' : 'unavailable';
+  const deskState = !cfg.desk.organizationId ? 'not_configured'
+    : deskTotals ? 'ok' : 'unavailable';
 
   const items = attention.build({
     applications: applications.map(n.application),
@@ -639,6 +727,8 @@ R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
     lmsStatus,
     booksTotals,
     booksState,
+    deskTotals,
+    deskState,
     now: Date.now()
   });
 
@@ -651,7 +741,8 @@ R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
     sources: {
       crm: 'ok',
       lms: lmsStatus && lmsStatus.status === 'connected' ? 'ok' : 'unavailable',
-      books: booksState
+      books: booksState,
+      desk: deskState
     }
   });
 });
@@ -712,11 +803,12 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
   const intakeIds = [...new Set(enrolments.concat(applications)
     .map((r) => r.intake && r.intake.id).filter(Boolean))];
 
-  const [progRows, intakeRows, lmsLearning, invoices, activity] = await Promise.all([
+  const [progRows, intakeRows, lmsLearning, invoices, tickets, activity] = await Promise.all([
     programmeIds.length ? listProgrammes(req, `id in (${programmeIds.join(',')})`) : Promise.resolve([]),
     intakeIds.length ? listIntakes(req, `id in (${intakeIds.join(',')})`) : Promise.resolve([]),
     lms.enrolmentsForStudent(req, id).catch(() => []),
     studentInvoices(req, raw, student),
+    studentTickets(req, raw, student),
     auth.readActivity(req, { entityType: 'student', recordId: id, limit: 15 }).catch(() => [])
   ]);
 
@@ -737,6 +829,7 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
     programmes,
     intakes: intakeRows.map(n.intake),
     invoices,
+    tickets,
     activity,
     learning,
     lmsDemonstrationDataset: true
@@ -1408,6 +1501,44 @@ R('/api/students/:id/invoices', perms.P.INVOICE_READ, async (req, res) => {
   ok(res, result, { source: 'books', readOnly: true });
 });
 
+/* --------------------------- Zoho Desk (read) --------------------------- */
+
+R('/api/tickets', perms.P.TICKET_READ, async (req, res) => {
+  const r = await desk.listTickets(z, req, {
+    page: req.query.page,
+    perPage: req.query.perPage,
+    statusType: req.query.statusType,
+    contactId: req.query.contactId,
+    search: req.query.search
+  });
+  ok(res, r.tickets, {
+    page: r.page,
+    perPage: r.perPage,
+    // Desk does not return a total count or an explicit "more pages" flag, so
+    // the client is told whether a full page was returned rather than being
+    // given an invented total.
+    hasMore: r.hasMore,
+    statusTypes: desk.STATUS_TYPES.map((s) => ({ value: s, label: s })),
+    source: 'desk',
+    readOnly: true
+  });
+});
+
+R('/api/tickets/:id', perms.P.TICKET_READ, async (req, res) => {
+  const ticket = await desk.getTicket(z, req, req.params.id);
+  if (!ticket) return fail(res, 404, 'NOT_FOUND', 'No ticket matches that id.');
+  ok(res, ticket, { source: 'desk', readOnly: true });
+});
+
+R('/api/students/:id/tickets', perms.P.TICKET_READ, async (req, res) => {
+  const id = String(req.params.id).replace(/[^0-9]/g, '');
+  if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
+  const rows = await listStudents(req, `id = ${id}`);
+  if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No student matches that id.');
+  const result = await studentTickets(req, rows[0], n.student(rows[0]));
+  ok(res, result, { source: 'desk', readOnly: true });
+});
+
 /* --------------------------- integration status ------------------------ */
 
 R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
@@ -1419,9 +1550,10 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
     crmStatus = { status: 'unavailable', detail: z.safeError(err, 'crm').detail };
   }
 
-  const [lmsStatus, booksHealth] = await Promise.all([
+  const [lmsStatus, booksHealth, deskHealth] = await Promise.all([
     lms.status(req),
-    books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+    books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
+    desk.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
   ]);
 
   let students = [];
@@ -1454,13 +1586,19 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
         demonstrationDataset: true,
         tables: lmsStatus.tables || cfg.lms
       },
-      books: { ...booksHealth, readOnly: true }
+      books: { ...booksHealth, readOnly: true },
+      desk: { ...deskHealth, readOnly: true }
     },
     lms: lmsStatus,
     booksConfig: {
       organizationId: cfg.books.organizationId,
       baseUrl: cfg.books.baseUrl,
       configured: Boolean(cfg.books.organizationId)
+    },
+    deskConfig: {
+      organizationId: cfg.desk.organizationId,
+      baseUrl: cfg.desk.baseUrl,
+      configured: Boolean(cfg.desk.organizationId)
     },
     counts: {
       programmes: programmes.length,
@@ -1489,6 +1627,7 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
     notes: [
       'External LMS information is a normalized demonstration dataset stored in Zoho Catalyst. No connection is made to any LMS product.',
       'Zoho Books is read-only in this phase: invoices cannot be created, edited, paid or deleted from this application.',
+      'Zoho Desk is read-only: tickets cannot be created, replied to or closed from this application.',
       'Six LMS fields have no equivalent on the CRM Enrolments module, so their values are held in Catalyst and shown from there. See recommendedCrmFields.'
     ]
   });
@@ -1528,7 +1667,7 @@ R('/api/diag', perms.P.INTEGRATION_READ, async (req, res) => {
       attempts: req.__zylkerAuthAttempts || [],
       principal: { id: req.principal.id, email: req.principal.email, role: req.principal.role }
     },
-    connections: null, crmProbe: null, lmsProbe: null, booksProbe: null
+    connections: null, crmProbe: null, lmsProbe: null, booksProbe: null, deskProbe: null
   };
   try { out.connections = await z.probe(req); }
   catch (err) { out.connections = { error: z.redact(err && err.message) }; }
@@ -1551,12 +1690,15 @@ R('/api/diag', perms.P.INTEGRATION_READ, async (req, res) => {
   } catch (err) { out.lmsProbe = { ok: false, detail: z.redact(err && err.message) }; }
 
   out.booksProbe = await books.health(z, req).catch((err) => ({ status: 'unavailable', detail: z.redact(err && err.message) }));
+  out.deskProbe = await desk.health(z, req).catch((err) => ({ status: 'unavailable', detail: z.redact(err && err.message) }));
 
   out.config = {
     crmBaseUrl: cfg.crm.baseUrl,
     booksBaseUrl: cfg.books.baseUrl,
     booksOrgConfigured: Boolean(cfg.books.organizationId),
-    connections: { crm: cfg.crm.connection, books: cfg.books.connection },
+    deskBaseUrl: cfg.desk.baseUrl,
+    deskOrgConfigured: Boolean(cfg.desk.organizationId),
+    connections: { crm: cfg.crm.connection, books: cfg.books.connection, desk: cfg.desk.connection },
     lmsTables: cfg.lms
   };
   return ok(res, out);

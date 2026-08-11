@@ -13,6 +13,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const attention = require('../attention.js');
 const books = require('../books.js');
+const desk = require('../desk.js');
 
 const NOW = Date.parse('2026-07-30T12:00:00Z');
 const daysAgo = (n) => new Date(NOW - n * 86400000).toISOString().slice(0, 10);
@@ -20,9 +21,9 @@ const inDays = (n) => new Date(NOW + n * 86400000).toISOString().slice(0, 10);
 
 const find = (items, key) => items.find((i) => i.key === key) || null;
 
-/** Minimal build with the LMS and Books halves switched off. */
+/** Minimal build with the LMS, Books and Desk halves switched off. */
 const crmOnly = (over) => attention.build({
-  lmsEnrolments: null, lmsStatus: null, booksState: 'not_configured', now: NOW, ...over
+  lmsEnrolments: null, lmsStatus: null, booksState: 'not_configured', deskState: 'not_configured', now: NOW, ...over
 });
 
 test('an empty estate produces no items at all', () => {
@@ -126,6 +127,7 @@ test('a learner who never reported activity is not counted as having gone quiet'
       { id: '4', lmsStatus: 'Completed', lastActivityTime: daysAgo(200), externalLearnerId: 'L4' }
     ],
     booksState: 'not_configured',
+    deskState: 'not_configured',
     now: NOW
   });
   const item = find(items, 'learners-no-recent-activity');
@@ -141,6 +143,8 @@ test('an unavailable source becomes a named item, never a silent zero', () => {
     lmsStatus: { status: 'unavailable', detail: 'Data Store timed out' },
     booksState: 'unavailable',
     booksTotals: null,
+    deskState: 'unavailable',
+    deskTotals: null,
     now: NOW
   });
 
@@ -151,6 +155,7 @@ test('an unavailable source becomes a named item, never a silent zero', () => {
   assert.match(lms.explanation, /Data Store timed out/);
 
   assert.ok(find(items, 'books-unavailable'), 'an unreachable Books must be stated');
+  assert.ok(find(items, 'desk-unavailable'), 'an unreachable Desk must be stated');
 
   // The CRM item still renders — one integration failing costs one line.
   assert.ok(find(items, 'applications-awaiting-review'));
@@ -160,14 +165,18 @@ test('an unavailable source becomes a named item, never a silent zero', () => {
 });
 
 test('a deployment with no Books org raises nothing — that is a valid configuration', () => {
-  const items = attention.build({ booksState: 'not_configured', lmsEnrolments: null, lmsStatus: null, now: NOW });
+  const items = attention.build({
+    booksState: 'not_configured', deskState: 'not_configured', lmsEnrolments: null, lmsStatus: null, now: NOW
+  });
   assert.equal(find(items, 'books-unavailable'), null);
   assert.equal(find(items, 'overdue-invoices'), null);
+  assert.equal(find(items, 'desk-unavailable'), null);
+  assert.equal(find(items, 'tickets-overdue'), null);
 });
 
 test('overdue invoices carry their balance, oldest invoice and partial flag', () => {
   const items = attention.build({
-    lmsEnrolments: null, lmsStatus: null, booksState: 'ok', now: NOW,
+    lmsEnrolments: null, lmsStatus: null, booksState: 'ok', deskState: 'not_configured', now: NOW,
     booksTotals: {
       overdueCount: 3, overdueBalance: 4210.5, currency: 'EUR', truncated: true,
       oldestOverdue: { id: '77', invoiceNumber: 'INV-0077', dueDate: daysAgo(120), daysOverdue: 120 }
@@ -183,6 +192,24 @@ test('overdue invoices carry their balance, oldest invoice and partial flag', ()
   assert.equal(item.to, '/invoices?status=overdue');
 });
 
+test('overdue tickets carry their oldest ticket and partial flag', () => {
+  const items = attention.build({
+    lmsEnrolments: null, lmsStatus: null, booksState: 'not_configured', deskState: 'ok', now: NOW,
+    deskTotals: {
+      overdueCount: 2, truncated: true,
+      oldestOverdue: { id: '55', ticketNumber: 'TCK-0055', subject: 'Cannot access course', dueDate: daysAgo(10), daysOverdue: 10 }
+    }
+  });
+  const item = find(items, 'tickets-overdue');
+  assert.equal(item.severity, 'critical');
+  assert.equal(item.count, 2);
+  assert.equal(item.partial, true);
+  assert.match(item.explanation, /partial figure/);
+  assert.equal(item.oldest.label, 'Cannot access course');
+  assert.equal(item.oldest.to, '/tickets/55');
+  assert.equal(item.to, '/tickets?statusType=Open');
+});
+
 test('the queue is ordered critical first, then by size', () => {
   const items = attention.build({
     applications: [
@@ -190,7 +217,7 @@ test('the queue is ordered critical first, then by size', () => {
       { id: '2', stage: 'Submitted', applicationDate: daysAgo(1) },
       { id: '3', stage: 'Offer Issued', expectedDecisionDate: daysAgo(1) }
     ],
-    lmsEnrolments: null, lmsStatus: null, booksState: 'not_configured', now: NOW
+    lmsEnrolments: null, lmsStatus: null, booksState: 'not_configured', deskState: 'not_configured', now: NOW
   });
   assert.equal(items[0].key, 'offers-awaiting-response', 'the critical item sorts first');
   assert.equal(attention.worstSeverity(items), 'critical');
@@ -206,4 +233,13 @@ test('invoice ageing buckets money by how far past due it is', () => {
   assert.equal(bucket(31), '31–60 days');
   assert.equal(bucket(90), '61–90 days');
   assert.equal(bucket(91), 'Over 90 days');
+});
+
+test('a ticket is overdue only when open, past its due date, and a due date exists at all', () => {
+  const isOverdue = desk._internals.isOverdue;
+  const now = Date.parse('2026-07-30T12:00:00Z');
+  assert.equal(isOverdue({ statusType: 'Open', dueDate: '2026-07-01' }, now), true);
+  assert.equal(isOverdue({ statusType: 'Open', dueDate: '2026-08-15' }, now), false, 'not yet due');
+  assert.equal(isOverdue({ statusType: 'Open', dueDate: null }, now), false, 'no due date is not evidence of lateness');
+  assert.equal(isOverdue({ statusType: 'Closed', dueDate: '2026-07-01' }, now), false, 'a closed ticket is not overdue');
 });
