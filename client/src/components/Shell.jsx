@@ -7,6 +7,7 @@ import { api } from '../api.js';
 import { useDebounced } from '../useApi.js';
 import { useT } from '../i18n/I18nContext.jsx';
 import LanguageToggle from '../i18n/LanguageToggle.jsx';
+import Logo from './Logo.jsx';
 import { Modal } from './Ui.jsx';
 
 /* ============================== icons ================================== */
@@ -498,8 +499,13 @@ function Sidebar({ links, collapsed, onToggleCollapse, mobileOpen, onCloseMobile
       >
         <div className="sidebar-top">
           <div className="sidebar-brand">
-            <p className="brand">{collapsed ? 'ZA' : 'Zylker Academy'}</p>
-            {!collapsed && <p className="brand-sub">{t('shell.brandSub')}</p>}
+            <Logo size={collapsed ? 26 : 30} />
+            {!collapsed && (
+              <div className="brand-text">
+                <p className="brand">Zylker Academy</p>
+                <p className="brand-sub">{t('shell.brandSub')}</p>
+              </div>
+            )}
           </div>
           <button type="button" className="icon-btn collapse-btn" onClick={onToggleCollapse}
             aria-label={collapsed ? t('shell.expandNavigation') : t('shell.collapseNavigation')}

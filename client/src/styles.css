@@ -1,18 +1,24 @@
 :root{
   color-scheme: light;
-  --bg:#f6f8fb; --surface:#ffffff; --line:#dbe3ee; --line-soft:#eef2f7;
-  --ink:#12253d; --ink-2:#4a5f7a; --ink-3:#6b7d95;
-  --brand:#1f4e79; --brand-2:#2f6da8; --brand-soft:#eaf1f9;
-  --ok:#1c6b4a; --ok-soft:#e4f3ec;
-  --warn:#8a5a00; --warn-soft:#fdf1dc;
-  --stop:#9b2226; --stop-soft:#fbe9e9;
-  --info:#3a4a8a; --info-soft:#eceffa;
-  --radius:10px; --shadow:0 1px 2px rgba(18,37,61,.06),0 4px 14px rgba(18,37,61,.05);
-  --focus:#0b64c0;
+  --bg:#f5f7fb; --surface:#ffffff; --line:#e3e8f2; --line-soft:#eef1f8;
+  --ink:#12172b; --ink-2:#48506b; --ink-3:#6c7590;
+  /* A richer, more saturated blue than the old navy — still calm enough for an
+     admin console, but with some life in it. --brand-2 carries the mid-tone
+     work (bars, links, hovers); --brand-dark only shows up on hover states. */
+  --brand:#0b5fff; --brand-2:#3d8bff; --brand-soft:#eef4ff; --brand-dark:#0a4fd9;
+  --ok:#15803d; --ok-soft:#e7f7ee;
+  --warn:#b45309; --warn-soft:#fdf3e0;
+  --stop:#dc2626; --stop-soft:#fdecec;
+  --info:#4338ca; --info-soft:#eef0fd;
+  --radius:14px; --radius-sm:10px;
+  --shadow:0 1px 2px rgba(15,23,42,.04),0 10px 28px rgba(15,23,42,.07);
+  --shadow-lg:0 24px 64px rgba(15,23,42,.18);
+  --focus:#0b5fff;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
-  font:15px/1.55 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
 a{color:var(--brand-2)}
 :focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:4px}
 
@@ -43,7 +49,7 @@ a{color:var(--brand-2)}
 /* --- modal --- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(16,24,40,.45);display:flex;align-items:flex-start;
   justify-content:center;padding:40px 16px;z-index:50;overflow:auto}
-.modal{background:#fff;border-radius:12px;width:100%;max-width:520px;box-shadow:0 24px 64px rgba(16,24,40,.24)}
+.modal{background:#fff;border-radius:18px;width:100%;max-width:520px;box-shadow:var(--shadow-lg)}
 .modal.wide{max-width:760px}
 .modal-h{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #eef0f4}
 .modal-h h2{margin:0;font-size:16px}
@@ -64,12 +70,15 @@ a{color:var(--brand-2)}
 .user-menu-item{display:block;width:100%;text-align:left;padding:10px 12px;background:none;border:0;
   font:inherit;font-size:13px;cursor:pointer}
 .user-menu-item:hover{background:#f5f6f8}
-.sidebar{background:var(--brand);color:#fff;padding:18px 14px;position:sticky;top:0;height:100vh;
+.sidebar{background:linear-gradient(190deg,#1560ff 0%,var(--brand) 46%,#083ec7 100%);
+  color:#fff;padding:18px 14px;position:sticky;top:0;height:100vh;
   overflow:auto;display:flex;flex-direction:column}
 .sidebar-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:22px}
-.sidebar-brand{min-width:0}
-.brand{font-size:17px;font-weight:700;letter-spacing:.2px;margin:0 0 2px}
-.brand-sub{font-size:12px;color:#b9d2e8;margin:0}
+.sidebar-brand{min-width:0;display:flex;align-items:center;gap:10px}
+.brand-text{min-width:0}
+.brand{font-size:16px;font-weight:700;letter-spacing:-.1px;margin:0;white-space:nowrap}
+.brand-sub{font-size:11px;color:#c3d8ff;margin:1px 0 0}
+.logo-mark{flex-shrink:0;display:block;border-radius:9px;box-shadow:0 2px 6px rgba(4,20,60,.35)}
 .nav{display:flex;flex-direction:column;gap:2px}
 .nav a{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;
   color:#d8e6f4;text-decoration:none;font-weight:500}
@@ -132,8 +141,8 @@ a{color:var(--brand-2)}
 /* ---------- popup menus ---------- */
 .pop-wrap{position:relative}
 .pop{position:absolute;left:0;top:calc(100% + 6px);min-width:212px;background:#fff;
-  border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 28px rgba(18,37,61,.14);
-  z-index:45;overflow:hidden;padding:4px}
+  border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow-lg);
+  z-index:45;overflow:hidden;padding:5px}
 .pop.right{left:auto;right:0}
 .pop-item{display:block;width:100%;text-align:left;padding:9px 11px;background:none;border:0;
   font:inherit;font-size:14px;color:var(--ink);text-decoration:none;cursor:pointer;border-radius:6px}
@@ -145,8 +154,8 @@ a{color:var(--brand-2)}
 .gsearch{position:relative;flex:1 1 320px;max-width:560px;min-width:0}
 /* Raised specificity so these win over the generic input[type=search] rule. */
 .gsearch input[type=search]{width:100%;flex:none;min-width:0;padding:9px 52px 9px 36px;
-  border:1px solid var(--line);border-radius:9px;font-size:14px;background:var(--bg);
-  color:var(--ink);min-height:38px}
+  border:1px solid var(--line);border-radius:var(--radius-sm);font-size:14px;background:var(--bg);
+  color:var(--ink);min-height:38px;transition:background .12s,border-color .12s}
 .gsearch input[type=search]:focus{background:#fff}
 .gsearch-ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink-3);
   display:inline-flex;pointer-events:none}
@@ -154,7 +163,7 @@ a{color:var(--brand-2)}
   color:var(--ink-3);border:1px solid var(--line);border-radius:5px;padding:1px 5px;
   background:#fff;pointer-events:none;font-family:inherit}
 .gsearch-pop{position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;
-  border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 36px rgba(18,37,61,.16);
+  border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lg);
   z-index:45;max-height:min(70vh,460px);overflow:auto;padding:6px}
 .gsearch-msg{margin:0;padding:14px 12px;font-size:13px;color:var(--ink-3)}
 .gsearch-msg.err{color:var(--stop)}
@@ -177,7 +186,10 @@ a{color:var(--brand-2)}
 .card-h{padding:14px 18px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:center;gap:12px}
 .card-h h2{font-size:15px;margin:0;font-weight:650}
 .card-b{padding:16px 18px}
-.grid{display:grid;gap:16px}
+/* align-items:start so a row of cards with different content lengths keeps
+   each card at its own natural height instead of all stretching to match
+   the tallest sibling — the default grid behaviour reads as misaligned. */
+.grid{display:grid;gap:16px;align-items:start}
 .g-kpi{grid-template-columns:repeat(auto-fit,minmax(184px,1fr))}
 .g-2{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
 .g-3{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
@@ -228,8 +240,9 @@ tbody tr:hover{background:#fafcfe}
 .subnav a.active{background:var(--brand-soft);color:var(--brand);border-color:var(--line)}
 
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-input[type=search],select{padding:9px 11px;border:1px solid var(--line);border-radius:8px;
-  font-size:14px;background:#fff;color:var(--ink);min-height:38px}
+input[type=search],select{padding:9px 11px;border:1px solid var(--line);border-radius:var(--radius-sm);
+  font-size:14px;background:#fff;color:var(--ink);min-height:38px;transition:border-color .12s}
+input[type=search]:focus,select:focus{border-color:var(--brand-2)}
 input[type=search]{flex:1;min-width:220px}
 
 .state{padding:40px 20px;text-align:center;color:var(--ink-3)}
@@ -237,8 +250,10 @@ input[type=search]{flex:1;min-width:220px}
 .state p{margin:0;font-size:14px}
 .state.err h3{color:var(--stop)}
 .btn{display:inline-block;margin-top:14px;padding:8px 15px;border:1px solid var(--line);
-  background:#fff;border-radius:8px;font-size:14px;font-weight:600;color:var(--brand);cursor:pointer}
+  background:#fff;border-radius:var(--radius-sm);font-size:14px;font-weight:600;color:var(--brand);
+  cursor:pointer;transition:background .12s,border-color .12s,transform .1s}
 .btn:hover{background:var(--brand-soft)}
+.btn:active{transform:scale(.98)}
 .skel{height:12px;background:linear-gradient(90deg,#eef2f7 25%,#e3eaf2 37%,#eef2f7 63%);
   background-size:400% 100%;animation:sh 1.3s ease-in-out infinite;border-radius:5px;margin:9px 0}
 @keyframes sh{0%{background-position:100% 50%}100%{background-position:0 50%}}
@@ -300,7 +315,7 @@ input[type=search]{flex:1;min-width:220px}
 
 
 .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
-.btn.primary:hover{background:var(--brand-2)}
+.btn.primary:hover{background:var(--brand-dark);border-color:var(--brand-dark)}
 .btn.danger{color:var(--stop);border-color:#e6c3c4}
 .btn.danger:hover{background:var(--stop-soft)}
 
@@ -312,7 +327,9 @@ input[type=search]{flex:1;min-width:220px}
 .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
 .field label{font-size:13px;font-weight:600;color:var(--ink-2)}
 .field input,.field select,.field textarea{padding:9px 11px;border:1px solid var(--line);
-  border-radius:8px;font:inherit;font-size:14px;background:#fff;color:var(--ink);width:100%}
+  border-radius:var(--radius-sm);font:inherit;font-size:14px;background:#fff;color:var(--ink);width:100%;
+  transition:border-color .12s}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--brand-2)}
 .field input:disabled,.field select:disabled{background:#f4f6f9;color:var(--ink-3)}
 .field-hint{font-size:12px;color:var(--ink-3)}
 .field-error{font-size:12px;color:var(--stop);font-weight:600}
@@ -341,13 +358,13 @@ input[type=search]{flex:1;min-width:220px}
    with no intrinsic size would otherwise collapse to nothing while loading.
    ========================================================================== */
 .login-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 16px;
-  background:linear-gradient(180deg,var(--brand-soft) 0%,var(--bg) 45%)}
-.login-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;
-  box-shadow:var(--shadow);padding:28px;width:100%;max-width:460px;margin:0 auto;position:relative}
-.login-card .lang-toggle{position:absolute;top:18px;right:18px}
-.login-head{margin-bottom:14px}
-.login-head .brand{margin:0;font-size:22px}
-.login-head .brand-sub{margin:2px 0 0;color:var(--ink-3);font-size:14px}
+  background:radial-gradient(ellipse 900px 600px at 50% -10%,var(--brand-soft) 0%,var(--bg) 55%)}
+.login-card{background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  box-shadow:var(--shadow-lg);padding:32px;width:100%;max-width:460px;margin:0 auto;position:relative}
+.login-card .lang-toggle{position:absolute;top:20px;right:20px}
+.login-head{margin-bottom:16px;display:flex;align-items:center;gap:12px}
+.login-head .brand{margin:0;font-size:20px;color:var(--ink);letter-spacing:-.2px}
+.login-head .brand-sub{margin:1px 0 0;color:var(--ink-3);font-size:13px}
 .login-intro{color:var(--ink-2);font-size:14px;margin:0 0 18px}
 .login-embed{min-height:320px}
 .login-status{margin:8px 0 0;font-size:13px}

@@ -3,6 +3,7 @@ import { useAuth } from '../AuthContext.jsx';
 import * as catalystAuth from '../catalystAuth.js';
 import { useT } from '../i18n/I18nContext.jsx';
 import LanguageToggle from '../i18n/LanguageToggle.jsx';
+import Logo from '../components/Logo.jsx';
 
 const SIGNIN_ELEMENT_ID = 'catalyst-signin';
 
@@ -110,8 +111,11 @@ export default function Login() {
       <main className="login-card">
         <LanguageToggle />
         <header className="login-head">
-          <p className="brand">Zylker Academy</p>
-          <p className="brand-sub">{t('login.brandSub')}</p>
+          <Logo size={38} />
+          <div>
+            <p className="brand">Zylker Academy</p>
+            <p className="brand-sub">{t('login.brandSub')}</p>
+          </div>
         </header>
 
         {phase === PHASE.SERVER_REFUSED ? (

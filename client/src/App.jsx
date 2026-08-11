@@ -28,6 +28,7 @@ import Tickets from './pages/Tickets.jsx';
 import TicketDetail from './pages/TicketDetail.jsx';
 import IntegrationStatus from './pages/IntegrationStatus.jsx';
 import { Loading } from './components/Ui.jsx';
+import Logo from './components/Logo.jsx';
 import { Shell, NAV } from './components/Shell.jsx';
 
 /* ------------------------------ route guard ------------------------------ */
@@ -144,8 +145,13 @@ export default function App() {
     return (
       <div className="layout-plain">
         <div className="login-card">
-          <p className="brand">Zylker Academy</p>
-          <p className="brand-sub">{t('login.brandSub')}</p>
+          <div className="login-head">
+            <Logo size={38} />
+            <div>
+              <p className="brand">Zylker Academy</p>
+              <p className="brand-sub">{t('login.brandSub')}</p>
+            </div>
+          </div>
           <Loading rows={3} label={t('app.checkingSession')} />
         </div>
       </div>
