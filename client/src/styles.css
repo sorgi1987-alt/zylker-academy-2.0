@@ -5,7 +5,7 @@
   /* A muted, desaturated slate-blue — subdued rather than a vivid CTA blue.
      --brand-2 is the soft pastel accent (bars, links, hovers); --brand-dark
      only shows up on hover states, where something a shade deeper is needed. */
-  --brand:#4f6f9e; --brand-2:#88a7d6; --brand-soft:#eef3fa; --brand-dark:#3c5678;
+  --brand:#3d5a82; --brand-2:#6c8bc2; --brand-soft:#eaf0f8; --brand-dark:#2c4260;
   --ok:#15803d; --ok-soft:#e7f7ee;
   --warn:#b45309; --warn-soft:#fdf3e0;
   --stop:#dc2626; --stop-soft:#fdecec;
@@ -13,7 +13,7 @@
   --radius:14px; --radius-sm:10px;
   --shadow:0 1px 2px rgba(15,23,42,.04),0 10px 28px rgba(15,23,42,.07);
   --shadow-lg:0 24px 64px rgba(15,23,42,.18);
-  --focus:#4f6f9e;
+  --focus:#3d5a82;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -70,7 +70,7 @@ a{color:var(--brand-2)}
 .user-menu-item{display:block;width:100%;text-align:left;padding:10px 12px;background:none;border:0;
   font:inherit;font-size:13px;cursor:pointer}
 .user-menu-item:hover{background:#f5f6f8}
-.sidebar{background:linear-gradient(190deg,#6484b0 0%,var(--brand) 46%,#374f70 100%);
+.sidebar{background:linear-gradient(190deg,#4f6f9e 0%,var(--brand) 46%,#1f2f45 100%);
   color:#fff;padding:18px 14px;position:sticky;top:0;height:100vh;
   overflow:auto;display:flex;flex-direction:column}
 .sidebar-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:22px}
