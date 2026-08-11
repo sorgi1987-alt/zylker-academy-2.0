@@ -2,10 +2,10 @@
   color-scheme: light;
   --bg:#f5f7fb; --surface:#ffffff; --line:#e3e8f2; --line-soft:#eef1f8;
   --ink:#12172b; --ink-2:#48506b; --ink-3:#6c7590;
-  /* A richer, more saturated blue than the old navy — still calm enough for an
-     admin console, but with some life in it. --brand-2 carries the mid-tone
-     work (bars, links, hovers); --brand-dark only shows up on hover states. */
-  --brand:#0b5fff; --brand-2:#3d8bff; --brand-soft:#eef4ff; --brand-dark:#0a4fd9;
+  /* A muted, desaturated slate-blue — subdued rather than a vivid CTA blue.
+     --brand-2 is the soft pastel accent (bars, links, hovers); --brand-dark
+     only shows up on hover states, where something a shade deeper is needed. */
+  --brand:#4f6f9e; --brand-2:#88a7d6; --brand-soft:#eef3fa; --brand-dark:#3c5678;
   --ok:#15803d; --ok-soft:#e7f7ee;
   --warn:#b45309; --warn-soft:#fdf3e0;
   --stop:#dc2626; --stop-soft:#fdecec;
@@ -13,7 +13,7 @@
   --radius:14px; --radius-sm:10px;
   --shadow:0 1px 2px rgba(15,23,42,.04),0 10px 28px rgba(15,23,42,.07);
   --shadow-lg:0 24px 64px rgba(15,23,42,.18);
-  --focus:#0b5fff;
+  --focus:#4f6f9e;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);
@@ -70,7 +70,7 @@ a{color:var(--brand-2)}
 .user-menu-item{display:block;width:100%;text-align:left;padding:10px 12px;background:none;border:0;
   font:inherit;font-size:13px;cursor:pointer}
 .user-menu-item:hover{background:#f5f6f8}
-.sidebar{background:linear-gradient(190deg,#1560ff 0%,var(--brand) 46%,#083ec7 100%);
+.sidebar{background:linear-gradient(190deg,#6484b0 0%,var(--brand) 46%,#374f70 100%);
   color:#fff;padding:18px 14px;position:sticky;top:0;height:100vh;
   overflow:auto;display:flex;flex-direction:column}
 .sidebar-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:22px}
@@ -382,7 +382,12 @@ input[type=search]{flex:1;min-width:220px}
 /* --- KPI cards that link somewhere --- */
 .kpi-link{text-decoration:none;color:inherit;transition:border-color .12s,transform .12s}
 .kpi-link:hover{border-color:var(--brand-2);transform:translateY(-1px)}
-.kpi .label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* Reserves room for a two-line label (the badge can push a long one to wrap)
+   so every card in a row is the same height and the VALUE line underneath
+   lands on the same baseline across the row — align-items:start on the grid
+   only stops cards stretching to match each other, it doesn't make short and
+   long labels line up on their own. */
+.kpi .label{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;min-height:34px}
 
 /* --- lists --- */
 .plain-list{list-style:none;margin:0;padding:0}

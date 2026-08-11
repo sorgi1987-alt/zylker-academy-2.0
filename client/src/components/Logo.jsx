@@ -22,8 +22,8 @@ export default function Logo({ size = 30 }) {
         strokeLinecap="round" strokeLinejoin="round" />
       <defs>
         <linearGradient id="zylkerLogoGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#4C93FF" />
-          <stop offset="1" stopColor="#0B5FFF" />
+          <stop stopColor="#88A7D6" />
+          <stop offset="1" stopColor="#4F6F9E" />
         </linearGradient>
       </defs>
     </svg>
