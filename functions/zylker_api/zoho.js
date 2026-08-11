@@ -68,13 +68,11 @@ const CRM_CODE_MESSAGE = {
 };
 
 /**
- * Pulls the upstream's own explanation out of a 401/403 body, when it has one.
- *
- * "Not authorised" alone doesn't distinguish a missing scope from a bad org id
- * from an unlicensed account — three different fixes. Zoho's own message
- * (Desk: `{errorCode,message}`, CRM/Books: `{code,message}` or
- * `{data:[{code,message}]}`) says which, and none of these shapes carry a
- * token, so it's safe to surface redacted rather than discarded.
+ * Pulls the upstream's own explanation out of an error body, when it has one
+ * in a shape `crmErrorInfo` doesn't already recognise — Desk's `{errorCode,
+ * message}` in particular. A bare status code ("Upstream returned HTTP 422")
+ * throws away the only useful part of the response; Zoho's own message here
+ * carries no token, so it's safe to surface redacted rather than discarded.
  */
 function upstreamAuthDetail(body) {
   const row = body && Array.isArray(body.data) ? body.data[0] : body;
@@ -110,7 +108,8 @@ function safeError(err, service) {
         : `Zoho rejected the request: ${info.code}${info.field ? ` on "${info.field}"` : ''}.`;
       return { service, status: status || 502, detail, code: info.code, field: info.field };
     }
-    detail = `Upstream returned HTTP ${status}.`;
+    const extra = upstreamAuthDetail(body);
+    detail = `Upstream returned HTTP ${status}.` + (extra ? ` (${extra})` : '');
   } else {
     detail = `Request failed before a response was received: ${redact(err && err.message)}`;
   }

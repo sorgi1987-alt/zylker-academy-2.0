@@ -67,9 +67,18 @@ Console → **Integrations → Catalyst Connectors → New Connection**
   - `Desk.tickets.READ`
   - `Desk.contacts.READ`
   - `Desk.basic.READ` *(baseline scope Desk requires for most API calls)*
+  - `Desk.search.READ` *(required — Desk puts search endpoints, e.g.
+    `/contacts/search`, behind their own scope, separate from
+    `Desk.contacts.READ`. Missing this produces a `SCOPE_MISMATCH` error
+    specifically on the student-to-contact email lookup, confirmed against a
+    live deployment on 11 Aug 2026 — not a guess.)*
 
 Read scopes only. The application has no route that writes to Desk, so a write
 scope would grant reach it never uses.
+
+If you add `Desk.search.READ` to a connection that was already authorised
+without it, saving the new scope list is not enough — you must **re-authorise**
+the connection for Zoho to reissue a token that actually carries it.
 
 To find the Desk organisation id: Zoho Desk → **Setup → Developer Space**, or
 `GET https://desk.zoho.eu/api/v1/organizations` with a token that has
