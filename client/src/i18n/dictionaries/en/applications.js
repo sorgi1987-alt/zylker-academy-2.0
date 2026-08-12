@@ -24,6 +24,14 @@ export default {
       intake: 'Intake',
       applied: 'Applied',
       fee: 'Fee'
+    },
+    board: {
+      listView: 'List',
+      boardView: 'Board',
+      viewToggleLabel: 'View',
+      emptyColumn: 'No applications',
+      moveFailed: 'Could not move the application:',
+      dragHint: 'Drag a card to change its stage.'
     }
   },
   applicationDetail: {

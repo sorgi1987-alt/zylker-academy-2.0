@@ -24,6 +24,14 @@ export default {
       intake: 'Convocatoria',
       applied: 'Solicitada',
       fee: 'Tasa'
+    },
+    board: {
+      listView: 'Lista',
+      boardView: 'Tablero',
+      viewToggleLabel: 'Vista',
+      emptyColumn: 'Sin solicitudes',
+      moveFailed: 'No se pudo mover la solicitud:',
+      dragHint: 'Arrastra una tarjeta para cambiar su etapa.'
     }
   },
   applicationDetail: {
