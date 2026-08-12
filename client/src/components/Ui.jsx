@@ -193,11 +193,17 @@ const TONE = {
   Unmapped: 'warn',
   Invited: 'info',
   'Not Started': 'mute', 'Not Available': 'mute', Retired: 'mute',
-  Failed: 'stop'
+  Failed: 'stop',
+  // Application pipeline stages not already covered above
+  Submitted: 'mute', 'Under Review': 'info', 'Documents Pending': 'warn',
+  'Offer Issued': 'info', 'Offer Accepted': 'ok'
 };
+/** The same tone lookup Pill uses, exposed for callers (e.g. the Kanban
+ * board) that need to colour something other than a pill by picklist value. */
+export const toneFor = (value) => TONE[value] || 'mute';
 export const Pill = ({ value, tone }) => {
   if (!value) return <span className="muted">—</span>;
-  return <span className={`pill ${tone || TONE[value] || 'mute'}`}>{value}</span>;
+  return <span className={`pill ${tone || toneFor(value)}`}>{value}</span>;
 };
 
 /**

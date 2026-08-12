@@ -539,15 +539,29 @@ input[type=search]{flex:1;min-width:220px}
 /* ---------- kanban board ---------- */
 .kanban{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;align-items:flex-start}
 .kanban-col{flex:0 0 260px;width:260px;background:var(--bg);border:1px solid var(--line);
-  border-radius:var(--radius);display:flex;flex-direction:column;max-height:calc(100vh - 320px);min-height:160px}
+  border-radius:var(--radius);display:flex;flex-direction:column;max-height:calc(100vh - 320px);
+  min-height:160px;overflow:hidden}
 .kanban-col.over{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
-.kanban-col.exit{background:var(--line-soft)}
 .kanban-col-h{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:11px 13px;border-bottom:1px solid var(--line);flex-shrink:0}
+  padding:10px 13px;border-bottom:1px solid var(--line);border-top:3px solid transparent;flex-shrink:0}
 .kanban-col-title{font-size:13px;font-weight:700;color:var(--ink-2)}
-.kanban-col.exit .kanban-col-title{color:var(--ink-3)}
 .kanban-col-count{font-size:11px;font-weight:700;background:var(--surface);color:var(--ink-3);
   border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+/* Column colour follows the same picklist-value tone Pill uses elsewhere,
+   so a stage reads as the same colour in list and board view. */
+.kanban-col.tone-ok .kanban-col-h{border-top-color:var(--ok)}
+.kanban-col.tone-warn .kanban-col-h{border-top-color:var(--warn)}
+.kanban-col.tone-stop .kanban-col-h{border-top-color:var(--stop)}
+.kanban-col.tone-info .kanban-col-h{border-top-color:var(--info)}
+.kanban-col.tone-mute .kanban-col-h{border-top-color:var(--ink-3)}
+.kanban-col.tone-ok .kanban-col-title{color:var(--ok)}
+.kanban-col.tone-warn .kanban-col-title{color:var(--warn)}
+.kanban-col.tone-stop .kanban-col-title{color:var(--stop)}
+.kanban-col.tone-info .kanban-col-title{color:var(--info)}
+.kanban-col.tone-ok .kanban-col-count{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.kanban-col.tone-warn .kanban-col-count{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.kanban-col.tone-stop .kanban-col-count{background:var(--stop-soft);color:var(--stop);border-color:transparent}
+.kanban-col.tone-info .kanban-col-count{background:var(--info-soft);color:var(--info);border-color:transparent}
 .kanban-col-b{display:flex;flex-direction:column;gap:8px;padding:10px;overflow-y:auto}
 .kanban-card{display:flex;flex-direction:column;gap:6px;background:var(--surface);
   border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);

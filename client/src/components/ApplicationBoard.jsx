@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, newIdempotencyKey } from '../api.js';
 import { useT } from '../i18n/I18nContext.jsx';
-import { useToast, fmtDate, fmtMoney } from './Ui.jsx';
+import { useToast, fmtDate, fmtMoney, toneFor } from './Ui.jsx';
 import { friendlyError } from './Form.jsx';
 
 /**
@@ -16,11 +16,11 @@ import { friendlyError } from './Form.jsx';
  * would from the detail page. A refusal (invalid transition, stale record,
  * capacity conflict, a hard blocker) reverts the card to its original column
  * and says why, rather than pretending the move happened.
+ *
+ * Each column is coloured by `toneFor(stage)` — the same picklist-value
+ * tone lookup the Stage column's Pill already uses in list view, so a
+ * stage reads as the same colour everywhere in the app.
  */
-
-// Presentation only — which columns get the muted "exit" treatment. Not used
-// for any validation; that stays server-side.
-const EXIT_STAGES = new Set(['Rejected', 'Withdrawn', 'Deferred']);
 
 export default function ApplicationBoard({ rows, stages, canDrag, onReload }) {
   const t = useT();
@@ -78,7 +78,7 @@ export default function ApplicationBoard({ rows, stages, canDrag, onReload }) {
       {columns.map(({ stage, apps }) => (
         <div
           key={stage}
-          className={`kanban-col${EXIT_STAGES.has(stage) ? ' exit' : ''}${dragOverStage === stage ? ' over' : ''}`}
+          className={`kanban-col tone-${toneFor(stage)}${dragOverStage === stage ? ' over' : ''}`}
           onDragOver={(e) => { e.preventDefault(); setDragOverStage(stage); }}
           onDragLeave={() => setDragOverStage((s) => (s === stage ? null : s))}
           onDrop={(e) => handleDrop(stage, e)}
