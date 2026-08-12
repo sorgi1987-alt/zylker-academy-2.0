@@ -119,7 +119,8 @@ test('every route except /api/health rejects an unauthenticated caller', async (
     ['PATCH', '/api/lms/enrolments/1', { progressPercentage: 10 }],
     ['POST', '/api/lms/enrolments/1/map', {}],
     ['POST', '/api/lms/enrolments/1/sync', {}],
-    ['POST', '/api/lms/enrolments/1/create-crm-enrolment', { intakeId: '1' }]
+    ['POST', '/api/lms/enrolments/1/create-crm-enrolment', { intakeId: '1' }],
+    ['POST', '/api/admin/bootstrap-sync', {}]
   ];
   for (const [method, path, body] of writeRoutes) {
     const res = await request(server, method, path, { body });
@@ -412,4 +413,46 @@ test('global search groups results by entity, matches references, and refuses a 
   assert.equal(none.status, 200);
   assert.equal(none.body.data.total, 0);
   assert.deepEqual(none.body.data.groups, []);
+});
+
+/* --------------------------- reconciliation gate ------------------------- */
+
+/**
+ * /api/admin/reconcile-sync is invoked by a Catalyst Cron Job, not a signed-in
+ * user — it has no Catalyst session to check, so it is authorized by a shared
+ * secret instead of requireAuth. This is the one route the "every route
+ * rejects an unauthenticated caller" test above cannot cover, since it never
+ * carries a Catalyst identity in the first place, authenticated or not.
+ */
+test('reconcile-sync is gated by a shared secret, not a Catalyst session', async (t) => {
+  delete process.env.RECONCILE_SECRET;
+  for (const k of Object.keys(require.cache)) delete require.cache[k];
+  const app = require('../index.js');
+  const server = await listen(app);
+  t.after(() => { server.close(); delete process.env.RECONCILE_SECRET; });
+
+  // No secret configured on the deployment at all: refused outright, even
+  // with a header supplied, so a misconfigured deployment fails closed.
+  const noSecretConfigured = await request(server, 'POST', '/api/admin/reconcile-sync',
+    { body: {}, headers: { 'x-reconcile-secret': 'anything' } });
+  assert.equal(noSecretConfigured.status, 401);
+
+  process.env.RECONCILE_SECRET = 'test-secret';
+  for (const k of Object.keys(require.cache)) delete require.cache[k];
+  const app2 = require('../index.js');
+  const server2 = await listen(app2);
+  t.after(() => server2.close());
+
+  const missingHeader = await request(server2, 'POST', '/api/admin/reconcile-sync', { body: {} });
+  assert.equal(missingHeader.status, 401);
+
+  const wrongSecret = await request(server2, 'POST', '/api/admin/reconcile-sync',
+    { body: {}, headers: { 'x-reconcile-secret': 'wrong' } });
+  assert.equal(wrongSecret.status, 401);
+
+  // A bad entity list is refused before anything reaches the CRM.
+  const badEntities = await request(server2, 'POST', '/api/admin/reconcile-sync',
+    { body: { entities: ['not-a-real-entity'] }, headers: { 'x-reconcile-secret': 'test-secret' } });
+  assert.equal(badEntities.status, 400);
+  assert.equal(badEntities.body.error.code, 'INVALID_ENTITIES');
 });

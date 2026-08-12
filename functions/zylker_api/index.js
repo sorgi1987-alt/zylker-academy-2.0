@@ -24,6 +24,7 @@ const attention = require('./attention');
 const apiCallLog = require('./apiCallLog');
 const bootstrap = require('./bootstrap');
 const projectionReads = require('./projectionReads');
+const reconciliation = require('./reconciliation');
 
 const app = express();
 app.disable('x-powered-by');
@@ -1899,6 +1900,43 @@ LMS_WRITE_ROUTES.forEach(([method, path, permission, handler]) => {
     auth.requireAuth, auth.checkOrigin, auth.rateLimit, auth.requireJson,
     auth.requirePermission(permission),
     wrapLmsWrite(handler));
+});
+
+/**
+ * Reconciliation trigger (kickoff-prompt.md §2/§3 phase 7) — invoked by a
+ * Catalyst Cron Job (Webhook target), not by a signed-in user. There is no
+ * Catalyst session behind a Cron invocation, so this route is deliberately
+ * NOT wired through readRoutes/WRITE_ROUTES: it is authorized by a shared
+ * secret (`RECONCILE_SECRET` in the Catalyst environment) sent as a header,
+ * the same way a Cron Job's Webhook target can attach custom headers,
+ * rather than by requireAuth + a permission. Off by default — with no
+ * secret configured, every call is refused.
+ */
+app.post('/api/admin/reconcile-sync', express.json({ limit: '8kb' }), async (req, res) => {
+  const configured = String(process.env.RECONCILE_SECRET || '').trim();
+  const supplied = String(req.headers['x-reconcile-secret'] || '');
+  if (!configured || supplied !== configured) {
+    return fail(res, 401, 'UNAUTHORIZED', 'Missing or incorrect reconciliation secret.');
+  }
+
+  const validEntities = new Set(['students', 'applications', 'programmes', 'intakes', 'enrolments']);
+  const requested = Array.isArray(req.body && req.body.entities) ? req.body.entities : null;
+  const entities = requested && requested.length
+    ? requested.filter((e) => validEntities.has(e))
+    : [...validEntities];
+  if (!entities.length) {
+    return fail(res, 400, 'INVALID_ENTITIES', 'No valid entity names were supplied.');
+  }
+
+  req.__apiCallSource = apiCallLog.SOURCE.RECONCILIATION;
+  try {
+    const results = await reconciliation.reconcileMany(z, req, entities);
+    return ok(res, results);
+  } catch (err) {
+    const s = z.safeError(err, err.__service || 'zoho');
+    return fail(res, s.status >= 400 && s.status < 600 ? s.status : 502,
+      'UPSTREAM_ERROR', s.detail, s.service);
+  }
 });
 
 app.use((req, res) => fail(res, 404, 'NO_ROUTE', 'Unknown endpoint.'));

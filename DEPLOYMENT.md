@@ -23,6 +23,31 @@ Console → your project → **Settings → Environment Variables** (Development
 | `REFERENCE_PREFIX` | Optional | `TEST` | Tags every reference this deployment mints, e.g. `TEST-STU-M4X1PQ2A`. Set it for a verification run, then clear it. |
 | `ZOHO_BOOKS_PAGE_SIZE` | Optional | `50` | Invoices per page. |
 | `ZOHO_BOOKS_MAX_PAGES` | Optional | `10` | Ceiling on pages walked for the dashboard totals. |
+| `RECONCILE_SECRET` | Yes, for reconciliation | a long random string | Read-model PoC (kickoff-prompt.md). Authorizes `POST /api/admin/reconcile-sync` — this route has no Catalyst session behind it (it's called by a Cron Job, not a signed-in user), so it's gated by this shared secret sent as an `x-reconcile-secret` header instead of `requireAuth`. Unset means the route refuses every call. |
+
+**Note for this project specifically:** environment variables here are set at the
+**function level** (Console → your function → Settings → Environment
+Variables), not the project level the rest of this section describes —
+confirmed for `Zylker-Academy-Signals`. Set them once the `zylker_api`
+function exists (i.e. after the first deploy).
+
+### Reconciliation Cron jobs (read-model PoC, phase 7)
+
+Once `zylker_api` is deployed and `RECONCILE_SECRET` is set, create 3 Cron
+Jobs (Console → **Job Scheduling → Cron** → New Cron, or the
+`Create_Cron_Job` management API) — all with **target type: Webhook**,
+**method: POST**, **URL**: `https://<your-domain>/server/zylker_api/api/admin/reconcile-sync`,
+and a custom header `x-reconcile-secret: <the same value as RECONCILE_SECRET>`.
+Body per job, matching `reconciliation.js`'s `SCHEDULE_TIERS`:
+
+| Cron name | Schedule | Body |
+|---|---|---|
+| `reconcile-15min` | every 15 minutes | `{"entities":["applications","enrolments"]}` |
+| `reconcile-hourly` | hourly | `{"entities":["students"]}` |
+| `reconcile-daily` | daily | `{"entities":["programmes","intakes"]}` |
+
+These aren't created yet — there's no deployed URL to point them at until
+after the first deploy.
 
 Do **not** set `ZYLKER_AUTH_BYPASS`. It exists only for a local harness and
 would make every request unauthenticated-but-allowed.
