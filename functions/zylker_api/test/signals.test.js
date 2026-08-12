@@ -195,3 +195,55 @@ test('one bad event in a batch does not stop the rest from processing', async ()
   assert.ok(ds.rowFor('crm_students', '1'));
   assert.ok(ds.rowFor('crm_applications', '3'));
 });
+
+/* ------------------------------ cache invalidation ------------------------- */
+
+function makeFakeCache() {
+  const invalidated = [];
+  return { invalidated, async invalidateForEntity(req, entity) { invalidated.push(entity); } };
+}
+
+test('a create/update event invalidates the cache for its entity (kickoff-prompt.md §2a)', async () => {
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await signals.processEvent(req, crmEvent('Contacts Created', {
+    id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
+  }), ds, fakeCache);
+  assert.deepEqual(fakeCache.invalidated, ['students']);
+});
+
+test('a delete event invalidates the cache too', async () => {
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await signals.processEvent(req, crmEvent('Contacts Created', {
+    id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
+  }), ds, fakeCache);
+  fakeCache.invalidated.length = 0;
+
+  await signals.processEvent(req, crmEvent('Contacts Deleted', { id: '1' }), ds, fakeCache);
+  assert.deepEqual(fakeCache.invalidated, ['students']);
+});
+
+test('a stale (skipped) event never invalidates the cache — nothing actually changed', async () => {
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await signals.processEvent(req, crmEvent('Contacts Created', {
+    id: '1', Modified_Time: '2026-08-12T12:00:00+02:00'
+  }), ds, fakeCache);
+  fakeCache.invalidated.length = 0;
+
+  const result = await signals.processEvent(req, crmEvent('Contacts Updated', {
+    id: '1', Modified_Time: '2026-08-12T10:00:00+02:00' // older
+  }), ds, fakeCache);
+
+  assert.equal(result.outcome, 'skipped-stale');
+  assert.deepEqual(fakeCache.invalidated, []);
+});
+
+test('an unrecognised or missing-id event never invalidates the cache', async () => {
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await signals.processEvent(req, crmEvent('Tasks Created', { id: '1' }), ds, fakeCache);
+  await signals.processEvent(req, crmEvent('Contacts Created', {}), ds, fakeCache);
+  assert.deepEqual(fakeCache.invalidated, []);
+});

@@ -52,6 +52,7 @@
  */
 const cfg = require('./config');
 const projections = require('./projections');
+const cacheModule = require('./cache');
 
 /** "<ModuleAPIName> <Action>" -> { entity, action }, or null if unrecognised. */
 function parseEventConfig(apiName) {
@@ -82,8 +83,14 @@ async function touchLastEventReceived(req, entity, ds) {
  * a single bad/unrecognised event — one malformed event in a batch must not
  * take the rest down. Returns a per-event outcome for the caller to tally
  * and, for phase 10, surface on the Integration Status page.
+ *
+ * On a successful projection change, invalidates the same cache keys
+ * write-through would (kickoff-prompt.md §2a) via cache.invalidateForEntity
+ * — not on a stale/unrecognised/missing-id outcome, since nothing actually
+ * changed in those cases. `cacheApi` lets tests inject a fake the same way
+ * `ds` already lets them inject a fake Datastore.
  */
-async function processEvent(req, event, ds) {
+async function processEvent(req, event, ds, cacheApi = cacheModule) {
   const parsed = event && event.event_config ? parseEventConfig(event.event_config.api_name) : null;
   if (!parsed) {
     return { outcome: 'unrecognised', apiName: event && event.event_config && event.event_config.api_name };
@@ -99,10 +106,12 @@ async function processEvent(req, event, ds) {
 
   if (action === 'deleted') {
     const removed = await projections.deleteProjectionRow(req, entity, crmId, ds);
+    if (removed) await cacheApi.invalidateForEntity(req, entity);
     return { outcome: removed ? 'deleted' : 'delete-noop', entity, action, crmId };
   }
 
   const result = await projections.upsertProjectionRow(req, entity, record, ds);
+  if (result === 'inserted' || result === 'updated') await cacheApi.invalidateForEntity(req, entity);
   return { outcome: result, entity, action, crmId };
 }
 
@@ -112,7 +121,7 @@ async function processEvent(req, event, ds) {
  * request that isn't even a Signals envelope is a configuration problem
  * worth failing loudly on, not silently no-op-ing.
  */
-async function processEnvelope(req, envelope, ds = projections.defaultDs) {
+async function processEnvelope(req, envelope, ds = projections.defaultDs, cacheApi = cacheModule) {
   const events = envelope && Array.isArray(envelope.events) ? envelope.events : null;
   if (!events) {
     const e = new Error('Payload is not a recognisable Signals envelope (no `events` array).');
@@ -123,7 +132,7 @@ async function processEnvelope(req, envelope, ds = projections.defaultDs) {
   const results = [];
   for (const event of events) {
     try {
-      results.push(await processEvent(req, event, ds));
+      results.push(await processEvent(req, event, ds, cacheApi));
     } catch (err) {
       results.push({ outcome: 'error', error: err && err.message });
     }

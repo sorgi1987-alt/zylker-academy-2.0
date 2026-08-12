@@ -26,6 +26,7 @@ const bootstrap = require('./bootstrap');
 const projectionReads = require('./projectionReads');
 const reconciliation = require('./reconciliation');
 const signals = require('./signals');
+const cache = require('./cache');
 
 const app = express();
 app.disable('x-powered-by');
@@ -157,10 +158,25 @@ const readStudents = async (req) => {
   return rows.sort((a, b) => (Date.parse(b.createdTime) || 0) - (Date.parse(a.createdTime) || 0));
 };
 const readApplications = (req) => projectionReads.readAll(req, 'applications');
-const readProgrammes = (req) => projectionReads.readAll(req, 'programmes');
+/*
+ * Reference data (kickoff-prompt.md §2 "Cache"): programmes and intakes
+ * change rarely and are re-read by almost every route in this file (every
+ * application/enrolment list joins programme/intake names), so these two
+ * sit behind a shared ~15-30 minute cache rather than re-reading Datastore
+ * on every request. Sort order is applied AFTER the cache read so a cached
+ * entry is never stored pre-sorted in a way a future caller's assumptions
+ * could drift from.
+ */
+const readProgrammes = (req) => cache.readThrough(
+  req, cache.KEYS.CATALOGUE_PROGRAMMES, cache.TTL.REFERENCE_DATA_MS,
+  () => projectionReads.readAll(req, 'programmes')
+);
 const readIntakes = async (req) => {
-  const rows = await projectionReads.readAll(req, 'intakes');
-  return rows.sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
+  const rows = await cache.readThrough(
+    req, cache.KEYS.CATALOGUE_INTAKES, cache.TTL.REFERENCE_DATA_MS,
+    () => projectionReads.readAll(req, 'intakes')
+  );
+  return [...rows].sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
 };
 const readEnrolments = (req) => projectionReads.readAll(req, 'enrolments');
 
@@ -509,16 +525,18 @@ R('/api/search', null, async (req, res) => {
 
 /* ------------------------------- dashboard ----------------------------- */
 
-R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
-  // Read-model PoC (kickoff-prompt.md §2/§3 phase 4): these 5 reads come from
-  // the crm_* Datastore projections instead of live Zoho — 5 CRM calls to 0
-  // on this endpoint. projectionReads hydrates each row back to exactly the
-  // shape normalise.js produces, so nothing downstream of this changed.
-  const [S, A, P, I, E] = await Promise.all([
-    readStudents(req), readApplications(req), readProgrammes(req), readIntakes(req), readEnrolments(req)
-  ]);
+/**
+ * The CRM-only half of the dashboard aggregate — everything derivable from
+ * the 5 Datastore projections alone, with no Books/Desk/LMS call in it.
+ * Extracted into its own function so it can sit behind cache.readThrough
+ * (kickoff-prompt.md §2 "Cache" / §3 phase 9) and be unit-tested without a
+ * live Catalyst session. Books/Desk are explicitly out of scope for
+ * caching or projection ("stay on today's live per-request read path
+ * unchanged"), so they are computed fresh on every request regardless of
+ * whether this half was a cache hit.
+ */
+function buildCrmDashboardAggregate(S, A, P, I, E) {
   const today = new Date().toISOString().slice(0, 10);
-
   const closedStages = new Set([writes.STAGE.ENROLLED, writes.STAGE.REJECTED, writes.STAGE.WITHDRAWN]);
 
   // Stages where the next move belongs to this institution rather than to the
@@ -546,19 +564,91 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
   // label on the card says which one this is.
   const conversionRate = A.length ? Math.round((enrolledCount / A.length) * 1000) / 10 : null;
 
-  // The LMS connector, Books and Desk are settled independently and never
-  // rejected, so a failure in any one degrades one card instead of the whole
-  // dashboard.
-  const [lmsStatus, booksTotals, booksHealth, deskTotals, deskHealth] = await Promise.all([
-    lms.status(req),
-    cfg.books.organizationId
-      ? books.invoiceTotals(z, req).catch((err) => ({ error: z.safeError(err, 'books') }))
-      : Promise.resolve(null),
-    books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
-    cfg.desk.organizationId
-      ? desk.ticketTotals(z, req).catch((err) => ({ error: z.safeError(err, 'desk') }))
-      : Promise.resolve(null),
-    desk.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+  return {
+    kpis: {
+      totalStudents: { value: S.length, source: 'crm' },
+      openApplications: { value: A.filter((a) => !closedStages.has(a.stage)).length, source: 'crm' },
+      applicationsAwaitingAction: { value: A.filter((a) => actionStages.has(a.stage)).length, source: 'crm' },
+      offersAwaitingResponse: { value: A.filter((a) => a.stage === writes.STAGE.OFFER_ISSUED).length, source: 'crm' },
+      conversionRate: { value: conversionRate, source: 'crm', unavailable: conversionRate === null, suffix: '%' },
+      activeProgrammes: { value: P.filter((p) => p.active && p.status !== 'Archived').length, source: 'crm' },
+      upcomingIntakes: { value: I.filter((i) => (i.startDate || '') >= today).length, source: 'crm' },
+      intakeCapacityWarnings: { value: capacityWatch.length, source: 'crm' },
+      activeEnrolments: { value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE).length, source: 'crm' },
+      enrolmentsWithoutLmsMapping: {
+        value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE && !(e.lms && e.lms.enrolmentId)).length,
+        source: 'crm'
+      }
+    },
+    applicationsByStage: groupBy(A, (a) => a.stage),
+    enrolmentsByStatus: groupBy(E, (e) => e.status),
+    admissionsFunnel: (() => {
+      const order = [
+        writes.STAGE.SUBMITTED, writes.STAGE.UNDER_REVIEW, writes.STAGE.DOCUMENTS_PENDING,
+        writes.STAGE.OFFER_ISSUED, writes.STAGE.OFFER_ACCEPTED, writes.STAGE.ENROLLED
+      ];
+      const rank = new Map(order.map((s, i) => [s, i]));
+      return order.map((stage, i) => ({
+        stage,
+        count: A.filter((a) => {
+          const r = rank.get(a.stage);
+          return r !== undefined && r >= i;
+        }).length
+      }));
+    })(),
+    admissionsExits: {
+      [writes.STAGE.REJECTED]: A.filter((a) => a.stage === writes.STAGE.REJECTED).length,
+      [writes.STAGE.WITHDRAWN]: A.filter((a) => a.stage === writes.STAGE.WITHDRAWN).length,
+      [writes.STAGE.DEFERRED]: A.filter((a) => a.stage === writes.STAGE.DEFERRED).length
+    },
+    enrolmentsByProgramme: groupBy(
+      E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE),
+      (e) => (e.programme && e.programme.name) || 'Unassigned'
+    ),
+    intakeCapacity: capacityWatch.slice(0, 6).map((i) => ({
+      id: i.id,
+      name: i.name,
+      startDate: i.startDate,
+      capacity: i.capacity,
+      activeEnrolments: activeByIntake[i.id] || 0
+    })),
+    recentApplications: [...A]
+      .sort((x, y) => String(y.applicationDate || '').localeCompare(String(x.applicationDate || '')))
+      .slice(0, 6),
+    upcomingIntakesList: I.filter((i) => (i.startDate || '') >= today).slice(0, 6),
+    recentStudents: S.slice(0, 6)
+  };
+}
+
+R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
+  // Read-model + cache PoC (kickoff-prompt.md §2/§3 phases 4 and 9): the
+  // CRM-only half is a shared cache entry (dashboard:aggregate, ~4 min TTL —
+  // one institutional rollup serves every session, not one per teacher) on
+  // top of the Datastore projections (already 0 Zoho calls as of phase 4).
+  // Books/Desk/LMS are fetched live every request regardless, per the
+  // kickoff prompt's explicit "stay on today's live per-request read path
+  // unchanged" for those two services.
+  const [crmAggregate, [lmsStatus, booksTotals, booksHealth, deskTotals, deskHealth]] = await Promise.all([
+    cache.readThrough(req, cache.KEYS.DASHBOARD_AGGREGATE, cache.TTL.DASHBOARD_AGGREGATE_MS, async () => {
+      const [S, A, P, I, E] = await Promise.all([
+        readStudents(req), readApplications(req), readProgrammes(req), readIntakes(req), readEnrolments(req)
+      ]);
+      return buildCrmDashboardAggregate(S, A, P, I, E);
+    }),
+    // The LMS connector, Books and Desk are settled independently and never
+    // rejected, so a failure in any one degrades one card instead of the
+    // whole dashboard.
+    Promise.all([
+      lms.status(req),
+      cfg.books.organizationId
+        ? books.invoiceTotals(z, req).catch((err) => ({ error: z.safeError(err, 'books') }))
+        : Promise.resolve(null),
+      books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
+      cfg.desk.organizationId
+        ? desk.ticketTotals(z, req).catch((err) => ({ error: z.safeError(err, 'desk') }))
+        : Promise.resolve(null),
+      desk.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+    ])
   ]);
 
   const booksOk = booksTotals && !booksTotals.error;
@@ -569,21 +659,7 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     // Each KPI declares where it came from, so the UI can badge it and a null
     // reads as "this source is unavailable" rather than "the number is zero".
     kpis: {
-      totalStudents: { value: S.length, source: 'crm' },
-      openApplications: { value: A.filter((a) => !closedStages.has(a.stage)).length, source: 'crm' },
-      applicationsAwaitingAction: { value: A.filter((a) => actionStages.has(a.stage)).length, source: 'crm' },
-      offersAwaitingResponse: { value: A.filter((a) => a.stage === writes.STAGE.OFFER_ISSUED).length, source: 'crm' },
-      // Null rather than 0 when there are no applications: a conversion rate
-      // over an empty set is undefined, and "0%" would read as a failure.
-      conversionRate: { value: conversionRate, source: 'crm', unavailable: conversionRate === null, suffix: '%' },
-      activeProgrammes: { value: P.filter((p) => p.active && p.status !== 'Archived').length, source: 'crm' },
-      upcomingIntakes: { value: I.filter((i) => (i.startDate || '') >= today).length, source: 'crm' },
-      intakeCapacityWarnings: { value: capacityWatch.length, source: 'crm' },
-      activeEnrolments: { value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE).length, source: 'crm' },
-      enrolmentsWithoutLmsMapping: {
-        value: E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE && !(e.lms && e.lms.enrolmentId)).length,
-        source: 'crm'
-      },
+      ...crmAggregate.kpis,
       lmsCourses: {
         value: lmsOk ? lmsStatus.counts.activeCourses : null,
         source: 'lms', unavailable: !lmsOk
@@ -643,8 +719,8 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
         partial: deskOk ? deskTotals.truncated === true : false
       }
     },
-    applicationsByStage: groupBy(A, (a) => a.stage),
-    enrolmentsByStatus: groupBy(E, (e) => e.status),
+    applicationsByStage: crmAggregate.applicationsByStage,
+    enrolmentsByStatus: crmAggregate.enrolmentsByStatus,
     /*
      * Admissions funnel. Ordered by the pipeline rather than by size, and
      * cumulative — each step counts everyone who reached it, including those who
@@ -652,50 +728,20 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
      * meaningful. Rejected and Withdrawn are exits, not steps, so they are
      * reported beside the funnel instead of inside it.
      */
-    admissionsFunnel: (() => {
-      const order = [
-        writes.STAGE.SUBMITTED, writes.STAGE.UNDER_REVIEW, writes.STAGE.DOCUMENTS_PENDING,
-        writes.STAGE.OFFER_ISSUED, writes.STAGE.OFFER_ACCEPTED, writes.STAGE.ENROLLED
-      ];
-      const rank = new Map(order.map((s, i) => [s, i]));
-      return order.map((stage, i) => ({
-        stage,
-        // Anything at or beyond this step reached it. A rejected application is
-        // not counted onward, because it did not reach the later steps.
-        count: A.filter((a) => {
-          const r = rank.get(a.stage);
-          return r !== undefined && r >= i;
-        }).length
-      }));
-    })(),
-    admissionsExits: {
-      [writes.STAGE.REJECTED]: A.filter((a) => a.stage === writes.STAGE.REJECTED).length,
-      [writes.STAGE.WITHDRAWN]: A.filter((a) => a.stage === writes.STAGE.WITHDRAWN).length,
-      [writes.STAGE.DEFERRED]: A.filter((a) => a.stage === writes.STAGE.DEFERRED).length
-    },
-    enrolmentsByProgramme: groupBy(
-      E.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE),
-      (e) => (e.programme && e.programme.name) || 'Unassigned'
-    ),
+    admissionsFunnel: crmAggregate.admissionsFunnel,
+    admissionsExits: crmAggregate.admissionsExits,
+    enrolmentsByProgramme: crmAggregate.enrolmentsByProgramme,
     // Money outstanding by how long it has been outstanding. Null, not an empty
     // object, when Books did not answer — so the card can say so.
     invoiceAgeing: booksOk ? booksTotals.ageing : null,
     invoiceAgeingCurrency: booksOk ? booksTotals.currency : null,
     ticketsByStatus: deskOk ? deskTotals.byStatus : null,
-    intakeCapacity: capacityWatch.slice(0, 6).map((i) => ({
-      id: i.id,
-      name: i.name,
-      startDate: i.startDate,
-      capacity: i.capacity,
-      activeEnrolments: activeByIntake[i.id] || 0
-    })),
+    intakeCapacity: crmAggregate.intakeCapacity,
     lmsCoursesByProvider: lmsOk ? lmsStatus.coursesByProvider : null,
     learnersByLmsStatus: lmsOk ? lmsStatus.learnersByStatus : null,
-    recentApplications: [...A]
-      .sort((x, y) => String(y.applicationDate || '').localeCompare(String(x.applicationDate || '')))
-      .slice(0, 6),
-    upcomingIntakes: I.filter((i) => (i.startDate || '') >= today).slice(0, 6),
-    recentStudents: S.slice(0, 6),
+    recentApplications: crmAggregate.recentApplications,
+    upcomingIntakes: crmAggregate.upcomingIntakesList,
+    recentStudents: crmAggregate.recentStudents,
     connections: {
       crm: { status: 'connected', label: 'Connected' },
       lms: { status: lmsStatus.status, label: lmsStatus.label, detail: lmsStatus.detail || null, demonstrationDataset: true },

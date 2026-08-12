@@ -200,3 +200,44 @@ test('programmeCreate write-through projects a flattened row, including the deli
   assert.ok(row);
   assert.equal(row.product_name, 'New Programme');
 });
+
+/* ------------------------------ cache invalidation ------------------------- */
+
+function makeFakeCache() {
+  const invalidated = [];
+  return { invalidated, async invalidateForEntity(req, entity) { invalidated.push(entity); } };
+}
+
+test('a successful create invalidates the dashboard aggregate cache (kickoff-prompt.md §2 write-through)', async () => {
+  const zoho = makeZoho(seed());
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await writes.studentCreate({ zoho, ds, cache: fakeCache }, req({}, { lastName: 'Cached', email: 'cached@example.com' }));
+  assert.deepEqual(fakeCache.invalidated, ['students']);
+});
+
+test('a successful delete also invalidates the cache', async () => {
+  const zoho = makeZoho(seed());
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await writes.studentDelete({ zoho, ds, cache: fakeCache }, req({ id: '1' }));
+  assert.deepEqual(fakeCache.invalidated, ['students']);
+});
+
+test('a failed write never touches the cache — nothing changed, so nothing to invalidate', async () => {
+  const zoho = makeZoho(seed());
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  await assert.rejects(() => writes.studentCreate({ zoho, ds, cache: fakeCache },
+    req({}, { lastName: 'Dup', email: 'PRIYA@example.com' })));
+  assert.deepEqual(fakeCache.invalidated, []);
+});
+
+test('a cache invalidation failure never fails the write response itself', async () => {
+  const zoho = makeZoho(seed());
+  const ds = makeDs();
+  const brokenCache = { async invalidateForEntity() { throw new Error('cache unavailable'); } };
+  const result = await writes.studentCreate({ zoho, ds, cache: brokenCache },
+    req({}, { lastName: 'StillWorks', email: 'stillworks@example.com' }));
+  assert.ok(result.data.id);
+});

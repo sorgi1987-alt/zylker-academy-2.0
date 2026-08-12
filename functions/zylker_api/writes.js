@@ -34,6 +34,7 @@ const cfg = require('./config');
 const n = require('./normalise');
 const refs = require('./references');
 const projections = require('./projections');
+const cacheModule = require('./cache');
 
 /* ------------------------- resolved metadata --------------------------- */
 /**
@@ -207,16 +208,20 @@ function assertUnchanged(record, expectedModifiedTime) {
 /**
  * Write-through (kickoff-prompt.md §2 "Write-through"): after a Zoho write
  * succeeds and is read back, keep the matching Datastore projection row in
- * sync from that same record — no extra Zoho call. Best-effort: a projection
- * hiccup must never fail a write that has already landed in Zoho, so this
- * never throws. `deps.ds` lets tests inject a fake Datastore the same way
- * `deps.zoho` already lets them inject a fake CRM.
+ * sync from that same record — no extra Zoho call — and invalidate the
+ * cache keys the change affects (cache.invalidateForEntity, shared with the
+ * Signals handler so the two paths can't drift on which keys an entity
+ * affects). Best-effort throughout: a projection or cache hiccup must never
+ * fail a write that has already landed in Zoho, so this never throws.
+ * `deps.ds`/`deps.cache` let tests inject fakes the same way `deps.zoho`
+ * already lets them inject a fake CRM.
  */
 async function writeThroughUpsert(deps, req, module_, rawRecord) {
   const entity = cfg.projections.moduleToEntity[module_];
   if (!entity) return; // a module this PoC does not project (none, today)
   try {
     await projections.upsertProjectionRow(req, entity, rawRecord, deps.ds);
+    await (deps.cache || cacheModule).invalidateForEntity(req, entity);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`write-through upsert failed for ${entity}:`, err && err.message);
@@ -234,6 +239,7 @@ async function writeThroughDelete(deps, req, module_, id) {
   if (!entity) return;
   try {
     await projections.deleteProjectionRow(req, entity, String(id), deps.ds);
+    await (deps.cache || cacheModule).invalidateForEntity(req, entity);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`write-through delete failed for ${entity}:`, err && err.message);
