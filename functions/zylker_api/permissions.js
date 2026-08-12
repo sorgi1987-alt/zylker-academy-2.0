@@ -86,7 +86,12 @@ const P = {
   // the same act as changing it, and no CRM field is touched.
   ACTIVITY_WRITE: 'activity:write',
   // Overrides a capacity limit on an intake. Deliberately administrator-only.
-  CAPACITY_OVERRIDE: 'intake:capacity-override'
+  CAPACITY_OVERRIDE: 'intake:capacity-override',
+  // Triggers the read-model PoC's bootstrap/reconciliation sync operations
+  // (kickoff-prompt.md §2). Deliberately administrator-only, same reasoning
+  // as CAPACITY_OVERRIDE: not included in any role's list below, so only the
+  // '*' wildcard grants it.
+  SYNC_ADMIN: 'sync:admin'
 };
 
 /** Everything any authenticated user may read. Keeps the matrix below short. */

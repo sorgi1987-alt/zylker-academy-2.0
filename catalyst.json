@@ -1,6 +1,6 @@
 {
-  "project_name": "Zylker-Academy",
-  "project_id": 11922000000014048,
+  "project_name": "Zylker-Academy-Signals",
+  "project_id": 11922000000133164,
   "functions": {
     "source": "functions",
     "targets": ["zylker_api"]

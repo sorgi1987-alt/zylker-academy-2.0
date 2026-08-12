@@ -21,6 +21,7 @@
  *   Desk.basic.READ   (baseline scope Desk requires for most API calls)
  */
 const cfg = require('./config');
+const apiCallLog = require('./apiCallLog');
 
 /** Raised when Desk is configured incompletely, so the UI can say what is missing. */
 class DeskNotConfigured extends Error {
@@ -47,13 +48,15 @@ function assertConfigured() {
  */
 async function deskGet(zoho, req, path, params = {}) {
   assertConfigured();
-  const creds = await zoho.credentials(req, cfg.desk.connection);
-  const http = zoho.httpClient(cfg.desk.baseUrl, {
-    headers: { ...creds.headers, orgId: cfg.desk.organizationId },
-    params: creds.params
+  return apiCallLog.timed(req, { service: 'desk', operation: 'get', moduleOrEndpoint: path }, async () => {
+    const creds = await zoho.credentials(req, cfg.desk.connection);
+    const http = zoho.httpClient(cfg.desk.baseUrl, {
+      headers: { ...creds.headers, orgId: cfg.desk.organizationId },
+      params: creds.params
+    });
+    const res = await http.get(path, { params });
+    return res.data || {};
   });
-  const res = await http.get(path, { params });
-  return res.data || {};
 }
 
 /* ------------------------------ normalisation ------------------------------ */

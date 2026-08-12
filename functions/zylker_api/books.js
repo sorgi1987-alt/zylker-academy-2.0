@@ -20,6 +20,7 @@
  *   ZohoBooks.settings.READ   (only for organisation lookup / verification)
  */
 const cfg = require('./config');
+const apiCallLog = require('./apiCallLog');
 
 /** Raised when Books is configured incompletely, so the UI can say what is missing. */
 class BooksNotConfigured extends Error {
@@ -42,21 +43,23 @@ function assertConfigured() {
  */
 async function booksGet(zoho, req, path, params = {}) {
   assertConfigured();
-  const creds = await zoho.credentials(req, cfg.books.connection);
-  const http = zoho.httpClient(cfg.books.baseUrl, creds);
-  const res = await http.get(path, {
-    params: { organization_id: cfg.books.organizationId, ...params }
+  return apiCallLog.timed(req, { service: 'books', operation: 'get', moduleOrEndpoint: path }, async () => {
+    const creds = await zoho.credentials(req, cfg.books.connection);
+    const http = zoho.httpClient(cfg.books.baseUrl, creds);
+    const res = await http.get(path, {
+      params: { organization_id: cfg.books.organizationId, ...params }
+    });
+    const body = res.data || {};
+    // Books signals application-level failure in the body with a non-zero code
+    // even on HTTP 200, so a 200 alone is not evidence of success.
+    if (body.code !== undefined && Number(body.code) !== 0) {
+      const e = new Error(`Zoho Books returned code ${body.code}.`);
+      e.__service = 'books';
+      e.response = { status: 502 };
+      throw e;
+    }
+    return body;
   });
-  const body = res.data || {};
-  // Books signals application-level failure in the body with a non-zero code
-  // even on HTTP 200, so a 200 alone is not evidence of success.
-  if (body.code !== undefined && Number(body.code) !== 0) {
-    const e = new Error(`Zoho Books returned code ${body.code}.`);
-    e.__service = 'books';
-    e.response = { status: 502 };
-    throw e;
-  }
-  return body;
 }
 
 /* ------------------------------ normalisation ------------------------------ */

@@ -21,6 +21,9 @@ const books = require('./books');
 const desk = require('./desk');
 const lms = require('./lms');
 const attention = require('./attention');
+const apiCallLog = require('./apiCallLog');
+const bootstrap = require('./bootstrap');
+const projectionReads = require('./projectionReads');
 
 const app = express();
 app.disable('x-powered-by');
@@ -98,8 +101,9 @@ app.get('/api/auth-diag', async (req, res) => {
 
 const tag = (p, service) => p.catch((e) => { e.__service = service; throw e; });
 
-const wrap = (fn) => (req, res) =>
-  fn(req, res).catch((err) => {
+const wrap = (fn) => (req, res) => {
+  req.__apiCallSource = apiCallLog.SOURCE.INTERACTIVE_READ_LIVE;
+  return fn(req, res).catch((err) => {
     if (err instanceof writes.AppError) return fail(res, err.status, err.code, err.message);
     if (err instanceof lms.LmsError) return fail(res, err.status, err.code, err.message, 'lms');
     if (err instanceof books.BooksNotConfigured) return fail(res, 503, err.code, err.message, 'books');
@@ -109,6 +113,7 @@ const wrap = (fn) => (req, res) =>
     return fail(res, s.status >= 400 && s.status < 600 ? s.status : 502,
       'UPSTREAM_ERROR', s.detail, s.service);
   });
+};
 
 /* ------------------------------ CRM reads ------------------------------ */
 
@@ -132,6 +137,30 @@ const listApplications = (req, where = ALL) => q(req, F.applications, cfg.module
 const listProgrammes = (req, where = ALL) => q(req, F.programmes, cfg.modules.programmes, where);
 const listIntakes = (req, where = ALL) => q(req, F.intakes, cfg.modules.intakes, where, MAX_ROWS, ' order by Start_Date asc');
 const listEnrolments = (req, where = ALL) => q(req, F.enrolments, cfg.modules.enrolments, where);
+
+/*
+ * Read-model PoC (kickoff-prompt.md §2/§3 phase 5): the same 5 entities read
+ * from the crm_* Datastore projections instead of live Zoho. Already
+ * hydrated to the normalise.js shape by projectionReads, so callers below
+ * drop the `.map(n.X)` step the listX() versions needed.
+ *
+ * Datastore has no query-level ordering guarantee the way the COQL calls
+ * above did (`order by Created_Time desc` / `Start_Date asc`), so that
+ * ordering is reproduced here rather than left to whatever order the table
+ * happens to return rows in — callers like the dashboard's "recent students"
+ * and "upcoming intakes" slices depend on it.
+ */
+const readStudents = async (req) => {
+  const rows = await projectionReads.readAll(req, 'students');
+  return rows.sort((a, b) => (Date.parse(b.createdTime) || 0) - (Date.parse(a.createdTime) || 0));
+};
+const readApplications = (req) => projectionReads.readAll(req, 'applications');
+const readProgrammes = (req) => projectionReads.readAll(req, 'programmes');
+const readIntakes = async (req) => {
+  const rows = await projectionReads.readAll(req, 'intakes');
+  return rows.sort((a, b) => String(a.startDate || '').localeCompare(String(b.startDate || '')));
+};
+const readEnrolments = (req) => projectionReads.readAll(req, 'enrolments');
 
 const groupBy = (rows, key) => rows.reduce((acc, r) => {
   const k = key(r) || 'Unspecified';
@@ -479,16 +508,13 @@ R('/api/search', null, async (req, res) => {
 /* ------------------------------- dashboard ----------------------------- */
 
 R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
-  // CRM first and on its own: an LMS or Books failure must not stop these.
-  const [students, applications, programmes, intakes, enrolments] = await Promise.all([
-    listStudents(req), listApplications(req), listProgrammes(req), listIntakes(req), listEnrolments(req)
+  // Read-model PoC (kickoff-prompt.md §2/§3 phase 4): these 5 reads come from
+  // the crm_* Datastore projections instead of live Zoho — 5 CRM calls to 0
+  // on this endpoint. projectionReads hydrates each row back to exactly the
+  // shape normalise.js produces, so nothing downstream of this changed.
+  const [S, A, P, I, E] = await Promise.all([
+    readStudents(req), readApplications(req), readProgrammes(req), readIntakes(req), readEnrolments(req)
   ]);
-
-  const P = programmes.map(n.programme);
-  const I = intakes.map(n.intake);
-  const E = enrolments.map(n.enrolment);
-  const A = applications.map(n.application);
-  const S = students.map(n.student);
   const today = new Date().toISOString().slice(0, 10);
 
   const closedStages = new Set([writes.STAGE.ENROLLED, writes.STAGE.REJECTED, writes.STAGE.WITHDRAWN]);
@@ -750,11 +776,9 @@ R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
 /* -------------------------------- students ----------------------------- */
 
 R('/api/students', perms.P.STUDENT_READ, async (req, res) => {
-  const [rows, apps, enrols] = await Promise.all([listStudents(req), listApplications(req), listEnrolments(req)]);
-  const A = apps.map(n.application);
-  const E = enrols.map(n.enrolment);
+  const [S, A, E] = await Promise.all([readStudents(req), readApplications(req), readEnrolments(req)]);
 
-  let students = rows.map(n.student).map((s) => {
+  let students = S.map((s) => {
     const a = A.find((x) => x.student && x.student.id === s.id) || null;
     const e = E.find((x) => x.student && x.student.id === s.id) || null;
     return {
@@ -772,7 +796,8 @@ R('/api/students', perms.P.STUDENT_READ, async (req, res) => {
 
   const { items, meta } = paginate(students, req, {
     byStatus: groupBy(students, (s) => s.status),
-    source: 'crm'
+    source: 'crm',
+    capped: false
   });
   ok(res, items, meta);
 });
@@ -786,33 +811,35 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
   if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
 
-  const rows = await listStudents(req, `id = ${id}`);
-  if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No student matches that id.');
-  const raw = rows[0];
-  const student = n.student(raw);
+  const S = await readStudents(req);
+  const student = S.find((s) => s.id === id) || null;
+  if (!student) return fail(res, 404, 'NOT_FOUND', 'No student matches that id.');
 
-  const [apps, enrols] = await Promise.all([
-    listApplications(req, `Contact_Name = ${id}`),
-    listEnrolments(req, `Student = ${id}`)
-  ]);
-  const applications = apps.map(n.application);
-  const enrolments = enrols.map(n.enrolment);
+  const [A, E] = await Promise.all([readApplications(req), readEnrolments(req)]);
+  const applications = A.filter((a) => a.student && a.student.id === id);
+  const enrolments = E.filter((e) => e.student && e.student.id === id);
 
   const programmeIds = [...new Set(enrolments.concat(applications)
     .map((r) => r.programme && r.programme.id).filter(Boolean))];
   const intakeIds = [...new Set(enrolments.concat(applications)
     .map((r) => r.intake && r.intake.id).filter(Boolean))];
 
-  const [progRows, intakeRows, lmsLearning, invoices, tickets, activity] = await Promise.all([
-    programmeIds.length ? listProgrammes(req, `id in (${programmeIds.join(',')})`) : Promise.resolve([]),
-    intakeIds.length ? listIntakes(req, `id in (${intakeIds.join(',')})`) : Promise.resolve([]),
+  const [allProgrammes, allIntakes, lmsLearning, invoices, tickets, activity] = await Promise.all([
+    programmeIds.length ? readProgrammes(req) : Promise.resolve([]),
+    intakeIds.length ? readIntakes(req) : Promise.resolve([]),
     lms.enrolmentsForStudent(req, id).catch(() => []),
-    studentInvoices(req, raw, student),
-    studentTickets(req, raw, student),
+    // The raw CRM record (Books/Desk linking fields) is not carried in the
+    // projection — but F.students never selected those fields live either
+    // (Zoho_Books_Customer_ID etc. aren't in its field list), so this was
+    // already always falling through to the email-match step. No behaviour
+    // change, just no raw record left to (uselessly) pass through.
+    studentInvoices(req, {}, student),
+    studentTickets(req, {}, student),
     auth.readActivity(req, { entityType: 'student', recordId: id, limit: 15 }).catch(() => [])
   ]);
 
-  const programmes = progRows.map(n.programme);
+  const programmes = allProgrammes.filter((p) => programmeIds.includes(p.id));
+  const intakes = allIntakes.filter((i) => intakeIds.includes(i.id));
 
   // Attach each LMS record's course so the Learning section can name it without
   // a second round trip. Courses are few, so one list is cheaper than N reads.
@@ -827,7 +854,7 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
     applications,
     enrolments,
     programmes,
-    intakes: intakeRows.map(n.intake),
+    intakes,
     invoices,
     tickets,
     activity,
@@ -839,9 +866,8 @@ R('/api/students/:id', perms.P.STUDENT_READ, async (req, res) => {
 /* ------------------------------ applications --------------------------- */
 
 R('/api/applications', perms.P.APPLICATION_READ, async (req, res) => {
-  const [appRows, studRows] = await Promise.all([listApplications(req), listStudents(req)]);
-  const S = studRows.map(n.student);
-  let data = appRows.map(n.application).map((a) => {
+  const [appRows, S] = await Promise.all([readApplications(req), readStudents(req)]);
+  let data = appRows.map((a) => {
     const st = a.student ? S.find((s) => s.id === a.student.id) : null;
     return {
       ...a,
@@ -866,7 +892,7 @@ R('/api/applications', perms.P.APPLICATION_READ, async (req, res) => {
   }
   data = data.filter((a) => matches(a, req.query.search, ['name', 'applicationId', 'applicantName', 'applicantEmail', 'externalReference']));
 
-  const { items, meta } = paginate(data, req, { byStage, stages: [...writes.ALL_STAGES], source: 'crm' });
+  const { items, meta } = paginate(data, req, { byStage, stages: [...writes.ALL_STAGES], source: 'crm', capped: false });
   ok(res, items, meta);
 });
 
@@ -874,22 +900,21 @@ R('/api/applications/:id', perms.P.APPLICATION_READ, async (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
   if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
 
-  const rows = await listApplications(req, `id = ${id}`);
-  if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No application matches that id.');
-  const application = n.application(rows[0]);
+  const [Apps, E] = await Promise.all([readApplications(req), readEnrolments(req)]);
+  const application = Apps.find((a) => a.id === id) || null;
+  if (!application) return fail(res, 404, 'NOT_FOUND', 'No application matches that id.');
 
-  const [enrolRows, studRows, progRows, intakeRows, activity] = await Promise.all([
-    listEnrolments(req, `Application = ${id}`),
-    application.student ? listStudents(req, `id = ${application.student.id}`) : Promise.resolve([]),
-    application.programme ? listProgrammes(req, `id = ${application.programme.id}`) : Promise.resolve([]),
-    application.intake ? listIntakes(req, `id = ${application.intake.id}`) : Promise.resolve([]),
+  const [S, allProgrammes, allIntakes, activity] = await Promise.all([
+    application.student ? readStudents(req) : Promise.resolve([]),
+    application.programme ? readProgrammes(req) : Promise.resolve([]),
+    application.intake ? readIntakes(req) : Promise.resolve([]),
     auth.readActivity(req, { entityType: 'application', recordId: id, limit: 15 }).catch(() => [])
   ]);
 
-  const programme = progRows.length ? n.programme(progRows[0]) : null;
-  const intake = intakeRows.length ? n.intake(intakeRows[0]) : null;
-  const student = studRows.length ? n.student(studRows[0]) : null;
-  const enrolment = enrolRows.length ? n.enrolment(enrolRows[0]) : null;
+  const programme = application.programme ? (allProgrammes.find((p) => p.id === application.programme.id) || null) : null;
+  const intake = application.intake ? (allIntakes.find((i) => i.id === application.intake.id) || null) : null;
+  const student = application.student ? (S.find((s) => s.id === application.student.id) || null) : null;
+  const enrolment = E.find((e) => e.application && e.application.id === id) || null;
   const allowed = writes.TRANSITIONS[application.stage] || [];
 
   /*
@@ -899,9 +924,8 @@ R('/api/applications/:id', perms.P.APPLICATION_READ, async (req, res) => {
    */
   let intakeUsage = null;
   if (intake && intake.capacity != null && intake.capacity > 0 && allowed.includes(writes.STAGE.ENROLLED)) {
-    const taken = await listEnrolments(req,
-      `Intake = ${intake.id} and Enrolment_Status = '${writes.ENROLMENT_STATUS.ACTIVE}'`).catch(() => null);
-    if (taken) intakeUsage = { used: taken.length, capacity: intake.capacity };
+    const taken = E.filter((e) => e.intake && e.intake.id === intake.id && e.status === writes.ENROLMENT_STATUS.ACTIVE);
+    intakeUsage = { used: taken.length, capacity: intake.capacity };
   }
 
   /*
@@ -983,17 +1007,14 @@ R('/api/applications/:id', perms.P.APPLICATION_READ, async (req, res) => {
 /* ------------------------------- programmes ---------------------------- */
 
 R('/api/programmes', perms.P.PROGRAMME_READ, async (req, res) => {
-  const [rows, enrols, apps, intakes] = await Promise.all([
-    listProgrammes(req), listEnrolments(req), listApplications(req), listIntakes(req)
+  const [rows, E, A, I] = await Promise.all([
+    readProgrammes(req), readEnrolments(req), readApplications(req), readIntakes(req)
   ]);
-  const E = enrols.map(n.enrolment);
-  const A = apps.map(n.application);
-  const I = intakes.map(n.intake);
   // Courses come from the Catalyst connector and are matched by CRM id, so the
   // name-based guessing the previous integration needed is gone entirely.
   const lmsCourses = await lms.listCourses(req).catch(() => []);
 
-  let data = rows.map(n.programme).map((p) => {
+  let data = rows.map((p) => {
     const lmsCourse = lmsCourses.find((c) => String(c.crmProgrammeId) === String(p.id)) || null;
     return {
       ...p,
@@ -1010,7 +1031,7 @@ R('/api/programmes', perms.P.PROGRAMME_READ, async (req, res) => {
   if (req.query.active === 'false') data = data.filter((p) => !p.active);
   data = data.filter((p) => matches(p, req.query.search, ['name', 'code', 'department', 'academicLevel']));
 
-  const { items, meta } = paginate(data, req, { source: 'crm', lmsDemonstrationDataset: true });
+  const { items, meta } = paginate(data, req, { source: 'crm', lmsDemonstrationDataset: true, capped: false });
   ok(res, items, meta);
 });
 
@@ -1018,17 +1039,15 @@ R('/api/programmes/:id', perms.P.PROGRAMME_READ, async (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
   if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
 
-  const rows = await listProgrammes(req, `id = ${id}`);
-  if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No programme matches that id.');
-  const programme = n.programme(rows[0]);
-
-  const [ints, enrols, apps] = await Promise.all([
-    listIntakes(req, `Programme = ${id}`),
-    listEnrolments(req, `Programme = ${id}`),
-    listApplications(req, `Programme = ${id}`)
+  const [P, allIntakes, allEnrolments, allApplications] = await Promise.all([
+    readProgrammes(req), readIntakes(req), readEnrolments(req), readApplications(req)
   ]);
-  const intakes = ints.map(n.intake);
-  const enrolments = enrols.map(n.enrolment);
+  const programme = P.find((p) => p.id === id) || null;
+  if (!programme) return fail(res, 404, 'NOT_FOUND', 'No programme matches that id.');
+
+  const intakes = allIntakes.filter((i) => i.programme && i.programme.id === id);
+  const enrolments = allEnrolments.filter((e) => e.programme && e.programme.id === id);
+  const applications = allApplications.filter((a) => a.programme && a.programme.id === id);
   const lmsCourses = await lms.listCourses(req).catch(() => []);
   const lmsCourse = lmsCourses.find((c) => String(c.crmProgrammeId) === String(programme.id)) || null;
 
@@ -1039,7 +1058,7 @@ R('/api/programmes/:id', perms.P.PROGRAMME_READ, async (req, res) => {
       ...i,
       enrolledStudents: enrolments.filter((e) => e.intake && e.intake.id === i.id && e.status === writes.ENROLMENT_STATUS.ACTIVE).length
     })),
-    applications: apps.map(n.application),
+    applications,
     enrolments,
     lmsDemonstrationDataset: true
   });
@@ -1048,11 +1067,9 @@ R('/api/programmes/:id', perms.P.PROGRAMME_READ, async (req, res) => {
 /* --------------------------------- intakes ----------------------------- */
 
 R('/api/intakes', perms.P.INTAKE_READ, async (req, res) => {
-  const [rows, enrols, apps] = await Promise.all([listIntakes(req), listEnrolments(req), listApplications(req)]);
-  const E = enrols.map(n.enrolment);
-  const A = apps.map(n.application);
+  const [rows, E, A] = await Promise.all([readIntakes(req), readEnrolments(req), readApplications(req)]);
 
-  let data = rows.map(n.intake).map((i) => {
+  let data = rows.map((i) => {
     const active = E.filter((e) => e.intake && e.intake.id === i.id && e.status === writes.ENROLMENT_STATUS.ACTIVE).length;
     return {
       ...i,
@@ -1089,7 +1106,8 @@ R('/api/intakes', perms.P.INTAKE_READ, async (req, res) => {
   const { items, meta } = paginate(data, req, {
     byStatus: groupBy(data, (i) => i.status),
     statuses: writes.INTAKE_STATUS,
-    source: 'crm'
+    source: 'crm',
+    capped: false
   });
   ok(res, items, meta);
 });
@@ -1098,17 +1116,19 @@ R('/api/intakes/:id', perms.P.INTAKE_READ, async (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
   if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
 
-  const rows = await listIntakes(req, `id = ${id}`);
-  if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No intake matches that id.');
-  const intake = n.intake(rows[0]);
-
-  const [apps, enrols, progRows] = await Promise.all([
-    listApplications(req, `Intake = ${id}`),
-    listEnrolments(req, `Intake = ${id}`),
-    intake.programme ? listProgrammes(req, `id = ${intake.programme.id}`) : Promise.resolve([])
+  const [I, allApplications, allEnrolments, allProgrammes] = await Promise.all([
+    readIntakes(req), readApplications(req), readEnrolments(req),
+    // Resolved below only if needed, but fetched alongside everything else
+    // since a Datastore read costs nothing worth gating.
+    readProgrammes(req)
   ]);
-  const enrolments = enrols.map(n.enrolment);
+  const intake = I.find((i) => i.id === id) || null;
+  if (!intake) return fail(res, 404, 'NOT_FOUND', 'No intake matches that id.');
+
+  const applications = allApplications.filter((a) => a.intake && a.intake.id === id);
+  const enrolments = allEnrolments.filter((e) => e.intake && e.intake.id === id);
   const active = enrolments.filter((e) => e.status === writes.ENROLMENT_STATUS.ACTIVE).length;
+  const programme = intake.programme ? (allProgrammes.find((p) => p.id === intake.programme.id) || null) : null;
 
   ok(res, {
     intake: {
@@ -1116,8 +1136,8 @@ R('/api/intakes/:id', perms.P.INTAKE_READ, async (req, res) => {
       placesRemaining: intake.capacity == null ? null : Math.max(0, intake.capacity - active),
       full: intake.capacity != null && active >= intake.capacity
     },
-    programme: progRows.length ? n.programme(progRows[0]) : null,
-    applications: apps.map(n.application),
+    programme,
+    applications,
     enrolments,
     activeEnrolments: active
   });
@@ -1126,10 +1146,9 @@ R('/api/intakes/:id', perms.P.INTAKE_READ, async (req, res) => {
 /* ------------------------------- enrolments ---------------------------- */
 
 R('/api/enrolments', perms.P.ENROLMENT_READ, async (req, res) => {
-  const [rows, studRows] = await Promise.all([listEnrolments(req), listStudents(req)]);
-  const S = studRows.map(n.student);
+  const [rows, S] = await Promise.all([readEnrolments(req), readStudents(req)]);
 
-  let data = rows.map(n.enrolment).map((e) => {
+  let data = rows.map((e) => {
     const st = e.student ? S.find((s) => s.id === e.student.id) : null;
     return { ...e, studentName: st ? st.fullName : (e.student && e.student.name) || null, studentEmail: st ? st.email : null };
   });
@@ -1146,7 +1165,7 @@ R('/api/enrolments', perms.P.ENROLMENT_READ, async (req, res) => {
   data = data.filter((e) => matches(e, req.query.search, ['reference', 'externalReference', 'studentName', 'studentEmail']));
 
   const { items, meta } = paginate(data, req, {
-    byStatus, statuses: Object.values(writes.ENROLMENT_STATUS), source: 'crm'
+    byStatus, statuses: Object.values(writes.ENROLMENT_STATUS), source: 'crm', capped: false
   });
   ok(res, items, meta);
 });
@@ -1155,19 +1174,18 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
   const id = String(req.params.id).replace(/[^0-9]/g, '');
   if (!id) return fail(res, 400, 'INVALID_ID', 'A numeric record id is required.');
 
-  const rows = await listEnrolments(req, `id = ${id}`);
-  if (!rows.length) return fail(res, 404, 'NOT_FOUND', 'No enrolment matches that id.');
-  const enrolment = n.enrolment(rows[0]);
-
-  const [studRows, progRows, intakeRows, appRows, activity] = await Promise.all([
-    enrolment.student ? listStudents(req, `id = ${enrolment.student.id}`) : Promise.resolve([]),
-    enrolment.programme ? listProgrammes(req, `id = ${enrolment.programme.id}`) : Promise.resolve([]),
-    enrolment.intake ? listIntakes(req, `id = ${enrolment.intake.id}`) : Promise.resolve([]),
-    enrolment.application ? listApplications(req, `id = ${enrolment.application.id}`) : Promise.resolve([]),
-    auth.readActivity(req, { entityType: 'enrolment', recordId: id, limit: 15 }).catch(() => [])
+  const [Enr, allStudents, allProgrammes, allIntakes, allApplications] = await Promise.all([
+    readEnrolments(req), readStudents(req), readProgrammes(req), readIntakes(req), readApplications(req)
   ]);
+  const enrolment = Enr.find((e) => e.id === id) || null;
+  if (!enrolment) return fail(res, 404, 'NOT_FOUND', 'No enrolment matches that id.');
 
-  const programme = progRows.length ? n.programme(progRows[0]) : null;
+  const activity = await auth.readActivity(req, { entityType: 'enrolment', recordId: id, limit: 15 }).catch(() => []);
+
+  const student = enrolment.student ? (allStudents.find((s) => s.id === enrolment.student.id) || null) : null;
+  const programme = enrolment.programme ? (allProgrammes.find((p) => p.id === enrolment.programme.id) || null) : null;
+  const intake = enrolment.intake ? (allIntakes.find((i) => i.id === enrolment.intake.id) || null) : null;
+  const application = enrolment.application ? (allApplications.find((a) => a.id === enrolment.application.id) || null) : null;
 
   // The External LMS panel: records linked to THIS CRM enrolment, each with its
   // course. Never rejected — an LMS outage must not break the CRM page.
@@ -1189,11 +1207,9 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
    * this student is fetched alongside it and the UI shows both. Only for a
    * principal allowed to see invoices at all.
    */
-  const invoices = (studRows.length && auth.hasPermission(req, perms.P.INVOICE_READ))
-    ? await studentInvoices(req, studRows[0], n.student(studRows[0]))
+  const invoices = (student && auth.hasPermission(req, perms.P.INVOICE_READ))
+    ? await studentInvoices(req, {}, student)
     : null;
-
-  const intake = intakeRows.length ? n.intake(intakeRows[0]) : null;
 
   /*
    * Places consumed on this enrolment's intake. Only fetched when the intake
@@ -1201,9 +1217,8 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
    */
   let intakeUsage = null;
   if (intake && intake.capacity != null && intake.capacity > 0) {
-    const taken = await listEnrolments(req,
-      `Intake = ${intake.id} and Enrolment_Status = '${writes.ENROLMENT_STATUS.ACTIVE}'`).catch(() => null);
-    if (taken) intakeUsage = { used: taken.length, capacity: intake.capacity };
+    const taken = Enr.filter((e) => e.intake && e.intake.id === intake.id && e.status === writes.ENROLMENT_STATUS.ACTIVE);
+    intakeUsage = { used: taken.length, capacity: intake.capacity };
   }
 
   /*
@@ -1277,12 +1292,12 @@ R('/api/enrolments/:id', perms.P.ENROLMENT_READ, async (req, res) => {
 
   ok(res, {
     enrolment,
-    student: studRows.length ? n.student(studRows[0]) : null,
+    student,
     programme,
     intake,
     intakeUsage,
     warnings,
-    application: appRows.length ? n.application(appRows[0]) : null,
+    application,
     learning,
     lmsCourse: programme
       ? lmsCourses.find((c) => String(c.crmProgrammeId) === String(programme.id)) || null
@@ -1746,7 +1761,15 @@ const WRITE_ROUTES = [
    * a record, and nothing here touches CRM. The handler still refuses a note
    * against a record that does not exist.
    */
-  ['post', '/api/notes', P.ACTIVITY_WRITE, writes.noteCreate]
+  ['post', '/api/notes', P.ACTIVITY_WRITE, writes.noteCreate],
+
+  /*
+   * Read-model PoC (kickoff-prompt.md §2/§3 phase 3). One-time population of
+   * the crm_* projection tables from live CRM data. Administrator-only,
+   * separate from every domain permission above because this touches every
+   * entity at once rather than one record a caller owns.
+   */
+  ['post', '/api/admin/bootstrap-sync', P.SYNC_ADMIN, bootstrap.runBootstrap]
 ];
 
 /**
@@ -1783,6 +1806,7 @@ const LMS_WRITE_ROUTES = [
 const deps = { zoho: z };
 
 const wrapWrite = (handler) => async (req, res) => {
+  req.__apiCallSource = apiCallLog.SOURCE.INTERACTIVE_WRITE;
   try {
     // Replay of an Idempotency-Key returns the first response, so a retried
     // create or transition cannot act twice.
@@ -1852,6 +1876,7 @@ WRITE_ROUTES.forEach(([method, path, permission, handler]) => {
  * differs: these handlers return the record itself.
  */
 const wrapLmsWrite = (handler) => async (req, res) => {
+  req.__apiCallSource = apiCallLog.SOURCE.INTERACTIVE_WRITE;
   try {
     const replayed = auth.idempotencyLookup(req);
     if (replayed) return res.status(200).json({ ...replayed, meta: { ...(replayed.meta || {}), idempotentReplay: true } });

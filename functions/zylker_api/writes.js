@@ -33,6 +33,7 @@
 const cfg = require('./config');
 const n = require('./normalise');
 const refs = require('./references');
+const projections = require('./projections');
 
 /* ------------------------- resolved metadata --------------------------- */
 /**
@@ -204,12 +205,49 @@ function assertUnchanged(record, expectedModifiedTime) {
 }
 
 /**
+ * Write-through (kickoff-prompt.md §2 "Write-through"): after a Zoho write
+ * succeeds and is read back, keep the matching Datastore projection row in
+ * sync from that same record — no extra Zoho call. Best-effort: a projection
+ * hiccup must never fail a write that has already landed in Zoho, so this
+ * never throws. `deps.ds` lets tests inject a fake Datastore the same way
+ * `deps.zoho` already lets them inject a fake CRM.
+ */
+async function writeThroughUpsert(deps, req, module_, rawRecord) {
+  const entity = cfg.projections.moduleToEntity[module_];
+  if (!entity) return; // a module this PoC does not project (none, today)
+  try {
+    await projections.upsertProjectionRow(req, entity, rawRecord, deps.ds);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`write-through upsert failed for ${entity}:`, err && err.message);
+  }
+}
+
+/**
+ * The delete-side counterpart: a CRM record that no longer exists must not
+ * keep showing up in the read model forever. Same best-effort contract as
+ * writeThroughUpsert — never throws, never blocks the (already-confirmed)
+ * delete response on a Datastore hiccup.
+ */
+async function writeThroughDelete(deps, req, module_, id) {
+  const entity = cfg.projections.moduleToEntity[module_];
+  if (!entity) return;
+  try {
+    await projections.deleteProjectionRow(req, entity, String(id), deps.ds);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`write-through delete failed for ${entity}:`, err && err.message);
+  }
+}
+
+/**
  * Reads a record back after a write and asserts it exists. `deps` carries the
  * zoho module (injected so the handlers can be unit-tested without Catalyst).
  */
 async function readBackRaw(deps, req, module_, id, fields) {
   const rec = await deps.zoho.crmGetRecord(req, module_, id, fields);
   if (!rec) throw new AppError(502, 'READBACK_FAILED', 'The record could not be read back after the write.');
+  await writeThroughUpsert(deps, req, module_, rec);
   return rec;
 }
 
@@ -546,6 +584,7 @@ async function applicationDelete(deps, req) {
   // Read-after-delete: confirm the record is actually gone.
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.applications, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
+  await writeThroughDelete(deps, req, cfg.modules.applications, id);
   return { data: { id, deleted: true }, audit: { action: 'application:delete', entityType: 'application', recordId: id, changedFields: [], result: 'success' } };
 }
 
@@ -922,6 +961,7 @@ async function studentDelete(deps, req) {
   await deps.zoho.crmDelete(req, cfg.modules.students, id);
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.students, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
+  await writeThroughDelete(deps, req, cfg.modules.students, id);
   return { data: { id, deleted: true }, audit: { action: 'student:delete', entityType: 'student', recordId: id, changedFields: [], result: 'success' } };
 }
 
@@ -934,6 +974,7 @@ async function enrolmentDelete(deps, req) {
   await deps.zoho.crmDelete(req, cfg.modules.enrolments, id);
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.enrolments, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
+  await writeThroughDelete(deps, req, cfg.modules.enrolments, id);
   return { data: { id, deleted: true }, audit: { action: 'enrolment:delete', entityType: 'enrolment', recordId: id, changedFields: [], result: 'success' } };
 }
 
@@ -996,6 +1037,7 @@ async function programmeDelete(deps, req) {
   await deps.zoho.crmDelete(req, cfg.modules.programmes, id);
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.programmes, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
+  await writeThroughDelete(deps, req, cfg.modules.programmes, id);
   return { data: { id, deleted: true }, audit: { action: 'programme:delete', entityType: 'programme', recordId: id, changedFields: [], result: 'success' } };
 }
 
@@ -1038,6 +1080,7 @@ async function intakeDelete(deps, req) {
   await deps.zoho.crmDelete(req, cfg.modules.intakes, id);
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.intakes, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
+  await writeThroughDelete(deps, req, cfg.modules.intakes, id);
   return { data: { id, deleted: true }, audit: { action: 'intake:delete', entityType: 'intake', recordId: id, changedFields: [], result: 'success' } };
 }
 

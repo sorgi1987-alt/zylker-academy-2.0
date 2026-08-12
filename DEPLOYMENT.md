@@ -141,7 +141,7 @@ npm install
 npm run build
 
 cd ~/Desktop/zylker-academy-app
-catalyst deploy --only functions,client -p 11922000000014048
+catalyst deploy --only functions,client -p 11922000000133164
 ```
 
 ## 4. The identity problem — resolved 28 July 2026

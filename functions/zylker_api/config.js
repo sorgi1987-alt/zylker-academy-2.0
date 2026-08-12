@@ -11,7 +11,7 @@
  * this file or anywhere else in the repository. Upstream calls are authorised
  * by Catalyst Connections, resolved at request time by zoho.js.
  */
-module.exports = {
+const config = {
   auth: {
     // Catalyst embedded authentication is enabled on this project's domain.
     // The mode is recorded so /api/integration-status can report what the
@@ -21,7 +21,7 @@ module.exports = {
     // Catalyst project id, used to build the project-user endpoint path when
     // validating a forwarded session. Not a secret — it appears in the client's
     // own SDK configuration and in every gateway URL.
-    projectId: process.env.CATALYST_PROJECT_ID || '11922000000014048',
+    projectId: process.env.CATALYST_PROJECT_ID || '11922000000133164',
     // Base URL for the platform API. Derived from the incoming request host by
     // default so it follows the environment (development / production) without
     // configuration; override only if the gateway is reached by another name.
@@ -107,5 +107,38 @@ module.exports = {
     programmes: 'Products',
     intakes: 'Intakes',
     enrolments: 'Enrolments'
+  },
+  // Read-model/cache/event-sync PoC (see kickoff-prompt.md). Datastore table
+  // names for the CRM projections and the sync bookkeeping table, and the
+  // sync_state.entity key each CRM module is tracked under. Table names are
+  // overridable the same way the LMS connector's tables are, so a projection
+  // can be repointed without a code change.
+  projections: {
+    tables: {
+      students: process.env.CRM_STUDENTS_TABLE || 'crm_students',
+      applications: process.env.CRM_APPLICATIONS_TABLE || 'crm_applications',
+      programmes: process.env.CRM_PROGRAMMES_TABLE || 'crm_programmes',
+      intakes: process.env.CRM_INTAKES_TABLE || 'crm_intakes',
+      enrolments: process.env.CRM_ENROLMENTS_TABLE || 'crm_enrolments'
+    },
+    syncStateTable: process.env.SYNC_STATE_TABLE || 'sync_state',
+    // sync_state.entity values, one per CRM module this PoC projects.
+    syncEntities: {
+      students: 'crm.contacts',
+      applications: 'crm.deals',
+      programmes: 'crm.products',
+      intakes: 'crm.intakes',
+      enrolments: 'crm.enrolments'
+    }
   }
 };
+
+// Reverse of `modules` (CRM API module name -> projection entity key), built
+// once here rather than duplicated wherever a write handler needs to turn
+// "Deals" back into "applications" for write-through (writes.js) or an event
+// payload's module name back into an entity (Signals handler, phase 8).
+config.projections.moduleToEntity = Object.fromEntries(
+  Object.entries(config.modules).map(([entity, module_]) => [module_, entity])
+);
+
+module.exports = config;

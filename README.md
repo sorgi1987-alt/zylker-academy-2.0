@@ -5,8 +5,12 @@ intakes and enrolments, backed by Zoho CRM, with an external LMS connector held
 in the Catalyst Data Store and read-only views of Zoho Books invoices and Zoho
 Desk support tickets.
 
-**Catalyst project:** `Zylker-Academy` · id `11922000000014048` · org `20117369913` · EU DC
-**Project domain:** `https://zylker-academy-20117369913.development.catalystserverless.eu`
+**Catalyst project:** `Zylker-Academy-Signals` · id `11922000000133164` · org `20117369913` · EU DC
+**Project domain:** `https://zylker-academy-signals-20117369913.development.catalystserverless.eu`
+
+> This is a duplicate of the original `Zylker-Academy` project (id `11922000000014048`), created for the
+> read-model/cache/event-sync PoC described in `kickoff-prompt.md`. See `ARCHITECTURE.md` (once written)
+> for what was built here and why.
 
 Deployment steps, environment variables, the Books connection setup and the
 verification checklist are in **[DEPLOYMENT.md](DEPLOYMENT.md)**.

@@ -2,6 +2,7 @@
 const axios = require('axios');
 const catalyst = require('zcatalyst-sdk-node');
 const cfg = require('./config');
+const apiCallLog = require('./apiCallLog');
 
 /**
  * Resolves credentials for a Catalyst Connection created in the console.
@@ -119,18 +120,25 @@ function safeError(err, service) {
 /* ------------------------------- CRM ---------------------------------- */
 
 async function crmQuery(req, selectQuery) {
-  const creds = await credentials(req, cfg.crm.connection);
-  const http = client(cfg.crm.baseUrl, creds);
-  const res = await http.post('/coql', { select_query: selectQuery });
-  if (!res.data || !res.data.data) return []; // 204 = no matching rows
-  return res.data.data;
+  // The queried module is pulled out for logging only — best-effort, and
+  // never allowed to change what gets sent upstream.
+  const module_ = (String(selectQuery).match(/\bfrom\s+(\S+)/i) || [])[1] || 'coql';
+  return apiCallLog.timed(req, { service: 'crm', operation: 'coql_query', moduleOrEndpoint: module_ }, async () => {
+    const creds = await credentials(req, cfg.crm.connection);
+    const http = client(cfg.crm.baseUrl, creds);
+    const res = await http.post('/coql', { select_query: selectQuery });
+    if (!res.data || !res.data.data) return []; // 204 = no matching rows
+    return res.data.data;
+  });
 }
 
 async function crmGet(req, path, params) {
-  const creds = await credentials(req, cfg.crm.connection);
-  const http = client(cfg.crm.baseUrl, creds);
-  const res = await http.get(path, { params });
-  return res.data;
+  return apiCallLog.timed(req, { service: 'crm', operation: 'get', moduleOrEndpoint: path }, async () => {
+    const creds = await credentials(req, cfg.crm.connection);
+    const http = client(cfg.crm.baseUrl, creds);
+    const res = await http.get(path, { params });
+    return res.data;
+  });
 }
 
 /* --------------------------- CRM writes ------------------------------- */
@@ -164,13 +172,15 @@ const fieldList = (fields) => String(fields || '')
 
 /** Reads a single record by id. Returns the raw record object, or null on 204. */
 async function crmGetRecord(req, module_, id, fields) {
-  const creds = await credentials(req, cfg.crm.connection);
-  const http = client(cfg.crm.baseUrl, creds);
-  const list = fieldList(fields);
-  const params = list ? { fields: list } : undefined;
-  const res = await http.get(`/${module_}/${encodeURIComponent(id)}`, { params });
-  const rec = res.data && Array.isArray(res.data.data) ? res.data.data[0] : null;
-  return rec || null;
+  return apiCallLog.timed(req, { service: 'crm', operation: 'get_record', moduleOrEndpoint: module_ }, async () => {
+    const creds = await credentials(req, cfg.crm.connection);
+    const http = client(cfg.crm.baseUrl, creds);
+    const list = fieldList(fields);
+    const params = list ? { fields: list } : undefined;
+    const res = await http.get(`/${module_}/${encodeURIComponent(id)}`, { params });
+    const rec = res.data && Array.isArray(res.data.data) ? res.data.data[0] : null;
+    return rec || null;
+  });
 }
 
 /** Unwraps Zoho's { data:[{code,status,details,message}] } write envelope. */
@@ -193,24 +203,30 @@ function firstWriteResult(body) {
 }
 
 async function crmCreate(req, module_, record) {
-  const creds = await credentials(req, cfg.crm.connection);
-  const http = client(cfg.crm.baseUrl, creds);
-  const res = await http.post(`/${module_}`, { data: [record] });
-  return firstWriteResult(res.data); // { id, Created_Time, Modified_Time, ... }
+  return apiCallLog.timed(req, { service: 'crm', operation: 'create', moduleOrEndpoint: module_ }, async () => {
+    const creds = await credentials(req, cfg.crm.connection);
+    const http = client(cfg.crm.baseUrl, creds);
+    const res = await http.post(`/${module_}`, { data: [record] });
+    return firstWriteResult(res.data); // { id, Created_Time, Modified_Time, ... }
+  });
 }
 
 async function crmUpdate(req, module_, id, record) {
-  const creds = await credentials(req, cfg.crm.connection);
-  const http = client(cfg.crm.baseUrl, creds);
-  const res = await http.put(`/${module_}/${encodeURIComponent(id)}`, { data: [record] });
-  return firstWriteResult(res.data);
+  return apiCallLog.timed(req, { service: 'crm', operation: 'update', moduleOrEndpoint: module_ }, async () => {
+    const creds = await credentials(req, cfg.crm.connection);
+    const http = client(cfg.crm.baseUrl, creds);
+    const res = await http.put(`/${module_}/${encodeURIComponent(id)}`, { data: [record] });
+    return firstWriteResult(res.data);
+  });
 }
 
 async function crmDelete(req, module_, id) {
-  const creds = await credentials(req, cfg.crm.connection);
-  const http = client(cfg.crm.baseUrl, creds);
-  const res = await http.delete(`/${module_}/${encodeURIComponent(id)}`);
-  return firstWriteResult(res.data);
+  return apiCallLog.timed(req, { service: 'crm', operation: 'delete', moduleOrEndpoint: module_ }, async () => {
+    const creds = await credentials(req, cfg.crm.connection);
+    const http = client(cfg.crm.baseUrl, creds);
+    const res = await http.delete(`/${module_}/${encodeURIComponent(id)}`);
+    return firstWriteResult(res.data);
+  });
 }
 
 /**
