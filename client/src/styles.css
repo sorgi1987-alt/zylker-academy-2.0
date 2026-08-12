@@ -542,11 +542,13 @@ input[type=search]{flex:1;min-width:220px}
   border-radius:var(--radius);display:flex;flex-direction:column;max-height:calc(100vh - 320px);
   min-height:160px;overflow:hidden}
 .kanban-col.over{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
-.kanban-col-h{display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:10px 13px;border-bottom:1px solid var(--line);border-top:3px solid transparent;flex-shrink:0}
+.kanban-col-h{display:flex;flex-direction:column;gap:3px;padding:10px 13px;
+  border-bottom:1px solid var(--line);border-top:3px solid transparent;flex-shrink:0}
+.kanban-col-h-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .kanban-col-title{font-size:13px;font-weight:700;color:var(--ink-2)}
 .kanban-col-count{font-size:11px;font-weight:700;background:var(--surface);color:var(--ink-3);
   border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+.kanban-col-total{font-size:11px;color:var(--ink-3)}
 /* Column colour follows the same picklist-value tone Pill uses elsewhere,
    so a stage reads as the same colour in list and board view. */
 .kanban-col.tone-ok .kanban-col-h{border-top-color:var(--ok)}

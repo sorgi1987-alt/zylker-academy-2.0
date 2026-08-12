@@ -9,6 +9,16 @@ import {
 } from '../components/Ui.jsx';
 import ApplicationBoard from '../components/ApplicationBoard.jsx';
 
+const VIEW_STORAGE_KEY = 'zylker.applications.view';
+// Reading/writing localStorage can throw (private browsing, storage disabled) —
+// that's not worth losing the page over, so a stored preference is best-effort.
+const readStoredView = () => {
+  try { return localStorage.getItem(VIEW_STORAGE_KEY); } catch { return null; }
+};
+const writeStoredView = (view) => {
+  try { localStorage.setItem(VIEW_STORAGE_KEY, view); } catch { /* best-effort */ }
+};
+
 export default function Applications() {
   const t = useT();
   const can = useCan();
@@ -25,13 +35,17 @@ export default function Applications() {
 
   const stages = (list.meta && list.meta.stages) || [];
 
-  // The view itself lives in the URL, same reasoning as Student 360's tab —
-  // shareable, and a reload doesn't quietly switch what someone was looking at.
-  const view = params.get('view') === 'board' ? 'board' : 'list';
+  // The view lives in the URL when a link specifies one — shareable, and a
+  // reload doesn't quietly switch what someone was looking at — and falls
+  // back to whichever view was last chosen, so returning to this page later
+  // (with no view param) reopens where you left off rather than resetting.
+  const paramView = params.get('view');
+  const view = paramView === 'board' || paramView === 'list' ? paramView : (readStoredView() || 'list');
   const setView = (next) => {
     const p = new URLSearchParams(params);
     if (next === 'list') p.delete('view'); else p.set('view', next);
     setParams(p, { replace: true });
+    writeStoredView(next);
   };
 
   // The board needs every matching application across every column at once,

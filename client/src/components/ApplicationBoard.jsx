@@ -33,10 +33,14 @@ export default function ApplicationBoard({ rows, stages, canDrag, onReload }) {
   // reload after a successful move brought back authoritative data).
   useEffect(() => { setItems(rows); }, [rows]);
 
-  const columns = stages.map((stage) => ({
-    stage,
-    apps: items.filter((a) => a.stage === stage)
-  }));
+  const columns = stages.map((stage) => {
+    const apps = items.filter((a) => a.stage === stage);
+    return {
+      stage,
+      apps,
+      totalFee: apps.reduce((sum, a) => sum + (Number(a.tuitionFee) || 0), 0)
+    };
+  });
 
   const handleDrop = async (targetStage, e) => {
     e.preventDefault();
@@ -75,7 +79,7 @@ export default function ApplicationBoard({ rows, stages, canDrag, onReload }) {
 
   return (
     <div className="kanban">
-      {columns.map(({ stage, apps }) => (
+      {columns.map(({ stage, apps, totalFee }) => (
         <div
           key={stage}
           className={`kanban-col tone-${toneFor(stage)}${dragOverStage === stage ? ' over' : ''}`}
@@ -84,8 +88,11 @@ export default function ApplicationBoard({ rows, stages, canDrag, onReload }) {
           onDrop={(e) => handleDrop(stage, e)}
         >
           <div className="kanban-col-h">
-            <span className="kanban-col-title">{stage}</span>
-            <span className="kanban-col-count">{apps.length}</span>
+            <div className="kanban-col-h-row">
+              <span className="kanban-col-title">{stage}</span>
+              <span className="kanban-col-count">{apps.length}</span>
+            </div>
+            {apps.length > 0 && <span className="kanban-col-total mono">{fmtMoney(totalFee)}</span>}
           </div>
           <div className="kanban-col-b">
             {apps.length ? apps.map((a) => (
