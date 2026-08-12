@@ -456,3 +456,32 @@ test('reconcile-sync is gated by a shared secret, not a Catalyst session', async
   assert.equal(badEntities.status, 400);
   assert.equal(badEntities.body.error.code, 'INVALID_ENTITIES');
 });
+
+/**
+ * /api/events/crm-signal is the Catalyst Signals webhook target — same
+ * reasoning as reconcile-sync: no Catalyst session behind the call, so it's
+ * gated by its own shared secret rather than requireAuth.
+ */
+test('crm-signal is gated by a shared secret, and rejects a payload that is not a Signals envelope', async (t) => {
+  process.env.SIGNALS_SECRET = 'signals-test-secret';
+  for (const k of Object.keys(require.cache)) delete require.cache[k];
+  const app = require('../index.js');
+  const server = await listen(app);
+  t.after(() => { server.close(); delete process.env.SIGNALS_SECRET; });
+
+  const noHeader = await request(server, 'POST', '/api/events/crm-signal', { body: { events: [] } });
+  assert.equal(noHeader.status, 401);
+
+  const wrongSecret = await request(server, 'POST', '/api/events/crm-signal',
+    { body: { events: [] }, headers: { 'x-signals-secret': 'wrong' } });
+  assert.equal(wrongSecret.status, 401);
+
+  const notAnEnvelope = await request(server, 'POST', '/api/events/crm-signal',
+    { body: { not: 'an envelope' }, headers: { 'x-signals-secret': 'signals-test-secret' } });
+  assert.equal(notAnEnvelope.status, 400);
+
+  const emptyBatch = await request(server, 'POST', '/api/events/crm-signal',
+    { body: { events: [] }, headers: { 'x-signals-secret': 'signals-test-secret' } });
+  assert.equal(emptyBatch.status, 200);
+  assert.equal(emptyBatch.body.data.processed, 0);
+});

@@ -24,6 +24,7 @@ Console → your project → **Settings → Environment Variables** (Development
 | `ZOHO_BOOKS_PAGE_SIZE` | Optional | `50` | Invoices per page. |
 | `ZOHO_BOOKS_MAX_PAGES` | Optional | `10` | Ceiling on pages walked for the dashboard totals. |
 | `RECONCILE_SECRET` | Yes, for reconciliation | a long random string | Read-model PoC (kickoff-prompt.md). Authorizes `POST /api/admin/reconcile-sync` — this route has no Catalyst session behind it (it's called by a Cron Job, not a signed-in user), so it's gated by this shared secret sent as an `x-reconcile-secret` header instead of `requireAuth`. Unset means the route refuses every call. |
+| `SIGNALS_SECRET` | Yes, for event-driven sync | a long random string, different from `RECONCILE_SECRET` | Read-model PoC. Authorizes `POST /api/events/crm-signal`, the Catalyst Signals webhook target — same reasoning as `RECONCILE_SECRET`, sent as an `x-signals-secret` header. |
 
 **Note for this project specifically:** environment variables here are set at the
 **function level** (Console → your function → Settings → Environment
@@ -48,6 +49,38 @@ Body per job, matching `reconciliation.js`'s `SCHEDULE_TIERS`:
 
 These aren't created yet — there's no deployed URL to point them at until
 after the first deploy.
+
+### Signals event source (read-model PoC, phase 8)
+
+Once `zylker_api` is deployed and `SIGNALS_SECRET` is set, configure Signals
+(Console → **Signals**) with Zoho CRM as the event publisher — confirmed as a
+default publisher requiring no manual schema setup. Create one **Rule** per
+module+action this PoC projects (15 total: Contacts/Deals/Products/Intakes/
+Enrolments × Created/Updated/Deleted), each with:
+
+- **Target type**: Webhook
+- **Method**: POST
+- **URL**: `https://<your-domain>/server/zylker_api/api/events/crm-signal`
+- **Header**: `x-signals-secret: <the same value as SIGNALS_SECRET>`
+- **Body**: pass the event through unmodified (no transform needed —
+  `signals.js` reads the standard envelope directly)
+
+**Before relying on this**, verify the one thing that could not be confirmed
+from documentation alone (see `signals.js`'s header comment for the full
+reasoning): fire one real test event per action type and check
+`event_config.api_name` in the delivered payload actually reads
+`"<ModuleAPIName> Created/Updated/Deleted"` (e.g. `"Contacts Created"`) as
+`signals.js`'s `parseEventConfig()` assumes. If it doesn't, the event is
+logged as `unrecognised` and silently skipped rather than misapplied — safe,
+but means events for that module aren't syncing until the parser is fixed to
+match what Zoho actually sends.
+
+Not confirmed, and not blocking: whether Catalyst deducts CRM API credits for
+delivering a Signals event, or any event-volume-based cost. Catalyst's own
+docs do not address this as of 2026-08-12. Confirmed instead: a single event
+occurrence is capped at 100 KB, a batch of occurrences at 5 MB, and up to 200
+distinct events can be configured across all publishers — none of which this
+PoC is near.
 
 Do **not** set `ZYLKER_AUTH_BYPASS`. It exists only for a local harness and
 would make every request unauthenticated-but-allowed.

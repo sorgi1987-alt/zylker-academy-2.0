@@ -25,6 +25,7 @@ const apiCallLog = require('./apiCallLog');
 const bootstrap = require('./bootstrap');
 const projectionReads = require('./projectionReads');
 const reconciliation = require('./reconciliation');
+const signals = require('./signals');
 
 const app = express();
 app.disable('x-powered-by');
@@ -1936,6 +1937,32 @@ app.post('/api/admin/reconcile-sync', express.json({ limit: '8kb' }), async (req
     const s = z.safeError(err, err.__service || 'zoho');
     return fail(res, s.status >= 400 && s.status < 600 ? s.status : 502,
       'UPSTREAM_ERROR', s.detail, s.service);
+  }
+});
+
+/**
+ * Catalyst Signals webhook target (kickoff-prompt.md §2a phase 8) — the
+ * primary CRM sync path. Same reasoning as reconcile-sync: no Catalyst
+ * session behind a Signals delivery, so this is gated by a shared secret
+ * (`SIGNALS_SECRET`) rather than requireAuth. Off by default.
+ *
+ * Responds 2xx on success so Signals' own retry policy does not treat a
+ * processed batch as failed; a malformed envelope (not what Signals should
+ * ever send) is the one thing that gets a 400, everything else in the batch
+ * is best-effort per event (see signals.js).
+ */
+app.post('/api/events/crm-signal', express.json({ limit: '512kb' }), async (req, res) => {
+  const configured = String(process.env.SIGNALS_SECRET || '').trim();
+  const supplied = String(req.headers['x-signals-secret'] || '');
+  if (!configured || supplied !== configured) {
+    return fail(res, 401, 'UNAUTHORIZED', 'Missing or incorrect Signals secret.');
+  }
+
+  try {
+    const results = await signals.processEnvelope(req, req.body || {});
+    return ok(res, { processed: results.length, results });
+  } catch (err) {
+    return fail(res, err.status || 400, 'INVALID_PAYLOAD', err.message || 'Could not process the Signals payload.');
   }
 });
 
