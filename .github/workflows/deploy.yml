@@ -117,7 +117,7 @@ jobs:
         run: |
           catalyst deploy \
             --only functions,client \
-            --project 11922000000014048 \
+            --project 11922000000133164 \
             --org 20117369913 \
             --dc eu \
             --token "$CATALYST_TOKEN"
@@ -126,7 +126,7 @@ jobs:
       # is actually answering before the run is called a success.
       - name: Smoke-test the deployment
         run: |
-          URL="https://zylker-academy-20117369913.development.catalystserverless.eu/server/zylker_api"
+          URL="https://zylker-academy-signals-20117369913.development.catalystserverless.eu/server/zylker_api"
 
           echo "Health check:"
           code=$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/health")
