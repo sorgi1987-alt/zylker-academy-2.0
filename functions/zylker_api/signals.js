@@ -53,6 +53,7 @@
 const cfg = require('./config');
 const projections = require('./projections');
 const cacheModule = require('./cache');
+const syncState = require('./syncState');
 
 /** "<ModuleAPIName> <Action>" -> { entity, action }, or null if unrecognised. */
 function parseEventConfig(apiName) {
@@ -85,12 +86,13 @@ async function touchLastEventReceived(req, entity, ds) {
  * and, for phase 10, surface on the Integration Status page.
  *
  * On a successful projection change, invalidates the same cache keys
- * write-through would (kickoff-prompt.md §2a) via cache.invalidateForEntity
- * — not on a stale/unrecognised/missing-id outcome, since nothing actually
- * changed in those cases. `cacheApi` lets tests inject a fake the same way
- * `ds` already lets them inject a fake Datastore.
+ * write-through would (kickoff-prompt.md §2a) via cache.invalidateForEntity,
+ * and increments sync_state's events_applied_total (§2 "Sync health") —
+ * neither on a stale/unrecognised/missing-id outcome, since nothing
+ * actually changed in those cases. `cacheApi`/`syncStateApi` let tests
+ * inject fakes the same way `ds` already lets them inject a fake Datastore.
  */
-async function processEvent(req, event, ds, cacheApi = cacheModule) {
+async function processEvent(req, event, ds, cacheApi = cacheModule, syncStateApi = syncState) {
   const parsed = event && event.event_config ? parseEventConfig(event.event_config.api_name) : null;
   if (!parsed) {
     return { outcome: 'unrecognised', apiName: event && event.event_config && event.event_config.api_name };
@@ -106,12 +108,18 @@ async function processEvent(req, event, ds, cacheApi = cacheModule) {
 
   if (action === 'deleted') {
     const removed = await projections.deleteProjectionRow(req, entity, crmId, ds);
-    if (removed) await cacheApi.invalidateForEntity(req, entity);
+    if (removed) {
+      await cacheApi.invalidateForEntity(req, entity);
+      await syncStateApi.incrementApplied(req, entity, 'event-sync', 1, ds);
+    }
     return { outcome: removed ? 'deleted' : 'delete-noop', entity, action, crmId };
   }
 
   const result = await projections.upsertProjectionRow(req, entity, record, ds);
-  if (result === 'inserted' || result === 'updated') await cacheApi.invalidateForEntity(req, entity);
+  if (result === 'inserted' || result === 'updated') {
+    await cacheApi.invalidateForEntity(req, entity);
+    await syncStateApi.incrementApplied(req, entity, 'event-sync', 1, ds);
+  }
   return { outcome: result, entity, action, crmId };
 }
 
@@ -121,7 +129,7 @@ async function processEvent(req, event, ds, cacheApi = cacheModule) {
  * request that isn't even a Signals envelope is a configuration problem
  * worth failing loudly on, not silently no-op-ing.
  */
-async function processEnvelope(req, envelope, ds = projections.defaultDs, cacheApi = cacheModule) {
+async function processEnvelope(req, envelope, ds = projections.defaultDs, cacheApi = cacheModule, syncStateApi = syncState) {
   const events = envelope && Array.isArray(envelope.events) ? envelope.events : null;
   if (!events) {
     const e = new Error('Payload is not a recognisable Signals envelope (no `events` array).');
@@ -132,7 +140,7 @@ async function processEnvelope(req, envelope, ds = projections.defaultDs, cacheA
   const results = [];
   for (const event of events) {
     try {
-      results.push(await processEvent(req, event, ds, cacheApi));
+      results.push(await processEvent(req, event, ds, cacheApi, syncStateApi));
     } catch (err) {
       results.push({ outcome: 'error', error: err && err.message });
     }

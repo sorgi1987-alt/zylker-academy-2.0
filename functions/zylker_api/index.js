@@ -27,6 +27,7 @@ const projectionReads = require('./projectionReads');
 const reconciliation = require('./reconciliation');
 const signals = require('./signals');
 const cache = require('./cache');
+const syncHealth = require('./syncHealth');
 
 const app = express();
 app.disable('x-powered-by');
@@ -1631,6 +1632,15 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
   const lmsCourses = lmsStatus.status === 'connected' ? await lms.listCourses(req).catch(() => []) : [];
   const mappedProgrammeIds = new Set(lmsCourses.map((c) => String(c.crmProgrammeId)).filter(Boolean));
 
+  // Read-model PoC (kickoff-prompt.md §2 "Sync health", phase 10). Never
+  // allowed to break this page: a Datastore hiccup reading sync_state or
+  // api_call_log degrades to an empty/unavailable section, same posture as
+  // every other integration section on this route.
+  const [perEntitySyncState, apiCallRollup] = await Promise.all([
+    syncHealth.readAllSyncState(req).catch(() => []),
+    syncHealth.apiCallLogRollup(req).catch(() => null)
+  ]);
+
   ok(res, {
     auth: {
       ...identity.authConfig(),
@@ -1692,7 +1702,19 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
       'Zoho Books is read-only in this phase: invoices cannot be created, edited, paid or deleted from this application.',
       'Zoho Desk is read-only: tickets cannot be created, replied to or closed from this application.',
       'Six LMS fields have no equivalent on the CRM Enrolments module, so their values are held in Catalyst and shown from there. See recommendedCrmFields.'
-    ]
+    ],
+    /*
+     * Read-model PoC (kickoff-prompt.md §2 "Sync health"). Per-entity
+     * sync_state, the event/reconciliation/write-through split (both
+     * per-entity and totalled — "this split is itself an interesting PoC
+     * result"), and a 24h api_call_log rollup so the before/after
+     * comparison has a live view here, not just the one-off BASELINE.md.
+     */
+    syncHealth: {
+      entities: perEntitySyncState,
+      appliedBySourceTotals: syncHealth.totalsBySource(perEntitySyncState),
+      apiCallLog: apiCallRollup
+    }
   });
 });
 

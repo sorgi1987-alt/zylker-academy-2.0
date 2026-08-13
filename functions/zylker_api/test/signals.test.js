@@ -247,3 +247,35 @@ test('an unrecognised or missing-id event never invalidates the cache', async ()
   await signals.processEvent(req, crmEvent('Contacts Created', {}), ds, fakeCache);
   assert.deepEqual(fakeCache.invalidated, []);
 });
+
+/* -------------------------- sync_state applied counter --------------------- */
+
+function makeFakeSyncState() {
+  const calls = [];
+  return { calls, async incrementApplied(req, entity, source) { calls.push([entity, source]); } };
+}
+
+test('a successful create/update event increments events_applied_total for its entity', async () => {
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  const fakeSyncState = makeFakeSyncState();
+  await signals.processEvent(req, crmEvent('Contacts Created', {
+    id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
+  }), ds, fakeCache, fakeSyncState);
+  assert.deepEqual(fakeSyncState.calls, [['students', 'event-sync']]);
+});
+
+test('a stale event never increments the counter', async () => {
+  const ds = makeDs();
+  const fakeCache = makeFakeCache();
+  const fakeSyncState = makeFakeSyncState();
+  await signals.processEvent(req, crmEvent('Contacts Created', {
+    id: '1', Modified_Time: '2026-08-12T12:00:00+02:00'
+  }), ds, fakeCache, fakeSyncState);
+  fakeSyncState.calls.length = 0;
+
+  await signals.processEvent(req, crmEvent('Contacts Updated', {
+    id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
+  }), ds, fakeCache, fakeSyncState);
+  assert.deepEqual(fakeSyncState.calls, []);
+});

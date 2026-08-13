@@ -35,6 +35,7 @@ const n = require('./normalise');
 const refs = require('./references');
 const projections = require('./projections');
 const cacheModule = require('./cache');
+const syncState = require('./syncState');
 
 /* ------------------------- resolved metadata --------------------------- */
 /**
@@ -220,8 +221,11 @@ async function writeThroughUpsert(deps, req, module_, rawRecord) {
   const entity = cfg.projections.moduleToEntity[module_];
   if (!entity) return; // a module this PoC does not project (none, today)
   try {
-    await projections.upsertProjectionRow(req, entity, rawRecord, deps.ds);
-    await (deps.cache || cacheModule).invalidateForEntity(req, entity);
+    const result = await projections.upsertProjectionRow(req, entity, rawRecord, deps.ds);
+    if (result === 'inserted' || result === 'updated') {
+      await (deps.cache || cacheModule).invalidateForEntity(req, entity);
+      await (deps.syncState || syncState).incrementApplied(req, entity, 'write-through', 1, deps.ds);
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`write-through upsert failed for ${entity}:`, err && err.message);
@@ -238,8 +242,11 @@ async function writeThroughDelete(deps, req, module_, id) {
   const entity = cfg.projections.moduleToEntity[module_];
   if (!entity) return;
   try {
-    await projections.deleteProjectionRow(req, entity, String(id), deps.ds);
-    await (deps.cache || cacheModule).invalidateForEntity(req, entity);
+    const removed = await projections.deleteProjectionRow(req, entity, String(id), deps.ds);
+    if (removed) {
+      await (deps.cache || cacheModule).invalidateForEntity(req, entity);
+      await (deps.syncState || syncState).incrementApplied(req, entity, 'write-through', 1, deps.ds);
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`write-through delete failed for ${entity}:`, err && err.message);

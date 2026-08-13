@@ -219,8 +219,13 @@ test('a successful create invalidates the dashboard aggregate cache (kickoff-pro
 test('a successful delete also invalidates the cache', async () => {
   const zoho = makeZoho(seed());
   const ds = makeDs();
+  // Seed the projection first (as an earlier write-through would have) so
+  // there is actually a row for the delete to remove.
+  await writes.studentCreate({ zoho, ds }, req({}, { lastName: 'ToDelete', email: 'todelete@example.com' }));
+  const id = Object.keys(zoho.db.Contacts).find((k) => zoho.db.Contacts[k].Last_Name === 'ToDelete');
+
   const fakeCache = makeFakeCache();
-  await writes.studentDelete({ zoho, ds, cache: fakeCache }, req({ id: '1' }));
+  await writes.studentDelete({ zoho, ds, cache: fakeCache }, req({ id }));
   assert.deepEqual(fakeCache.invalidated, ['students']);
 });
 
@@ -240,4 +245,28 @@ test('a cache invalidation failure never fails the write response itself', async
   const result = await writes.studentCreate({ zoho, ds, cache: brokenCache },
     req({}, { lastName: 'StillWorks', email: 'stillworks@example.com' }));
   assert.ok(result.data.id);
+});
+
+/* -------------------------- sync_state applied counter --------------------- */
+
+function makeFakeSyncState() {
+  const calls = [];
+  return { calls, async incrementApplied(req, entity, source) { calls.push([entity, source]); } };
+}
+
+test('a successful create increments the write_through_applied_total counter for its entity', async () => {
+  const zoho = makeZoho(seed());
+  const ds = makeDs();
+  const fakeSyncState = makeFakeSyncState();
+  await writes.studentCreate({ zoho, ds, syncState: fakeSyncState }, req({}, { lastName: 'Counted', email: 'counted@example.com' }));
+  assert.deepEqual(fakeSyncState.calls, [['students', 'write-through']]);
+});
+
+test('a failed write never increments the counter', async () => {
+  const zoho = makeZoho(seed());
+  const ds = makeDs();
+  const fakeSyncState = makeFakeSyncState();
+  await assert.rejects(() => writes.studentCreate({ zoho, ds, syncState: fakeSyncState },
+    req({}, { lastName: 'Dup', email: 'PRIYA@example.com' })));
+  assert.deepEqual(fakeSyncState.calls, []);
 });

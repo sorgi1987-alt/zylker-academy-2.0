@@ -206,3 +206,23 @@ test('SCHEDULE_TIERS covers exactly the 5 projected entities across the 3 kickof
   ].sort();
   assert.deepEqual(all, ['applications', 'enrolments', 'intakes', 'programmes', 'students']);
 });
+
+test('reconciliation_applied_total accumulates across runs (kickoff-prompt.md §2 "Sync health")', async () => {
+  const ds = makeDs();
+  const zoho1 = makeZoho({ Contacts: [rawStudent(1, '2026-08-01T10:00:00+02:00'), rawStudent(2, '2026-08-01T10:00:00+02:00')] });
+  await reconciliation.reconcileEntity(zoho1, req, 'students', 'Contacts', ds);
+  assert.equal(ds.syncStateRow('crm.contacts').reconciliation_applied_total, 2);
+
+  // A second run. The overlap window deliberately re-covers records right at
+  // the prior checkpoint (records 1 and 2 sit exactly at it), so this run
+  // re-applies those two — harmlessly, since upsert is idempotent — on top
+  // of the one genuinely new record. The counter reflects applied writes,
+  // including safe overlap re-application, not distinct records touched.
+  const zoho2 = makeZoho({ Contacts: [
+    rawStudent(1, '2026-08-01T10:00:00+02:00'),
+    rawStudent(2, '2026-08-01T10:00:00+02:00'),
+    rawStudent(3, '2026-08-05T10:00:00+02:00')
+  ] });
+  await reconciliation.reconcileEntity(zoho2, req, 'students', 'Contacts', ds);
+  assert.equal(ds.syncStateRow('crm.contacts').reconciliation_applied_total, 5, 'cumulative, not reset per run: 2 + (2 re-applied + 1 new)');
+});

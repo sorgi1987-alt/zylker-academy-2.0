@@ -143,12 +143,18 @@ async function reconcileEntity(zoho, req, entity, module_, ds = projections.defa
     throw err;
   }
 
+  // Integration Status "event vs. reconciliation vs. write-through" split
+  // (kickoff-prompt.md §2 "Sync health") — cumulative across runs, unlike
+  // records_updated above which reports only this run.
+  const priorReconciliationTotal = Number((state && state.reconciliation_applied_total) || 0);
+
   await writeSyncState(req, entity, {
     sync_status: 'completed',
     last_successful_sync: projections.sqlDatetime(new Date()),
     records_processed: processed,
     records_updated: updated,
     records_failed: failed,
+    reconciliation_applied_total: priorReconciliationTotal + updated,
     ...(maxModifiedTime ? { checkpoint: maxModifiedTime } : {})
   }, ds);
 
