@@ -100,3 +100,32 @@ test('apiCallLogRollup reports zero, not an error, when the log is empty', async
   assert.equal(result.total, 0);
   assert.deepEqual(result.breakdown, []);
 });
+
+/**
+ * Found live: this rollup originally requested `limit 2000`, which ZCQL
+ * hard-refuses (max 300), so the query errored on every call and the whole
+ * rollup silently came back null on the live Integration Status page. Fixed
+ * by paginating in pages of 300; this proves it actually walks multiple
+ * pages for a busy 24h window rather than reintroducing the same ceiling.
+ */
+test('apiCallLogRollup pages past 300 rows rather than hitting ZCQL\'s LIMIT ceiling (the bug found on first live deployment)', async () => {
+  const allRows = Array.from({ length: 350 }, () => ({ service: 'crm', source: 'interactive-read-live', call_status: 'success' }));
+  const calls = [];
+  const ds = {
+    async zcql(req, query) {
+      calls.push(query);
+      const m = /limit\s+(\d+),\s*(\d+)/.exec(query);
+      const offset = m ? Number(m[1]) : 0;
+      const count = m ? Number(m[2]) : allRows.length;
+      return allRows.slice(offset, offset + count).map((r) => ({ api_call_log: r }));
+    }
+  };
+
+  const result = await syncHealth.apiCallLogRollup(req, ds);
+
+  assert.equal(result.total, 350);
+  assert.equal(result.truncated, false);
+  assert.equal(calls.length, 2, '350 rows at 300/page is 2 calls (300 + 50)');
+  const requestedCounts = calls.map((q) => Number(/limit\s+\d+,\s*(\d+)/.exec(q)[1]));
+  assert.ok(requestedCounts.every((count) => count <= 300), 'no call ever requests more than the 300-row ZCQL ceiling');
+});

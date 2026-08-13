@@ -143,6 +143,27 @@ detail routes do the same rather than a single-row Datastore query, since at
 this scale "fetch all, `.find()` by id" costs nothing extra and needed no
 new query capability.
 
+**Bug found on first live deployment, now fixed:** ZCQL hard-refuses a
+`LIMIT` above 300 ("ZCQL CANNOT HAVE MORE THAN 300 ROWS in LIMIT", confirmed
+live) and applies some default when no `LIMIT` is given at all rather than
+returning everything — `readAll()` originally issued no `LIMIT` clause,
+which every entity's row count (≤244 today) happened not to expose, but
+would have silently truncated the moment any entity grew past whatever that
+implicit default turns out to be. `syncHealth.js`'s `api_call_log` rollup
+hit the same ceiling more directly: it requested `limit 2000` outright,
+which ZCQL rejects unconditionally, so the rollup silently came back `null`
+on the live Integration Status page (caught by index.js's
+`.catch(() => null)`) until this was traced back to the actual query error.
+Both now paginate explicitly in pages of 300 (`readAll()` walks every page;
+the log rollup caps at 10 pages / 3000 rows and reports `truncated: true`
+beyond that, since it's a reporting rollup, not a correctness-critical
+read). See `test/projectionReads.test.js` and `test/syncHealth.test.js`'s
+pagination tests, both built with fakes that actually respect `LIMIT
+offset,count` rather than ignoring it — the existing single-page fakes in
+`test/projectionReads.test.js` couldn't have caught this, since a fake that
+returns everything regardless of the query parameters can't distinguish
+"paginated correctly" from "the LIMIT clause was silently ignored."
+
 ## 6. Cache
 
 Two things are cached, both read through `cache.js`:

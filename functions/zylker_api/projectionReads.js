@@ -162,15 +162,38 @@ const HYDRATORS = {
   enrolments: hydrateEnrolment
 };
 
+// ZCQL hard-refuses a LIMIT above 300 ("ZCQL CANNOT HAVE MORE THAN 300 ROWS
+// in LIMIT" — confirmed live against this project, not assumed) and, worse,
+// silently applies some default when no LIMIT is given at all rather than
+// returning everything. Found live: with no explicit limit, readAll() was
+// one missed row away from silently truncating crm_applications (244 rows,
+// just under the 300 cap) the moment this org's data grew past it. Every
+// entity here is comfortably below 300 rows today, so this couldn't be
+// observed by comparing counts — it had to be reasoned through and fixed
+// defensively rather than left until it broke silently at 301 rows.
+const PAGE_SIZE = 300;
+
 /** Reads every row of one projection table, hydrated to the API shape. */
 async function readAll(req, entity, ds = projections.defaultDs) {
   const table = cfg.projections.tables[entity];
   const hydrate = HYDRATORS[entity];
   if (!table || !hydrate) throw new Error(`Unknown projection entity: ${entity}`);
-  const rows = projections.flattenRows(
-    await ds.zcql(req, `select * from ${table} where crm_id is not null`),
-    table
-  );
+
+  const rows = [];
+  let offset = 0;
+  for (;;) {
+    // crm_id is unique per row, so ordering by it alone gives a stable,
+    // tie-free sort across separate paginated calls — no second tiebreaker
+    // needed, unlike the CRM-side Modified_Time pagination in bootstrap.js/
+    // reconciliation.js where many rows can share the same timestamp.
+    const page = projections.flattenRows(
+      await ds.zcql(req, `select * from ${table} where crm_id is not null order by crm_id asc limit ${offset}, ${PAGE_SIZE}`),
+      table
+    );
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
   return rows.map(hydrate);
 }
 

@@ -67,20 +67,31 @@ function totalsBySource(perEntity) {
   }), { eventSync: 0, reconciliation: 0, writeThrough: 0 });
 }
 
-/**
- * Rolls up api_call_log by service + source over the last 24h. Fetched as
- * raw bounded rows and aggregated in JS rather than relying on ZCQL's
- * GROUP BY/aggregate support, which isn't confirmed for this Catalyst
- * version — a PoC's daily row volume is small enough that this is cheap and
- * avoids depending on unverified query surface.
- */
+// ZCQL hard-refuses a LIMIT above 300 (confirmed live against this project:
+// "ZCQL CANNOT HAVE MORE THAN 300 ROWS in LIMIT") — the original 2000 here
+// was invalid on every call, which is why this rollup was silently coming
+// back null on the live deployment (the query errored, caught by index.js's
+// .catch(() => null)). Paginated in pages of 300, capped at MAX_PAGES since
+// this is a reporting rollup, not a correctness-critical read — reporting
+// "truncated" honestly beats an unbounded loop over a busy 24h window.
 async function apiCallLogRollup(req, ds = projections.defaultDs) {
-  const ROW_LIMIT = 2000;
+  const PAGE_SIZE = 300;
+  const MAX_PAGES = 10; // up to 3000 rows/24h before this rollup admits truncation
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  const rows = projections.flattenRows(
-    await ds.zcql(req, `select service, source, call_status from ${apiCallLog.TABLE} where logged_at > '${since}' limit ${ROW_LIMIT}`),
-    apiCallLog.TABLE
-  );
+
+  const rows = [];
+  let offset = 0;
+  let truncated = false;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const batch = projections.flattenRows(
+      await ds.zcql(req, `select service, source, call_status from ${apiCallLog.TABLE} where logged_at > '${since}' order by logged_at asc limit ${offset}, ${PAGE_SIZE}`),
+      apiCallLog.TABLE
+    );
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+    if (page === MAX_PAGES - 1) truncated = true;
+  }
 
   const byServiceSource = new Map();
   rows.forEach((r) => {
@@ -96,7 +107,7 @@ async function apiCallLogRollup(req, ds = projections.defaultDs) {
   return {
     windowHours: 24,
     total: rows.length,
-    truncated: rows.length >= ROW_LIMIT,
+    truncated,
     breakdown: [...byServiceSource.values()].sort((a, b) => b.count - a.count)
   };
 }

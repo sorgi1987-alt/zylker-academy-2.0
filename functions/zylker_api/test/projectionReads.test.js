@@ -136,3 +136,32 @@ test('readAll hydrates every row from a fake Datastore table into the API shape'
   assert.equal(result[0].fullName, 'Ada Lovelace');
   assert.equal(result[1].status, 'Enrolled');
 });
+
+/**
+ * Found live: ZCQL hard-refuses a LIMIT above 300 and applies some default
+ * when none is given at all — readAll() used to issue no LIMIT clause,
+ * meaning it was one entity away from silently truncating past 300 rows the
+ * moment any table (e.g. crm_applications) grew past it. This proves the
+ * fix actually walks multiple pages rather than stopping at the first one.
+ */
+test('readAll pages past 300 rows rather than silently truncating (the bug found on first live deployment)', async () => {
+  const allRows = Array.from({ length: 620 }, (_, i) => ({
+    crm_id: String(i + 1), first_name: `S${i + 1}`, source_modified_time: '2026-08-01T10:00:00+02:00'
+  }));
+  const calls = [];
+  const ds = {
+    async zcql(req, query) {
+      calls.push(query);
+      const m = /limit\s+(\d+),\s*(\d+)/.exec(query);
+      const offset = m ? Number(m[1]) : 0;
+      const count = m ? Number(m[2]) : allRows.length;
+      return allRows.slice(offset, offset + count).map((r) => ({ crm_students: r }));
+    }
+  };
+
+  const result = await reads.readAll({}, 'students', ds);
+
+  assert.equal(result.length, 620, 'every row came back, not just the first page');
+  assert.equal(calls.length, 3, '620 rows at 300/page is 3 calls (300 + 300 + 20)');
+  assert.ok(calls.every((q) => /limit \d+, 300/.test(q)), 'every page requests exactly the 300-row ZCQL ceiling');
+});
