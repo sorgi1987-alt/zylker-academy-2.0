@@ -45,10 +45,21 @@ const PAGE_SIZE = 200;
  */
 const OVERLAP_MINUTES = 5;
 
+// Date#toISOString() produces "…T07:49:17.000Z" — milliseconds plus a
+// literal "Z" — which COQL rejects for a datetime column comparison
+// (confirmed live: "INVALID_QUERY … expected_data_type: datetime"). COQL
+// wants no milliseconds and an explicit numeric offset instead of "Z", e.g.
+// "…T07:49:17+00:00" — confirmed live to be accepted. Found live on this
+// deployment's first Cron-triggered reconciliation run: every run since the
+// Cron jobs were created had been failing with this exact error.
+function toCoqlDatetime(d) {
+  return d.toISOString().replace(/\.\d{3}Z$/, '+00:00');
+}
+
 function withOverlap(checkpointIso) {
   const t = Date.parse(checkpointIso);
   if (!Number.isFinite(t)) return null;
-  return new Date(t - OVERLAP_MINUTES * 60000).toISOString();
+  return toCoqlDatetime(new Date(t - OVERLAP_MINUTES * 60000));
 }
 
 async function readSyncState(req, entity, ds) {
@@ -190,6 +201,6 @@ async function reconcileMany(zoho, req, entities, ds = projections.defaultDs, ca
 }
 
 module.exports = {
-  reconcileEntity, reconcileMany, pageModule, withOverlap,
+  reconcileEntity, reconcileMany, pageModule, withOverlap, toCoqlDatetime,
   SCHEDULE_TIERS, OVERLAP_MINUTES, FIELD_LISTS
 };

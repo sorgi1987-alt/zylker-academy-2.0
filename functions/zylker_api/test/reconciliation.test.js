@@ -98,8 +98,25 @@ const rawStudent = (id, modified) => ({
 
 test('withOverlap subtracts OVERLAP_MINUTES from a checkpoint', () => {
   const result = reconciliation.withOverlap('2026-08-12T10:00:00+02:00');
-  const expected = new Date(Date.parse('2026-08-12T10:00:00+02:00') - reconciliation.OVERLAP_MINUTES * 60000).toISOString();
+  const expected = reconciliation.toCoqlDatetime(
+    new Date(Date.parse('2026-08-12T10:00:00+02:00') - reconciliation.OVERLAP_MINUTES * 60000)
+  );
   assert.equal(result, expected);
+});
+
+/**
+ * Found live: the very first Cron-triggered reconciliation run failed on
+ * every entity with COQL's "INVALID_QUERY … expected_data_type: datetime" —
+ * traced to withOverlap() handing Date#toISOString()'s own format
+ * ("…07:49:17.000Z") straight to COQL, which only accepts a plain numeric
+ * offset ("…07:49:17+00:00"), confirmed live via a direct COQL call with
+ * each format. This asserts the milliseconds-and-"Z" shape can never
+ * resurface, not just that today's example input happens to convert right.
+ */
+test('withOverlap never returns milliseconds or a literal "Z" — the exact shape COQL rejected live', () => {
+  const result = reconciliation.withOverlap('2026-08-12T10:00:00+02:00');
+  assert.doesNotMatch(result, /\.\d{3}Z$/);
+  assert.match(result, /[+-]\d{2}:\d{2}$/);
 });
 
 test('withOverlap returns null for an unparseable checkpoint', () => {
