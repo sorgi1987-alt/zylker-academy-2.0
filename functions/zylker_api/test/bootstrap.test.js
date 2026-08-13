@@ -188,3 +188,33 @@ test('flattening stays wired correctly end to end through the real projections m
   // Same Modified_Time as what's already stored -> harmless re-upsert, not an error.
   assert.equal(row, 'updated');
 });
+
+/**
+ * A cache entry (e.g. catalogue:programmes) can already hold a stale empty
+ * result from before bootstrap ran — this is exactly what happened on the
+ * first live deployment: the dashboard was opened once before bootstrap,
+ * caching zero programmes for ~20 minutes, and bootstrap alone did nothing
+ * to clear it. This must invalidate unconditionally on success, not just
+ * when a row actually changed.
+ */
+test('a successful bootstrap run always invalidates the cache for its entity, even with zero updates', async () => {
+  const zoho = makeZoho({ Contacts: [] });
+  const ds = makeDs();
+  const invalidated = [];
+  const fakeCache = { async invalidateForEntity(req, entity) { invalidated.push(entity); } };
+
+  const result = await bootstrap.bootstrapEntity(zoho, req, 'students', 'Contacts', ds, fakeCache);
+
+  assert.equal(result.updated, 0);
+  assert.deepEqual(invalidated, ['students']);
+});
+
+test('a failed bootstrap run does not invalidate the cache', async () => {
+  const zoho = makeZoho({}); // 'Boom' module throws
+  const ds = makeDs();
+  const invalidated = [];
+  const fakeCache = { async invalidateForEntity(req, entity) { invalidated.push(entity); } };
+
+  await assert.rejects(() => bootstrap.bootstrapEntity(zoho, req, 'students', 'Boom', ds, fakeCache));
+  assert.deepEqual(invalidated, []);
+});

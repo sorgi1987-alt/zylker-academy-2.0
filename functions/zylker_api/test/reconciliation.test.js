@@ -226,3 +226,26 @@ test('reconciliation_applied_total accumulates across runs (kickoff-prompt.md §
   await reconciliation.reconcileEntity(zoho2, req, 'students', 'Contacts', ds);
   assert.equal(ds.syncStateRow('crm.contacts').reconciliation_applied_total, 5, 'cumulative, not reset per run: 2 + (2 re-applied + 1 new)');
 });
+
+/* ------------------------------ cache invalidation ------------------------- */
+
+test('a reconciliation run that actually updates records invalidates the cache', async () => {
+  const zoho = makeZoho({ Contacts: [rawStudent(1, '2026-08-01T10:00:00+02:00')] });
+  const ds = makeDs();
+  const invalidated = [];
+  const fakeCache = { async invalidateForEntity(req, entity) { invalidated.push(entity); } };
+
+  await reconciliation.reconcileEntity(zoho, req, 'students', 'Contacts', ds, fakeCache);
+  assert.deepEqual(invalidated, ['students']);
+});
+
+test('a reconciliation run that touches nothing does not invalidate the cache', async () => {
+  const ds = makeDs({ 'crm.contacts': { checkpoint: '2026-08-01T10:00:00+02:00' } });
+  const zoho = makeZoho({ Contacts: [] }); // nothing modified since the checkpoint
+  const invalidated = [];
+  const fakeCache = { async invalidateForEntity(req, entity) { invalidated.push(entity); } };
+
+  const result = await reconciliation.reconcileEntity(zoho, req, 'students', 'Contacts', ds, fakeCache);
+  assert.equal(result.updated, 0);
+  assert.deepEqual(invalidated, []);
+});

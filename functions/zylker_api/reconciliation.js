@@ -15,6 +15,7 @@
  */
 const cfg = require('./config');
 const projections = require('./projections');
+const cacheModule = require('./cache');
 
 const FIELD_LISTS = {
   students: 'id, First_Name, Last_Name, Email, Phone, Student_ID, Student_Status, External_Student_Ref, LMS_Provider, LMS_User_ID, Last_LMS_Sync, Created_Time, Modified_Time',
@@ -100,7 +101,7 @@ async function* pageModule(zoho, req, module_, fields, sinceIso) {
  * reconciliation run"), so the next run re-covers the same ground instead of
  * silently widening the gap it exists to close.
  */
-async function reconcileEntity(zoho, req, entity, module_, ds = projections.defaultDs) {
+async function reconcileEntity(zoho, req, entity, module_, ds = projections.defaultDs, cacheApi = cacheModule) {
   const fields = FIELD_LISTS[entity];
   const state = await readSyncState(req, entity, ds);
   const sinceIso = state && state.checkpoint ? withOverlap(state.checkpoint) : null;
@@ -158,6 +159,12 @@ async function reconcileEntity(zoho, req, entity, module_, ds = projections.defa
     ...(maxModifiedTime ? { checkpoint: maxModifiedTime } : {})
   }, ds);
 
+  // Gated on an actual change (unlike bootstrap, which always invalidates):
+  // reconciliation runs frequently — every 15 min for applications/
+  // enrolments — and the common case is nothing changed, so skip the
+  // needless cache churn when this run touched nothing.
+  if (updated > 0) await cacheApi.invalidateForEntity(req, entity);
+
   return { entity, processed, updated, failed, skippedStale, since: sinceIso };
 }
 
@@ -172,12 +179,12 @@ const SCHEDULE_TIERS = {
   daily: ['programmes', 'intakes']
 };
 
-async function reconcileMany(zoho, req, entities, ds = projections.defaultDs) {
+async function reconcileMany(zoho, req, entities, ds = projections.defaultDs, cacheApi = cacheModule) {
   const results = [];
   for (const entity of entities) {
     const module_ = ENTITY_MODULE[entity];
     if (!module_) throw new Error(`Unknown reconciliation entity: ${entity}`);
-    results.push(await reconcileEntity(zoho, req, entity, module_, ds));
+    results.push(await reconcileEntity(zoho, req, entity, module_, ds, cacheApi));
   }
   return results;
 }

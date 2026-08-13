@@ -167,8 +167,26 @@ underneath (which is still set, generously, as an outer backstop).
 
 **Invalidation:** `cache.invalidateForEntity(req, entity)` is the single
 source of truth for which keys a change to a given entity affects (dashboard
-aggregate always; the matching catalogue key for programmes/intakes). Both
-write-through and the Signals handler call it, so the two paths can't drift.
+aggregate always; the matching catalogue key for programmes/intakes).
+Write-through, the Signals handler, bootstrap, and reconciliation all call
+it — bootstrap unconditionally on success (see below), the other three only
+when a row actually changed.
+
+**Bug found on first live deployment, now fixed:** the first `/api/dashboard`
+load happened *before* bootstrap ran, caching an empty `catalogue:programmes`
+result for its full ~20 min TTL. Bootstrap then populated the table, but
+originally invalidated nothing — write-through/Signals only invalidate on an
+*actual change*, and bootstrap's initial run legitimately has nothing prior
+to compare against, so that condition never held. `dashboard:aggregate`
+showed 0 active programmes and 0 upcoming intakes despite Datastore holding
+real data, until the stale keys were cleared by hand. Fixed by having
+bootstrap invalidate unconditionally on a successful run (its entire purpose
+is moving Datastore from an unknown prior state to a known one, so the cache
+must be treated as untrustworthy regardless of whether any individual row
+changed) and reconciliation invalidate whenever a run updates at least one
+record. See `bootstrap.js`/`reconciliation.js` and
+`test/bootstrap.test.js`/`test/reconciliation.test.js`'s cache-invalidation
+tests.
 
 ## 7. Write-through
 

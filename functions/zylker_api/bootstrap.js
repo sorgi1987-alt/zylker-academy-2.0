@@ -28,6 +28,7 @@
  */
 const cfg = require('./config');
 const projections = require('./projections');
+const cacheModule = require('./cache');
 
 const FIELD_LISTS = {
   students: 'id, First_Name, Last_Name, Email, Phone, Student_ID, Student_Status, External_Student_Ref, LMS_Provider, LMS_User_ID, Last_LMS_Sync, Created_Time, Modified_Time',
@@ -83,7 +84,7 @@ async function writeSyncState(req, entity, patch, ds) {
  * must not stop the other 236 from syncing. A failure reading the CRM module
  * itself IS fatal to this entity's run, since nothing was learned about it.
  */
-async function bootstrapEntity(zoho, req, entity, module_, ds = projections.defaultDs) {
+async function bootstrapEntity(zoho, req, entity, module_, ds = projections.defaultDs, cacheApi = cacheModule) {
   const fields = FIELD_LISTS[entity];
   let processed = 0;
   let updated = 0;
@@ -134,11 +135,21 @@ async function bootstrapEntity(zoho, req, entity, module_, ds = projections.defa
     ...(maxModifiedTime ? { checkpoint: maxModifiedTime } : {})
   }, ds);
 
+  // A cache entry (dashboard:aggregate, or the affected entity's catalogue
+  // key) may have been populated — even with an empty result — before this
+  // run gave Datastore anything to read. Without this, that stale value
+  // would sit there for its full TTL despite Datastore now having real
+  // data. Unconditional on success, unlike write-through/Signals which only
+  // invalidate on an actual change: bootstrap's very purpose is bringing
+  // Datastore from an unknown prior state to a known one, so the cache
+  // needs invalidating regardless of whether any individual row changed.
+  await cacheApi.invalidateForEntity(req, entity);
+
   return { entity, processed, updated, failed };
 }
 
 /** Bootstraps all 5 entities in kickoff-prompt.md's listed order. */
-async function bootstrapAll(zoho, req, ds = projections.defaultDs) {
+async function bootstrapAll(zoho, req, ds = projections.defaultDs, cacheApi = cacheModule) {
   const plan = [
     ['students', cfg.modules.students],
     ['applications', cfg.modules.applications],
@@ -148,7 +159,7 @@ async function bootstrapAll(zoho, req, ds = projections.defaultDs) {
   ];
   const results = [];
   for (const [entity, module_] of plan) {
-    results.push(await bootstrapEntity(zoho, req, entity, module_, ds));
+    results.push(await bootstrapEntity(zoho, req, entity, module_, ds, cacheApi));
   }
   return results;
 }
@@ -160,7 +171,7 @@ async function bootstrapAll(zoho, req, ds = projections.defaultDs) {
  * against a stubbed CRM without a live Catalyst session.
  */
 async function runBootstrap(deps, req) {
-  const results = await bootstrapAll(deps.zoho, req, deps.ds);
+  const results = await bootstrapAll(deps.zoho, req, deps.ds, deps.cache);
   const totals = results.reduce((acc, r) => ({
     processed: acc.processed + r.processed,
     updated: acc.updated + r.updated,
