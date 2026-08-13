@@ -369,6 +369,6 @@ is decided.
   Catalyst-native and untouched by design — see `ARCHITECTURE.md` §1), but
   the Courses page will show empty/unavailable state until those tables are
   created here independently.
-- **`BASELINE.md`/`RESULTS.md` — the kickoff prompt's own scripted
-  before/after measurement session — has not been run yet.** See
-  `ARCHITECTURE.md` §12.
+- **`BASELINE.md`/`RESULTS.md`** — done: 32 live CRM calls for the kickoff
+  prompt's scripted session, down to 0. See `ARCHITECTURE.md` §11 and the
+  two documents themselves.

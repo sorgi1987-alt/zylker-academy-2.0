@@ -12,11 +12,14 @@ and bootstrap have been exercised live, all 3 reconciliation Cron jobs are
 live and running on schedule, and all 15 Signals rules are live and have
 processed real CRM events end-to-end (verified via `sync_state`'s
 `events_applied_total`/`reconciliation_applied_total` counters, not just
-"the console shows Enabled"). Two real bugs were found only once this went
-live — both below, in §8 and §9 — that no amount of offline testing against
-fakes could have caught, because both were disagreements between this code's
-assumptions and the live platform's actual behaviour. §12 lists what is
-still genuinely not built.
+"the console shows Enabled"). `BASELINE.md`/`RESULTS.md` are done: **32
+live CRM calls → 0** for the kickoff prompt's own scripted session (§11).
+Three real bugs were found only once this went live — §8, §9, and the
+`/api/attention` gap `RESULTS.md` itself surfaced — that no amount of
+offline testing against fakes could have caught, because each was a
+disagreement between this code's assumptions and the live platform's (or
+the app's own route table's) actual behaviour. §12 lists what is still
+genuinely not built.
 
 ## 1. Scope
 
@@ -169,6 +172,24 @@ offset,count` rather than ignoring it — the existing single-page fakes in
 `test/projectionReads.test.js` couldn't have caught this, since a fake that
 returns everything regardless of the query parameters can't distinguish
 "paginated correctly" from "the LIMIT clause was silently ignored."
+
+**Gap found while capturing `RESULTS.md`'s live numbers, now fixed:**
+`/api/attention` — a second endpoint the Dashboard page calls alongside
+`/api/dashboard`, for the "Needs attention" panel (kept separate on purpose:
+a slow Books call degrades one card instead of the whole page) — was missed
+entirely by phases 4/5. It kept calling the pre-migration
+`listApplications`/`listEnrolments`/`listIntakes` helpers (3 live CRM calls
+on every dashboard load) straight through phases 4–11, because nothing in
+this migration's own checklist named it separately from `/api/dashboard`.
+No test caught it either: the offline suite has no test asserting
+`/api/attention` reads from Datastore, because no such route existed to
+test until this PoC's own migration should have added it. Found only by
+running the real scripted session end-to-end and seeing CRM traffic that
+the rest of this document said shouldn't be there. Fixed to read from
+`readApplications`/`readEnrolments`/`readIntakes` — the same Datastore
+projection every other route uses — leaving its Books/Desk calls untouched
+(out of scope, §1). See `RESULTS.md`'s own methodology section for the
+full account, including how it was diagnosed live.
 
 ## 6. Cache
 
@@ -345,32 +366,29 @@ the cumulative event/reconciliation/write-through split — see
 code over a bounded row fetch rather than relying on unconfirmed ZCQL
 `GROUP BY` support.
 
-## 11. What to measure
+## 11. What was measured
 
-The deployment blocker is gone — `Zylker-Academy-Signals` is live, all sync
-paths are running, and `/api/integration-status` already exposes a live
-`syncHealth` rollup (per-entity `sync_state` plus a 24h `api_call_log`
-rollup by service/source) rather than requiring the numbers to be re-derived
-by hand. What's live right now, pulled directly from `api_call_log` for
-today (2026-08-13, since 07:00): **41** live CRM reads
-(`interactive-read-live`) and 11 live CRM writes, versus the pre-migration
-baseline where `/api/dashboard` alone issued 9 live CRM calls on *every*
-load. `BASELINE.md`/`RESULTS.md` — the formal, reproducible before/after
-comparison per the kickoff prompt's own requirement — is still outstanding;
-see §12.
+`BASELINE.md`/`RESULTS.md` — the kickoff prompt's own closing deliverable —
+are done: a static, code-cited count of the pre-migration commit
+(`BASELINE.md`) against the same live-captured `api_call_log` session run
+against the deployed migrated app (`RESULTS.md`), both using the identical
+9-step script and the identical real records, so the two numbers are
+directly comparable. Headline result: **32 live CRM calls → 0**, a 100%
+reduction, for the full scripted session (dashboard, students list +
+detail, applications list + detail, programmes, intakes, enrolments). This
+measurement itself found and fixed a real gap — `/api/attention` had been
+missed by phases 4/5 and was still making 3 live CRM calls on every
+dashboard load — see `RESULTS.md`'s own methodology section for the full
+account. `/api/integration-status`'s live `syncHealth` rollup (per-entity
+`sync_state` plus a 24h `api_call_log` rollup) remains available for
+ongoing monitoring beyond this one-off comparison.
 
 ## 12. Deferred / not yet developed
 
-Everything in `kickoff-prompt.md`'s 11 phases is built, tested, deployed,
-and live. What remains is live-operations work the kickoff prompt scoped
-separately, or genuine gaps this PoC intentionally left alone:
-
-- **`BASELINE.md` / `RESULTS.md`** — the kickoff prompt's own closing
-  deliverable: a scripted, reproducible before/after session (original app
-  vs. this one) formalising the call-count reduction into the two documents.
-  Not yet run. The live `syncHealth` numbers in §11 are a preview, not a
-  substitute — they weren't captured via the specific reproducible script
-  the kickoff prompt asks for.
+Everything in `kickoff-prompt.md`'s 11 phases, plus its closing
+`BASELINE.md`/`RESULTS.md` deliverable, is built, tested, deployed, live,
+and measured. What remains is live-operations work the kickoff prompt
+scoped separately, or genuine gaps this PoC intentionally left alone:
 - **Production environment.** Everything above is live on this project's
   **Development** environment only. Promoting to Production means: setting
   `RECONCILE_SECRET`/`SIGNALS_SECRET` (and every other function-level env
