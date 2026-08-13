@@ -762,13 +762,26 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
  * page. The three sources are settled independently and a rejection from the LMS
  * connector or Books becomes a named "could not be checked" item instead of
  * taking the CRM items down with it.
+ *
+ * Read-model PoC gap found live (kickoff-prompt.md phase 4/5): this route was
+ * missed when /api/dashboard and the list/detail routes moved off live CRM —
+ * it kept calling the old listApplications/listEnrolments/listIntakes helpers
+ * (3 live CRM calls, every load) straight through phases 4–11. Found while
+ * capturing RESULTS.md's live session numbers: the "after" call count didn't
+ * drop the way the dashboard's own migration implied, because this sibling
+ * endpoint the same page also calls was never touched. Now reads from the
+ * same Datastore projection (readApplications/readEnrolments/readIntakes)
+ * the rest of the app uses — 0 CRM calls, same as /api/dashboard. Books/Desk
+ * calls are intentionally left as they are: out of scope for this PoC
+ * (kickoff-prompt.md §1's explicit scope boundary — only the 5 CRM entities
+ * move to the read-model), so their existing live-per-request behaviour,
+ * redundant with /api/dashboard's own Books/Desk totals or not, is unchanged.
  */
 R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
-  const [applications, enrolments, intakes] = await Promise.all([
-    listApplications(req), listEnrolments(req), listIntakes(req)
+  const [applications, E, intakes] = await Promise.all([
+    readApplications(req), readEnrolments(req), readIntakes(req)
   ]);
 
-  const E = enrolments.map(n.enrolment);
   const activeByIntake = E.reduce((acc, e) => {
     if (e.intake && e.status === writes.ENROLMENT_STATUS.ACTIVE) {
       acc[e.intake.id] = (acc[e.intake.id] || 0) + 1;
@@ -793,9 +806,9 @@ R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
     : deskTotals ? 'ok' : 'unavailable';
 
   const items = attention.build({
-    applications: applications.map(n.application),
+    applications,
     enrolments: E,
-    intakes: intakes.map(n.intake).map((i) => ({
+    intakes: intakes.map((i) => ({
       ...i, counts: { activeEnrolments: activeByIntake[i.id] || 0 }
     })),
     lmsEnrolments,
