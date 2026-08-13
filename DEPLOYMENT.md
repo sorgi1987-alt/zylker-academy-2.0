@@ -34,46 +34,70 @@ function exists (i.e. after the first deploy).
 
 ### Reconciliation Cron jobs (read-model PoC, phase 7)
 
-Once `zylker_api` is deployed and `RECONCILE_SECRET` is set, create 3 Cron
-Jobs (Console → **Job Scheduling → Cron** → New Cron, or the
-`Create_Cron_Job` management API) — all with **target type: Webhook**,
-**method: POST**, **URL**: `https://<your-domain>/server/zylker_api/api/admin/reconcile-sync`,
-and a custom header `x-reconcile-secret: <the same value as RECONCILE_SECRET>`.
-Body per job, matching `reconciliation.js`'s `SCHEDULE_TIERS`:
+**Live on Development as of 2026-08-13** — Console → **Job Scheduling → Cron**
+shows all 3, created via the console UI (a Cron Job Webhook target's exact
+`target_id`/`target_name` shape for the `Create_Cron_Job` management API was
+never confirmed against a working example — this deployment's jobs were
+created by hand in the console instead, not via that API). Each is **target
+type: Webhook**, **method: POST**, **URL**:
+`https://zylker-academy-signals-20117369913.development.catalystserverless.eu/server/zylker_api/api/admin/reconcile-sync`,
+header `x-reconcile-secret: <RECONCILE_SECRET>`, pointed at a shared Job
+Pool (`reconcile_webhook_pool`, Webhook type, capacity 5). Body per job,
+matching `reconciliation.js`'s `SCHEDULE_TIERS`:
 
 | Cron name | Schedule | Body |
 |---|---|---|
-| `reconcile-15min` | every 15 minutes | `{"entities":["applications","enrolments"]}` |
-| `reconcile-hourly` | hourly | `{"entities":["students"]}` |
-| `reconcile-daily` | daily | `{"entities":["programmes","intakes"]}` |
+| `reconcile_15min` | every 15 minutes (Cron expression `*/15 * * * *`) | `{"entities":["applications","enrolments"]}` |
+| `reconcile_hourly` | every 1 hour | `{"entities":["students"]}` |
+| `reconcile_daily` | daily at 02:00 Europe/Madrid | `{"entities":["programmes","intakes"]}` |
 
-These aren't created yet — there's no deployed URL to point them at until
-after the first deploy.
+**Bug found and fixed after these went live** (see `ARCHITECTURE.md` §8):
+every run failed with COQL's `INVALID_QUERY` until `reconciliation.js`'s
+`withOverlap()` was fixed to stop handing COQL a `Date#toISOString()` string
+(rejected) and instead emit a plain numeric UTC offset (accepted). Confirm a
+run has actually succeeded — not just that `cron_status` is enabled — via
+`sync_state.sync_status` (should read `completed`, not `failed`) or the
+`api_call_log` rollup on Integration Status.
+
+**Not portable automatically.** These 3 Cron jobs exist only on this
+project's Development environment. Promoting to Production (or recreating
+this setup in a fresh duplicate project) means creating all 3 again by hand
+against the new environment's URL — nothing here carries over.
 
 ### Signals event source (read-model PoC, phase 8)
 
-Once `zylker_api` is deployed and `SIGNALS_SECRET` is set, configure Signals
-(Console → **Signals**) with Zoho CRM as the event publisher — confirmed as a
-default publisher requiring no manual schema setup. Create one **Rule** per
-module+action this PoC projects (15 total: Contacts/Deals/Products/Intakes/
-Enrolments × Created/Updated/Deleted), each with:
+**Live on Development as of 2026-08-13.** Console → **Signals → Publishers**
+has `zylker_crm_publisher` (Zoho CRM, authorized against the
+`Zylker Academy` CRM org). Console → **Signals → Rules** has all 15 (one per
+module × Created/Updated/Deleted: Contacts/Deals/Products/Intakes/
+Enrolments), each:
 
-- **Target type**: Webhook
+- **Target type**: Webhook, pointed at one shared Webhook target
+  (`zylker_crm_signal_webhook`)
 - **Method**: POST
-- **URL**: `https://<your-domain>/server/zylker_api/api/events/crm-signal`
-- **Header**: `x-signals-secret: <the same value as SIGNALS_SECRET>`
-- **Body**: pass the event through unmodified (no transform needed —
-  `signals.js` reads the standard envelope directly)
+- **URL**: `https://zylker-academy-signals-20117369913.development.catalystserverless.eu/server/zylker_api/api/events/crm-signal`
+- **Header**: `x-signals-secret: <SIGNALS_SECRET>`
+- **Target Input**: Full Data (the entire record, matching `signals.js`'s
+  assumption — see `ARCHITECTURE.md` §9)
 
-**Before relying on this**, verify the one thing that could not be confirmed
-from documentation alone (see `signals.js`'s header comment for the full
-reasoning): fire one real test event per action type and check
-`event_config.api_name` in the delivered payload actually reads
-`"<ModuleAPIName> Created/Updated/Deleted"` (e.g. `"Contacts Created"`) as
-`signals.js`'s `parseEventConfig()` assumes. If it doesn't, the event is
-logged as `unrecognised` and silently skipped rather than misapplied — safe,
-but means events for that module aren't syncing until the parser is fixed to
-match what Zoho actually sends.
+**`event_config.api_name` format — confirmed live, corrected from the
+original guess.** It is `"<singular_module_noun>_<action>"`, all lowercase
+snake_case: `contact_created`, `deal_updated`, `product_deleted`,
+`intake_created`, `enrolment_deleted`, etc. — **not**
+`"<ModuleAPIName> Created"` as originally assumed before a live publisher
+existed to check against. This held even for modules this org
+display-renames in the CRM UI (Contacts shows as "Student", Deals as
+"Application" in the console's own Rule-creation event picker) — the
+wire-level `api_name` stays tied to the underlying standard/custom module
+name regardless of the display label. `signals.js`'s `parseEventConfig()`
+and its tests already reflect this; if you're rebuilding this setup
+elsewhere, don't re-guess the format — check the Rule creation flow's
+"Choose Event" picker for the live names before wiring anything (the
+Publisher's own Events tab search undercounts and is not reliable for this).
+
+**Not portable automatically**, same as the Cron jobs above — the publisher,
+webhook target, and all 15 rules exist only on this Development environment
+and must be recreated by hand for Production or a fresh project.
 
 Not confirmed, and not blocking: whether Catalyst deducts CRM API credits for
 delivering a Signals event, or any event-volume-based cost. Catalyst's own
@@ -168,7 +192,7 @@ git push -u origin main
 
 | Job | Trigger | Does |
 |---|---|---|
-| `verify` | every push **and** pull request | installs deps, runs the 54 backend tests, builds the client, and greps the bundle for credential-shaped strings |
+| `verify` | every push **and** pull request | installs deps, runs the 148 backend tests, builds the client, and greps the bundle for credential-shaped strings |
 | `deploy` | pushes to `main` only, and only if `verify` passed | bumps the client version, rebuilds, deploys functions + client, then smoke-tests |
 
 Three details worth knowing:
@@ -192,7 +216,7 @@ a production org.
 
 ```bash
 cd ~/Desktop/zylker-academy-app/functions/zylker_api
-npm test                     # 54 offline tests; all should pass
+npm test                     # 148 offline tests; all should pass
 
 cd ~/Desktop/zylker-academy-app/client
 npm install
@@ -335,3 +359,16 @@ is decided.
   `Desk_Contact_ID` is confirmed to exist or is added. The code already reads
   a stored id first and will start using it the day such a field is added,
   with no code change.
+- **The read-model PoC's Cron jobs and Signals rules are Development-only
+  and not portable.** All 3 Cron jobs and all 15 Signals rules (see §1
+  above) exist solely on `Zylker-Academy-Signals`'s Development environment
+  — they must be recreated by hand for Production or any other project.
+- **The External LMS Connector's Data Store tables don't exist on this
+  project** (`lms_courses`, `lms_enrolments`, `lms_sync_log`) — confirmed
+  live. Out of scope for the read-model PoC (the LMS connector was already
+  Catalyst-native and untouched by design — see `ARCHITECTURE.md` §1), but
+  the Courses page will show empty/unavailable state until those tables are
+  created here independently.
+- **`BASELINE.md`/`RESULTS.md` — the kickoff prompt's own scripted
+  before/after measurement session — has not been run yet.** See
+  `ARCHITECTURE.md` §12.

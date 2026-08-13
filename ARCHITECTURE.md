@@ -1,16 +1,22 @@
 # Architecture — read-model/cache/event-sync PoC
 
-What was built against `kickoff-prompt.md`, phases 1–10, in `Zylker-Academy-Signals`
+What was built against `kickoff-prompt.md`, phases 1–11, in `Zylker-Academy-Signals`
 (a duplicate of the original `Zylker-Academy` project — see `README.md`). This
 document exists so the numbers in `RESULTS.md` are reproducible by someone else
 reading the repo, per the kickoff prompt's own requirement.
 
-**Status at time of writing:** all code for phases 1–10 is implemented, tested
-(140/140 backend tests), and committed. Nothing is deployed yet — `Zylker-Academy-Signals`
-has zero live functions, so `BASELINE.md` and `RESULTS.md` (phase 11's numeric
-deliverables) are blocked on an actual deployment and a live scripted session,
-exactly as flagged when this work started. This document describes what the
-numbers will be measuring once that happens.
+**Status at time of writing (2026-08-13):** all code for phases 1–11 is
+implemented, tested (148/148 backend tests), committed, and **deployed and
+live**. All four sync paths are running against the real org: write-through
+and bootstrap have been exercised live, all 3 reconciliation Cron jobs are
+live and running on schedule, and all 15 Signals rules are live and have
+processed real CRM events end-to-end (verified via `sync_state`'s
+`events_applied_total`/`reconciliation_applied_total` counters, not just
+"the console shows Enabled"). Two real bugs were found only once this went
+live — both below, in §8 and §9 — that no amount of offline testing against
+fakes could have caught, because both were disagreements between this code's
+assumptions and the live platform's actual behaviour. §12 lists what is
+still genuinely not built.
 
 ## 1. Scope
 
@@ -237,17 +243,37 @@ and misses nothing. **Never advances the checkpoint on a failed run** — a
 failure leaves it exactly where it was, so the next run re-covers the same
 ground instead of silently widening the gap reconciliation exists to close.
 
-Schedule tiers (not yet created as live Cron Jobs — see `DEPLOYMENT.md`):
+Schedule tiers, **live** as of 2026-08-13 (Console → Job Scheduling → Cron):
 
-| Entities | Schedule |
-|---|---|
-| applications, enrolments | every 15 minutes |
-| students | hourly |
-| programmes, intakes | daily |
+| Cron name | Entities | Schedule |
+|---|---|---|
+| `reconcile_15min` | applications, enrolments | every 15 minutes |
+| `reconcile_hourly` | students | hourly |
+| `reconcile_daily` | programmes, intakes | daily at 02:00 Europe/Madrid |
 
 Triggered via `POST /api/admin/reconcile-sync`, a Catalyst Cron Job Webhook
 target authorized by a shared secret (`RECONCILE_SECRET`) rather than a
 Catalyst user session, since a Cron invocation has no session to check.
+
+**Bug found on first live Cron run, now fixed:** every single reconciliation
+run failed with Zoho's `INVALID_QUERY` ("expected_data_type: datetime") from
+the moment the Cron jobs were created — reproduced directly with a manual
+`curl` against the live endpoint, then isolated with a direct COQL call.
+`withOverlap()` was handing COQL a `Date#toISOString()` string
+(`"2026-08-12T07:49:17.000Z"` — milliseconds, literal `"Z"`), which COQL
+rejects for a datetime-column comparison; confirmed live that the same
+instant formatted as `"2026-08-12T07:49:17+00:00"` (no milliseconds, a plain
+numeric offset instead of `"Z"`) is accepted. This is exactly the kind of gap
+the §8 header comment used to (wrongly) claim was covered: the `>` comparison
+itself had been verified live, but the *string format* fed into it never had
+been, because `bootstrap.js`'s only COQL date-adjacent query
+(`Created_Time is not null`) doesn't exercise a date literal at all — nothing
+in the offline suite could have caught this either, since the fake CRM in
+`test/reconciliation.test.js` does a plain JS string comparison and doesn't
+care what format the string is in. Fixed by a `toCoqlDatetime()` helper
+`withOverlap()` now routes through; `test/reconciliation.test.js` asserts the
+output can never contain milliseconds or a literal `"Z"` again, not just that
+today's specific input happens to convert correctly.
 
 ## 9. Signals (event-driven sync)
 
@@ -264,16 +290,37 @@ function and its existing modules with zero new risk.
 Verified from docs.catalyst.zoho.com's own sample payload: `event.data` is
 the **full record** (not a diff), in the same shape `zoho.js` already
 returns — so applying a create/update event costs no extra Zoho call.
-**Not verified**, and handled defensively rather than guessed at: no sample
-existed for an update or delete event (only "created"), and the
-`event_config.api_name` naming convention
-(`"<ModuleAPIName> Created/Updated/Deleted"`) is inferred from the one
-confirmed example. `signals.js`'s `parseEventConfig()` fails safe — an
-unrecognised `api_name` is logged and skipped, never guessed at, so a wrong
-inference cannot corrupt a projection. **Before trusting this in
-production**, fire one real test event per action type once Signals is
-configured (see `DEPLOYMENT.md`) and confirm the parser actually matches
-what Zoho sends.
+
+**Bug found setting up the first live Signals publisher, now fixed:** the
+original `event_config.api_name` assumption —
+`"<ModuleAPIName> Created/Updated/Deleted"` (e.g. `"Contacts Created"`),
+inferred from docs.catalyst.zoho.com's one sample payload — was wrong.
+Confirmed live, once a real publisher (`zylker_crm_publisher`) existed to
+check against: the actual format is `"<singular_module_noun>_<action>"`,
+all lowercase snake_case — `contact_created`, `deal_updated`,
+`product_deleted`, `intake_created`, `enrolment_deleted`, etc. — regardless
+of how the module is display-labelled in this org's CRM UI (this org shows
+Contacts as "Student" and Deals as "Application" in the console's own event
+picker, but the wire-level `api_name` stays keyed to the underlying standard
+module name). Had this shipped unfixed, `parseEventConfig()`'s fail-safe
+design (an unrecognised `api_name` is logged and skipped, never guessed at)
+means no projection would have been corrupted — but *every single Signals
+event, for every entity, forever* would have been silently dropped as
+"unrecognised", making the entire event-driven sync path a no-op while
+looking fully configured in the console. `signals.js`'s
+`SIGNALS_MODULE_MAP`/`parseEventConfig()` and its test suite now use the
+confirmed format. Also confirmed live, contrary to the original "no sample
+existed for update/delete" caveat: the same `"<noun>_<action>"` shape holds
+for `updated` and `deleted` too, not just `created`.
+
+**Confirmed live for both custom modules too** — Intakes and Enrolments have
+real Signals events (`intake_created`/`enrolment_created`/etc.), found via
+the Rule creation flow's "Choose Event" picker. (The publisher's own Events
+tab search undercounts and returned nothing for "Intake"/"Enrolment" —
+not a reliable way to check which modules Signals covers; the rule creation
+picker is.) All 15 rules (5 entities × created/updated/deleted) are live,
+each targeting one shared Webhook (`zylker_crm_signal_webhook`) →
+`POST /api/events/crm-signal`.
 
 Not confirmed either way: whether Catalyst deducts CRM API credits for
 delivering a Signals event. Confirmed: 100 KB per event occurrence, 5 MB per
@@ -298,14 +345,51 @@ the cumulative event/reconciliation/write-through split — see
 code over a bounded row fetch rather than relying on unconfirmed ZCQL
 `GROUP BY` support.
 
-## 11. What to measure once deployed
+## 11. What to measure
 
-`BASELINE.md` (blocked — needs a live scripted session against the
-*original*, unmigrated `Zylker-Academy` app, or this repo checked out at a
-pre-phase-4 commit and deployed) and `RESULTS.md` (blocked — the same
-session against this migrated app) both need an actual deployment, which
-hasn't happened in this session. The comparison to make once it has:
-`/api/dashboard`'s call count (9 live calls → 0, the single highest-value
-change), the list/detail routes' call counts, and the
-`api_call_log`/`syncHealth` rollups this PoC now exposes live — so the
-"before" number doesn't have to be re-derived by hand a second time.
+The deployment blocker is gone — `Zylker-Academy-Signals` is live, all sync
+paths are running, and `/api/integration-status` already exposes a live
+`syncHealth` rollup (per-entity `sync_state` plus a 24h `api_call_log`
+rollup by service/source) rather than requiring the numbers to be re-derived
+by hand. What's live right now, pulled directly from `api_call_log` for
+today (2026-08-13, since 07:00): **41** live CRM reads
+(`interactive-read-live`) and 11 live CRM writes, versus the pre-migration
+baseline where `/api/dashboard` alone issued 9 live CRM calls on *every*
+load. `BASELINE.md`/`RESULTS.md` — the formal, reproducible before/after
+comparison per the kickoff prompt's own requirement — is still outstanding;
+see §12.
+
+## 12. Deferred / not yet developed
+
+Everything in `kickoff-prompt.md`'s 11 phases is built, tested, deployed,
+and live. What remains is live-operations work the kickoff prompt scoped
+separately, or genuine gaps this PoC intentionally left alone:
+
+- **`BASELINE.md` / `RESULTS.md`** — the kickoff prompt's own closing
+  deliverable: a scripted, reproducible before/after session (original app
+  vs. this one) formalising the call-count reduction into the two documents.
+  Not yet run. The live `syncHealth` numbers in §11 are a preview, not a
+  substitute — they weren't captured via the specific reproducible script
+  the kickoff prompt asks for.
+- **Production environment.** Everything above is live on this project's
+  **Development** environment only. Promoting to Production means: setting
+  `RECONCILE_SECRET`/`SIGNALS_SECRET` (and every other function-level env
+  var in `DEPLOYMENT.md` §1) again at the Production level, recreating all 3
+  Cron jobs and all 15 Signals rules again (neither carries over
+  automatically — confirmed live, see `DEPLOYMENT.md`), and re-running the
+  verification checklist in `DEPLOYMENT.md` §5 against the Production URL.
+- **A deploy approval gate.** `DEPLOYMENT.md` §3a already notes this:
+  `environment: development` is declared in the GitHub Actions workflow but
+  no required reviewer is configured, so a push to `main` deploys
+  immediately. Worth adding before this points at a production org — not
+  done here since this PoC's target has stayed Development throughout.
+- **The External LMS Connector's Data Store tables** (`lms_courses`,
+  `lms_enrolments`, `lms_sync_log`) do not exist in `Zylker-Academy-Signals`
+  — confirmed live, out of scope for this PoC (§1: LMS was already
+  Catalyst-native and untouched by design), but worth flagging since the
+  Courses page will show empty/unavailable state on this project until
+  those tables are created, independent of anything in this document.
+- **Whether Catalyst deducts CRM API credits for a delivered Signals
+  event** — noted as unconfirmed in §9, and still unconfirmed; not blocking,
+  but worth checking before relying on Signals at a much larger event volume
+  than this PoC's.

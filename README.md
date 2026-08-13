@@ -9,8 +9,10 @@ Desk support tickets.
 **Project domain:** `https://zylker-academy-signals-20117369913.development.catalystserverless.eu`
 
 > This is a duplicate of the original `Zylker-Academy` project (id `11922000000014048`), created for the
-> read-model/cache/event-sync PoC described in `kickoff-prompt.md`. See `ARCHITECTURE.md` (once written)
-> for what was built here and why.
+> read-model/cache/event-sync PoC described in `kickoff-prompt.md`: CRM reads are served from a Datastore
+> projection kept in sync by four paths (bootstrap, write-through, Signals events, reconciliation Cron)
+> instead of hitting Zoho CRM live on every request. See **[ARCHITECTURE.md](ARCHITECTURE.md)** for what
+> was built, why, and what's still deferred.
 
 Deployment steps, environment variables, the Books connection setup and the
 verification checklist are in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
@@ -26,15 +28,29 @@ Browser (React SPA)
 Catalyst Advanced I/O function `zylker_api`
   │  requireAuth ──► requirePermission ──► handler
   │  OAuth resolved per request from Catalyst Connections
-  ├──►  Zoho CRM    www.zohoapis.eu/crm/v8      read + write
+  ├──►  Students/Applications/Programmes/Intakes/Enrolments reads:
+  │       Datastore projection (crm_students, crm_applications, …) + cache.js,
+  │       NOT a live Zoho CRM call — see ARCHITECTURE.md
+  ├──►  Zoho CRM    www.zohoapis.eu/crm/v8      writes always live;
+  │                                             reads live only for the
+  │                                             sync paths that keep the
+  │                                             projection current
   ├──►  Catalyst Data Store  lms_courses, lms_enrolments, lms_sync_log
-  ├──►  Zoho Books  www.zohoapis.eu/books/v3    read only
-  └──►  Zoho Desk   desk.zoho.eu/api/v1         read only
+  ├──►  Zoho Books  www.zohoapis.eu/books/v3    read only, always live
+  └──►  Zoho Desk   desk.zoho.eu/api/v1         read only, always live
+
+Keeping the CRM projection current (no browser involvement in any of these):
+  Zoho CRM ──Signals event──►  POST /api/events/crm-signal   (near-real-time)
+  Zoho CRM ◄──Cron (15 min/hourly/daily)──  POST /api/admin/reconcile-sync  (safety net)
+  every in-app CRM write ──► write-through updates the projection in the same request
 ```
 
 The browser calls only `/server/zylker_api/api/*` on its own origin. Every Zoho
 call happens inside the function. No OAuth client id, client secret, refresh
-token or access token exists in the client bundle.
+token or access token exists in the client bundle. Books, Desk and the LMS
+connector are unchanged by the read-model PoC — only the 5 CRM-backed
+entities moved off the live-read path (see `ARCHITECTURE.md` §1 for the exact
+scope boundary).
 
 ## Authentication and authorization
 
@@ -125,7 +141,7 @@ code change.
 ## Running the tests
 
 ```bash
-cd functions/zylker_api && npm test      # 54 offline tests, no Catalyst session needed
+cd functions/zylker_api && npm test      # 148 offline tests, no Catalyst session needed
 cd client && npm run build               # production build
 ```
 
@@ -138,18 +154,26 @@ only a deployment can do that. See DEPLOYMENT.md §4.
 
 ```
 functions/zylker_api/
-  index.js         route table, reads, response shaping
-  identity.js      Catalyst identity resolution (SDK-validated only)
-  permissions.js   role → permission matrix
-  auth.js          requireAuth / requirePermission, rate limit, idempotency, audit
-  writes.js        CRM write handlers and their invariants
-  books.js         Zoho Books, read only
-  desk.js          Zoho Desk, read only
-  zoho.js          Catalyst Connections, CRM/Learn clients, error redaction
-  normalise.js     CRM record → client shape, Learn course matching
-  references.js    server-minted external references
-  config.js        all configuration, resolved from the environment
-  test/            offline verification suite
+  index.js            route table, reads, response shaping
+  identity.js         Catalyst identity resolution (SDK-validated only)
+  permissions.js      role → permission matrix
+  auth.js             requireAuth / requirePermission, rate limit, idempotency, audit
+  writes.js           CRM write handlers, their invariants, and write-through sync
+  books.js            Zoho Books, read only
+  desk.js             Zoho Desk, read only
+  zoho.js             Catalyst Connections, CRM/Learn clients, error redaction
+  normalise.js        CRM record → client shape, Learn course matching
+  references.js       server-minted external references
+  config.js           all configuration, resolved from the environment
+  apiCallLog.js        instrumentation — one row per real outbound Zoho HTTP call
+  projections.js       Datastore row shape + the single idempotent upsert choke point
+  projectionReads.js   hydrates a Datastore row back to the exact normalise.js shape
+  bootstrap.js         one-time full pull of all 5 CRM modules into the Datastore
+  reconciliation.js    incremental Cron safety net (15 min / hourly / daily)
+  signals.js           Catalyst Signals event handler (near-real-time CRM → app sync)
+  cache.js             dashboard/catalogue read cache, minute-granularity TTL
+  syncHealth.js        sync_state + api_call_log rollups for Integration Status
+  test/                offline verification suite — see also ARCHITECTURE.md
 
 client/src/
   AuthContext.jsx  session state; nothing renders before the server confirms it
