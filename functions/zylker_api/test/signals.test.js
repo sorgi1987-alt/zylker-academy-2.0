@@ -74,14 +74,20 @@ const crmEvent = (apiName, data) => ({
 
 /* ------------------------------- parseEventConfig ------------------------- */
 
-test('parseEventConfig resolves "<Module> Created/Updated/Deleted" to an entity + action', () => {
-  assert.deepEqual(signals.parseEventConfig('Contacts Created'), { entity: 'students', action: 'created' });
-  assert.deepEqual(signals.parseEventConfig('Deals Updated'), { entity: 'applications', action: 'updated' });
-  assert.deepEqual(signals.parseEventConfig('Enrolments Deleted'), { entity: 'enrolments', action: 'deleted' });
+test('parseEventConfig resolves "<noun>_<created|updated|deleted>" to an entity + action (confirmed live format)', () => {
+  assert.deepEqual(signals.parseEventConfig('contact_created'), { entity: 'students', action: 'created' });
+  assert.deepEqual(signals.parseEventConfig('deal_updated'), { entity: 'applications', action: 'updated' });
+  assert.deepEqual(signals.parseEventConfig('product_deleted'), { entity: 'programmes', action: 'deleted' });
 });
 
-test('parseEventConfig returns null for an unrecognised module or malformed name — fails safe, never guesses', () => {
-  assert.equal(signals.parseEventConfig('Leads Created'), null); // not one of our 5 projected modules
+test('parseEventConfig also resolves the 2 custom modules (confirmed live via the Rule creation event picker)', () => {
+  assert.deepEqual(signals.parseEventConfig('intake_created'), { entity: 'intakes', action: 'created' });
+  assert.deepEqual(signals.parseEventConfig('enrolment_deleted'), { entity: 'enrolments', action: 'deleted' });
+});
+
+test('parseEventConfig returns null for an unrecognised module, an approval-process event, or a malformed name — fails safe, never guesses', () => {
+  assert.equal(signals.parseEventConfig('lead_created'), null); // not one of our 5 projected modules
+  assert.equal(signals.parseEventConfig('intake_approved'), null); // approval events are out of scope, not create/update/delete
   assert.equal(signals.parseEventConfig('garbage'), null);
   assert.equal(signals.parseEventConfig(''), null);
   assert.equal(signals.parseEventConfig(undefined), null);
@@ -91,7 +97,7 @@ test('parseEventConfig returns null for an unrecognised module or malformed name
 
 test('a create/update event upserts the projection directly from event.data, no extra fetch', async () => {
   const ds = makeDs();
-  const event = crmEvent('Contacts Created', {
+  const event = crmEvent('contact_created', {
     id: '111', First_Name: 'Ada', Last_Name: 'Lovelace', Modified_Time: '2026-08-12T10:00:00+02:00'
   });
   const result = await signals.processEvent(req, event, ds);
@@ -102,12 +108,12 @@ test('a create/update event upserts the projection directly from event.data, no 
 
 test('a delete event removes the projection row', async () => {
   const ds = makeDs();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '111', First_Name: 'Ada', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds);
   assert.ok(ds.rowFor('crm_students', '111'));
 
-  const result = await signals.processEvent(req, crmEvent('Contacts Deleted', { id: '111' }), ds);
+  const result = await signals.processEvent(req, crmEvent('contact_deleted', { id: '111' }), ds);
 
   assert.equal(result.outcome, 'deleted');
   assert.equal(ds.rowFor('crm_students', '111'), undefined);
@@ -115,31 +121,31 @@ test('a delete event removes the projection row', async () => {
 
 test('a delete event for a row never projected is a harmless no-op', async () => {
   const ds = makeDs();
-  const result = await signals.processEvent(req, crmEvent('Contacts Deleted', { id: '999' }), ds);
+  const result = await signals.processEvent(req, crmEvent('contact_deleted', { id: '999' }), ds);
   assert.equal(result.outcome, 'delete-noop');
 });
 
 test('an unrecognised event is reported, not thrown', async () => {
   const ds = makeDs();
-  const result = await signals.processEvent(req, crmEvent('Tasks Created', { id: '1' }), ds);
+  const result = await signals.processEvent(req, crmEvent('task_created', { id: '1' }), ds);
   assert.equal(result.outcome, 'unrecognised');
 });
 
 test('an event with no record id is reported, not thrown', async () => {
   const ds = makeDs();
-  const result = await signals.processEvent(req, crmEvent('Contacts Created', { First_Name: 'No Id' }), ds);
+  const result = await signals.processEvent(req, crmEvent('contact_created', { First_Name: 'No Id' }), ds);
   assert.equal(result.outcome, 'missing-id');
 });
 
 test('a duplicate or out-of-order event is harmless: an older event never overwrites newer projected data', async () => {
   const ds = makeDs();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '111', Student_Status: 'Enrolled', Modified_Time: '2026-08-12T12:00:00+02:00'
   }), ds);
 
   // The same event delivered again (Signals retries), or an earlier event
   // arriving late — either way, must not regress the projection.
-  const result = await signals.processEvent(req, crmEvent('Contacts Updated', {
+  const result = await signals.processEvent(req, crmEvent('contact_updated', {
     id: '111', Student_Status: 'Applicant', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds);
 
@@ -149,7 +155,7 @@ test('a duplicate or out-of-order event is harmless: an older event never overwr
 
 test('processing an event touches sync_state.last_event_received_at for that entity', async () => {
   const ds = makeDs();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '111', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds);
   assert.ok(ds.syncStateRow('crm.contacts').last_event_received_at);
@@ -161,8 +167,8 @@ test('processEnvelope processes every event in the batch and tallies outcomes', 
   const ds = makeDs();
   const envelope = {
     events: [
-      crmEvent('Contacts Created', { id: '1', Modified_Time: '2026-08-12T10:00:00+02:00' }),
-      crmEvent('Deals Created', { id: '2', Modified_Time: '2026-08-12T10:00:00+02:00' })
+      crmEvent('contact_created', { id: '1', Modified_Time: '2026-08-12T10:00:00+02:00' }),
+      crmEvent('deal_created', { id: '2', Modified_Time: '2026-08-12T10:00:00+02:00' })
     ]
   };
   const results = await signals.processEnvelope(req, envelope, ds);
@@ -183,9 +189,9 @@ test('one bad event in a batch does not stop the rest from processing', async ()
   const ds = makeDs();
   const envelope = {
     events: [
-      crmEvent('Contacts Created', { id: '1', Modified_Time: '2026-08-12T10:00:00+02:00' }),
+      crmEvent('contact_created', { id: '1', Modified_Time: '2026-08-12T10:00:00+02:00' }),
       { data: { id: '2' }, event_config: null }, // malformed event_config
-      crmEvent('Deals Created', { id: '3', Modified_Time: '2026-08-12T10:00:00+02:00' })
+      crmEvent('deal_created', { id: '3', Modified_Time: '2026-08-12T10:00:00+02:00' })
     ]
   };
   const results = await signals.processEnvelope(req, envelope, ds);
@@ -206,7 +212,7 @@ function makeFakeCache() {
 test('a create/update event invalidates the cache for its entity (kickoff-prompt.md §2a)', async () => {
   const ds = makeDs();
   const fakeCache = makeFakeCache();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds, fakeCache);
   assert.deepEqual(fakeCache.invalidated, ['students']);
@@ -215,24 +221,24 @@ test('a create/update event invalidates the cache for its entity (kickoff-prompt
 test('a delete event invalidates the cache too', async () => {
   const ds = makeDs();
   const fakeCache = makeFakeCache();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds, fakeCache);
   fakeCache.invalidated.length = 0;
 
-  await signals.processEvent(req, crmEvent('Contacts Deleted', { id: '1' }), ds, fakeCache);
+  await signals.processEvent(req, crmEvent('contact_deleted', { id: '1' }), ds, fakeCache);
   assert.deepEqual(fakeCache.invalidated, ['students']);
 });
 
 test('a stale (skipped) event never invalidates the cache — nothing actually changed', async () => {
   const ds = makeDs();
   const fakeCache = makeFakeCache();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '1', Modified_Time: '2026-08-12T12:00:00+02:00'
   }), ds, fakeCache);
   fakeCache.invalidated.length = 0;
 
-  const result = await signals.processEvent(req, crmEvent('Contacts Updated', {
+  const result = await signals.processEvent(req, crmEvent('contact_updated', {
     id: '1', Modified_Time: '2026-08-12T10:00:00+02:00' // older
   }), ds, fakeCache);
 
@@ -243,8 +249,8 @@ test('a stale (skipped) event never invalidates the cache — nothing actually c
 test('an unrecognised or missing-id event never invalidates the cache', async () => {
   const ds = makeDs();
   const fakeCache = makeFakeCache();
-  await signals.processEvent(req, crmEvent('Tasks Created', { id: '1' }), ds, fakeCache);
-  await signals.processEvent(req, crmEvent('Contacts Created', {}), ds, fakeCache);
+  await signals.processEvent(req, crmEvent('task_created', { id: '1' }), ds, fakeCache);
+  await signals.processEvent(req, crmEvent('contact_created', {}), ds, fakeCache);
   assert.deepEqual(fakeCache.invalidated, []);
 });
 
@@ -259,7 +265,7 @@ test('a successful create/update event increments events_applied_total for its e
   const ds = makeDs();
   const fakeCache = makeFakeCache();
   const fakeSyncState = makeFakeSyncState();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds, fakeCache, fakeSyncState);
   assert.deepEqual(fakeSyncState.calls, [['students', 'event-sync']]);
@@ -269,12 +275,12 @@ test('a stale event never increments the counter', async () => {
   const ds = makeDs();
   const fakeCache = makeFakeCache();
   const fakeSyncState = makeFakeSyncState();
-  await signals.processEvent(req, crmEvent('Contacts Created', {
+  await signals.processEvent(req, crmEvent('contact_created', {
     id: '1', Modified_Time: '2026-08-12T12:00:00+02:00'
   }), ds, fakeCache, fakeSyncState);
   fakeSyncState.calls.length = 0;
 
-  await signals.processEvent(req, crmEvent('Contacts Updated', {
+  await signals.processEvent(req, crmEvent('contact_updated', {
     id: '1', Modified_Time: '2026-08-12T10:00:00+02:00'
   }), ds, fakeCache, fakeSyncState);
   assert.deepEqual(fakeSyncState.calls, []);

@@ -27,22 +27,20 @@
  * NOT a diff of changed fields. This lets create/update events reuse
  * projections.upsertProjectionRow directly, no extra Zoho call needed.
  *
- * WHAT IS NOT VERIFIED, and how this handler stays safe regardless:
- *   - No sample payload for an update or delete event was found (only
- *     "created"). Assumed to follow the same {data, event_config} shape.
- *   - `event_config.api_name` for a CREATE/UPDATE/DELETE event on OUR
- *     modules is inferred to be "<ModuleAPIName> <Action>" (e.g. "Contacts
- *     Created") by direct analogy with the one confirmed sample ("Leads
- *     Created", where Leads is both the display label and the API name).
- *     This is an inference, not a confirmed fact, especially for a renamed
- *     module — though this org's 5 projected modules keep their original
- *     API names (config.js), so the display-label-vs-API-name ambiguity
- *     that would break this inference does not apply here.
- *   - MUST be verified against one real fired event once Signals is
- *     configured and connected — see parseEventConfig()'s handling of an
- *     unrecognised api_name: it is logged and the event is skipped, never
- *     guessed at, so a wrong inference fails safe instead of corrupting a
- *     projection.
+ * event_config.api_name — CONFIRMED LIVE (2026-08-13) against this project's
+ * own Signals publisher: the format is "<singular_module_noun>_<action>",
+ * all lowercase snake_case — e.g. "contact_created", "deal_updated",
+ * "product_deleted", "intake_created", "enrolment_updated" — NOT the
+ * "<ModuleAPIName> Created" form originally assumed here before a publisher
+ * existed to check against. Confirmed for all 5 projected modules, including
+ * both custom ones (Intakes, Enrolments) via the Rule creation flow's
+ * "Choose Event" picker — the publisher's own Events tab search undercounts
+ * (returned nothing for "Intake"/"Enrolment" there), so that tab is not a
+ * reliable way to check which modules Signals actually covers; the rule
+ * creation picker is. Some modules also expose "_approved"/"_rejected"
+ * (approval-process events) alongside created/updated/deleted — irrelevant
+ * to this PoC's create/update/delete sync, and parseEventConfig's regex
+ * already excludes them, so they simply fail safe as "unrecognised".
  *
  * Idempotency: delegated entirely to projections.upsertProjectionRow, the
  * same choke point bootstrap/write-through/reconciliation use. Events may
@@ -55,11 +53,21 @@ const projections = require('./projections');
 const cacheModule = require('./cache');
 const syncState = require('./syncState');
 
-/** "<ModuleAPIName> <Action>" -> { entity, action }, or null if unrecognised. */
+// "<singular_module_noun>_<action>" -> entity, for all 5 projected modules
+// (see header comment — confirmed live via the Rule creation flow's "Choose
+// Event" picker, not derived from config.projections.moduleToEntity, since
+// that map is keyed by the plural API module name, not this singular
+// event-name noun).
+const SIGNALS_MODULE_MAP = {
+  contact: 'students', deal: 'applications', product: 'programmes',
+  intake: 'intakes', enrolment: 'enrolments'
+};
+
+/** "<singular_module_noun>_<created|updated|deleted>" -> { entity, action }, or null if unrecognised. */
 function parseEventConfig(apiName) {
-  const m = /^(\S+)\s+(Created|Updated|Deleted)$/i.exec(String(apiName || '').trim());
+  const m = /^([a-z]+)_(created|updated|deleted)$/i.exec(String(apiName || '').trim());
   if (!m) return null;
-  const entity = cfg.projections.moduleToEntity[m[1]];
+  const entity = SIGNALS_MODULE_MAP[m[1].toLowerCase()];
   if (!entity) return null;
   return { entity, action: m[2].toLowerCase() };
 }
