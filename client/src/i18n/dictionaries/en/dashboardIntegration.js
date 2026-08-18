@@ -1,8 +1,11 @@
 export default {
   dashboard: {
     pageTitle: 'Dashboard',
-    pageIntro: 'Live figures for {name}. Each card names its source and opens the filtered list behind it: Zoho CRM for admissions, the external LMS connector for learning, Zoho Books for finance, Zoho Desk for support.',
     noDataYet: 'No data yet',
+    customize: 'Customize',
+    customizeTitle: 'Customize dashboard',
+    customizeIntro: 'Choose which sections show on your dashboard. This is remembered on this device only.',
+    allSectionsHidden: 'Every section is hidden. Use Customize to bring one back.',
     section: {
       admissions: 'Admissions',
       delivery: 'Delivery',

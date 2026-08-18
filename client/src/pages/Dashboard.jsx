@@ -1,13 +1,29 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Kpi, BarList, MoneyBarList, Funnel, Pill, ConnDot,
+  Async, Card, Kpi, BarList, MoneyBarList, Funnel, Pill, ConnDot, Modal,
   SourceBadge, DemoDataBadge, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import AttentionPanel from '../components/Attention.jsx';
+
+// Which KPI sections are hidden, remembered locally so the choice survives a
+// reload without needing a backend field for it. Best-effort: a storage
+// failure (private browsing, quota) just means every section shows, which is
+// the safe direction to fail in.
+const SECTIONS = ['admissions', 'delivery', 'learning', 'finance', 'support'];
+const HIDDEN_STORAGE_KEY = 'zylker.dashboard.hiddenSections';
+const readHiddenSections = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(HIDDEN_STORAGE_KEY) || '[]');
+    return Array.isArray(raw) ? raw.filter((k) => SECTIONS.includes(k)) : [];
+  } catch { return []; }
+};
+const writeHiddenSections = (keys) => {
+  try { localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(keys)); } catch { /* best-effort */ }
+};
 
 /**
  * Dashboard — an operational workspace rather than a summary.
@@ -25,18 +41,58 @@ import AttentionPanel from '../components/Attention.jsx';
 export default function Dashboard() {
   const t = useT();
   const state = useApi((o) => api.dashboard(o), []);
+  const [hidden, setHidden] = useState(readHiddenSections);
+  const [customizing, setCustomizing] = useState(false);
+
+  const toggleSection = (key) => {
+    setHidden((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      writeHiddenSections(next);
+      return next;
+    });
+  };
+  const shows = (key) => !hidden.includes(key);
 
   return (
     <>
       <div className="page-head page-head-row">
         <h1>{t('dashboard.pageTitle')}</h1>
-        {/* Loads on its own request — see the note in Attention.jsx. */}
-        <AttentionPanel />
+        <div className="head-actions">
+          <button type="button" className="btn" onClick={() => setCustomizing(true)}>
+            {t('dashboard.customize')}
+          </button>
+          {/* Loads on its own request — see the note in Attention.jsx. */}
+          <AttentionPanel />
+        </div>
       </div>
+
+      {customizing && (
+        <Modal title={t('dashboard.customizeTitle')} onClose={() => setCustomizing(false)}>
+          <p className="muted" style={{ marginTop: 0 }}>{t('dashboard.customizeIntro')}</p>
+          <ul className="plain-list">
+            {SECTIONS.map((key) => (
+              <li key={key}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={shows(key)} onChange={() => toggleSection(key)} />
+                  {t(`dashboard.section.${key}`)}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </Modal>
+      )}
+
+      {hidden.length === SECTIONS.length && (
+        <p className="muted small" style={{ marginBottom: 16 }}>
+          {t('dashboard.allSectionsHidden')}
+        </p>
+      )}
 
       <Async state={state} empty={{ title: t('dashboard.noDataYet') }} emptyWhen={(d) => !d}>
         {(d) => (
           <>
+            {shows('admissions') && (
+            <>
             <h2 className="sec-h">{t('dashboard.section.admissions')}</h2>
             <section className="grid g-kpi">
               {/* Submitted, Under Review and Documents Pending together, which is
@@ -57,7 +113,11 @@ export default function Dashboard() {
               />
               <Kpi label={t('dashboard.kpi.students')} {...d.kpis.totalStudents} to="/students" />
             </section>
+            </>
+            )}
 
+            {shows('delivery') && (
+            <>
             <h2 className="sec-h">{t('dashboard.section.delivery')}</h2>
             <section className="grid g-kpi">
               <Kpi label={t('dashboard.kpi.activeEnrolments')} {...d.kpis.activeEnrolments} to="/enrolments?status=Active" />
@@ -68,7 +128,11 @@ export default function Dashboard() {
                 to="/intakes?capacity=at-risk" />
               <Kpi label={t('dashboard.kpi.activeProgrammes')} {...d.kpis.activeProgrammes} to="/programmes?active=true" />
             </section>
+            </>
+            )}
 
+            {shows('learning') && (
+            <>
             <h2 className="sec-h">{t('dashboard.section.learning')}</h2>
             <section className="grid g-kpi">
               <Kpi
@@ -88,7 +152,11 @@ export default function Dashboard() {
               <Kpi label={t('dashboard.kpi.failedSyncs')} {...d.kpis.failedSyncs} to="/learning/sync-log?result=error" />
               <Kpi label={t('dashboard.kpi.lmsCourses')} {...d.kpis.lmsCourses} to="/learning/courses" />
             </section>
+            </>
+            )}
 
+            {shows('finance') && (
+            <>
             <h2 className="sec-h">{t('dashboard.section.finance')}</h2>
             <section className="grid g-kpi">
               <Kpi label={t('dashboard.kpi.overdueInvoices')} {...d.kpis.overdueInvoices} to="/invoices?status=overdue" />
@@ -106,12 +174,18 @@ export default function Dashboard() {
                 format={(v) => fmtMoney(v, d.kpis.outstandingBalance.currency)}
               />
             </section>
+            </>
+            )}
 
+            {shows('support') && (
+            <>
             <h2 className="sec-h">{t('dashboard.section.support')}</h2>
             <section className="grid g-kpi">
               <Kpi label={t('dashboard.kpi.openTickets')} {...d.kpis.openTickets} to="/tickets" />
               <Kpi label={t('dashboard.kpi.overdueTickets')} {...d.kpis.overdueTickets} to="/tickets?statusType=Open" />
             </section>
+            </>
+            )}
 
             <div className="grid g-2">
               <Card

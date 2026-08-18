@@ -1,8 +1,11 @@
 export default {
   dashboard: {
     pageTitle: 'Panel',
-    pageIntro: 'Cifras en tiempo real para {name}. Cada tarjeta indica su fuente y abre la lista filtrada correspondiente: Zoho CRM para admisiones, el conector LMS externo para aprendizaje, Zoho Books para finanzas, Zoho Desk para soporte.',
     noDataYet: 'Todavía no hay datos',
+    customize: 'Personalizar',
+    customizeTitle: 'Personalizar el panel',
+    customizeIntro: 'Elige qué secciones se muestran en tu panel. Esto se recuerda solo en este dispositivo.',
+    allSectionsHidden: 'Todas las secciones están ocultas. Usa Personalizar para volver a mostrar alguna.',
     section: {
       admissions: 'Admisiones',
       delivery: 'Impartición',
