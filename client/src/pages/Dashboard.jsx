@@ -4,26 +4,13 @@ import { useApi } from '../useApi.js';
 import { api } from '../api.js';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Kpi, BarList, MoneyBarList, Funnel, Pill, ConnDot, Modal,
-  SourceBadge, DemoDataBadge, fmtDate, fmtMoney
+  Async, Card, BarList, MoneyBarList, Funnel, Pill, ConnDot, Modal,
+  SourceBadge, DemoDataBadge, fmtDate
 } from '../components/Ui.jsx';
 import AttentionPanel from '../components/Attention.jsx';
+import KpiGrid, { KPI_DEFS, readHiddenKpis, writeHiddenKpis, resetKpiLayout } from '../components/KpiGrid.jsx';
 
-// Which KPI sections are hidden, remembered locally so the choice survives a
-// reload without needing a backend field for it. Best-effort: a storage
-// failure (private browsing, quota) just means every section shows, which is
-// the safe direction to fail in.
 const SECTIONS = ['admissions', 'delivery', 'learning', 'finance', 'support'];
-const HIDDEN_STORAGE_KEY = 'zylker.dashboard.hiddenSections';
-const readHiddenSections = () => {
-  try {
-    const raw = JSON.parse(localStorage.getItem(HIDDEN_STORAGE_KEY) || '[]');
-    return Array.isArray(raw) ? raw.filter((k) => SECTIONS.includes(k)) : [];
-  } catch { return []; }
-};
-const writeHiddenSections = (keys) => {
-  try { localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(keys)); } catch { /* best-effort */ }
-};
 
 /**
  * Dashboard — an operational workspace rather than a summary.
@@ -41,17 +28,24 @@ const writeHiddenSections = (keys) => {
 export default function Dashboard() {
   const t = useT();
   const state = useApi((o) => api.dashboard(o), []);
-  const [hidden, setHidden] = useState(readHiddenSections);
+  const [hidden, setHidden] = useState(readHiddenKpis);
   const [customizing, setCustomizing] = useState(false);
+  // Bumped to force KpiGrid to remount and re-read localStorage after a
+  // reset — simpler than threading a "clear your internal state" prop
+  // through to a component whose whole point is owning that state itself.
+  const [layoutVersion, setLayoutVersion] = useState(0);
 
-  const toggleSection = (key) => {
+  const toggleKpi = (key) => {
     setHidden((prev) => {
       const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
-      writeHiddenSections(next);
+      writeHiddenKpis(next);
       return next;
     });
   };
-  const shows = (key) => !hidden.includes(key);
+  const resetLayout = () => {
+    resetKpiLayout();
+    setLayoutVersion((v) => v + 1);
+  };
 
   return (
     <>
@@ -69,20 +63,32 @@ export default function Dashboard() {
       {customizing && (
         <Modal title={t('dashboard.customizeTitle')} onClose={() => setCustomizing(false)}>
           <p className="muted" style={{ marginTop: 0 }}>{t('dashboard.customizeIntro')}</p>
-          <ul className="plain-list">
-            {SECTIONS.map((key) => (
-              <li key={key}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={shows(key)} onChange={() => toggleSection(key)} />
-                  {t(`dashboard.section.${key}`)}
-                </label>
-              </li>
-            ))}
-          </ul>
+          {SECTIONS.map((section) => (
+            <div key={section} style={{ marginBottom: 14 }}>
+              <p className="sec-h" style={{ margin: '0 0 6px' }}>{t(`dashboard.section.${section}`)}</p>
+              <ul className="plain-list">
+                {KPI_DEFS.filter((def) => def.section === section).map((def) => (
+                  <li key={def.key}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={!hidden.includes(def.key)}
+                        onChange={() => toggleKpi(def.key)}
+                      />
+                      {t(def.labelKey)}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <button type="button" className="btn" onClick={resetLayout}>
+            {t('dashboard.resetLayout')}
+          </button>
         </Modal>
       )}
 
-      {hidden.length === SECTIONS.length && (
+      {hidden.length === KPI_DEFS.length && (
         <p className="muted small" style={{ marginBottom: 16 }}>
           {t('dashboard.allSectionsHidden')}
         </p>
@@ -91,101 +97,7 @@ export default function Dashboard() {
       <Async state={state} empty={{ title: t('dashboard.noDataYet') }} emptyWhen={(d) => !d}>
         {(d) => (
           <>
-            {shows('admissions') && (
-            <>
-            <h2 className="sec-h">{t('dashboard.section.admissions')}</h2>
-            <section className="grid g-kpi">
-              {/* Submitted, Under Review and Documents Pending together, which is
-                  exactly what ?awaitingAction=true selects — so the number here
-                  and the row count there are the same number. */}
-              <Kpi label={t('dashboard.kpi.applicationsAwaitingAction')} {...d.kpis.applicationsAwaitingAction}
-                to="/applications?awaitingAction=true" />
-              <Kpi label={t('dashboard.kpi.offersAwaitingResponse')} {...d.kpis.offersAwaitingResponse}
-                to={`/applications?stage=${encodeURIComponent('Offer Issued')}`} />
-              <Kpi label={t('dashboard.kpi.openApplications')} {...d.kpis.openApplications} to="/applications" />
-              {/* Lifetime, not a rolling window — the label says so rather than
-                  leaving the reader to assume the more flattering reading. */}
-              <Kpi
-                label={t('dashboard.kpi.conversionRate')}
-                {...d.kpis.conversionRate}
-                to={`/applications?stage=${encodeURIComponent('Enrolled')}`}
-                format={(v) => (v === null || v === undefined ? '—' : `${v}%`)}
-              />
-              <Kpi label={t('dashboard.kpi.students')} {...d.kpis.totalStudents} to="/students" />
-            </section>
-            </>
-            )}
-
-            {shows('delivery') && (
-            <>
-            <h2 className="sec-h">{t('dashboard.section.delivery')}</h2>
-            <section className="grid g-kpi">
-              <Kpi label={t('dashboard.kpi.activeEnrolments')} {...d.kpis.activeEnrolments} to="/enrolments?status=Active" />
-              <Kpi label={t('dashboard.kpi.enrolmentsWithoutLmsMapping')} {...d.kpis.enrolmentsWithoutLmsMapping}
-                to="/enrolments?lmsMapped=no" />
-              <Kpi label={t('dashboard.kpi.upcomingIntakes')} {...d.kpis.upcomingIntakes} to="/intakes" />
-              <Kpi label={t('dashboard.kpi.intakeCapacityWarnings')} {...d.kpis.intakeCapacityWarnings}
-                to="/intakes?capacity=at-risk" />
-              <Kpi label={t('dashboard.kpi.activeProgrammes')} {...d.kpis.activeProgrammes} to="/programmes?active=true" />
-            </section>
-            </>
-            )}
-
-            {shows('learning') && (
-            <>
-            <h2 className="sec-h">{t('dashboard.section.learning')}</h2>
-            <section className="grid g-kpi">
-              <Kpi
-                label={t('dashboard.kpi.averageProgress')}
-                {...d.kpis.averageProgress}
-                to="/learning/enrolments"
-                format={(v) => (v === null || v === undefined ? '—' : `${v}%`)}
-              />
-              <Kpi label={t('dashboard.kpi.learnersNoRecentActivity')} {...d.kpis.inactiveLearners}
-                to="/learning/enrolments?activity=stale" />
-              {/* Counts learner completions, not distinct courses — labelled as such. */}
-              <Kpi label={t('dashboard.kpi.courseCompletions')} {...d.kpis.completedCourses}
-                to="/learning/enrolments?lmsStatus=Completed" />
-              <Kpi label={t('dashboard.kpi.certificatesIssued')} {...d.kpis.certificatesIssued} to="/learning/enrolments" />
-              <Kpi label={t('dashboard.kpi.unmappedLmsRecords')} {...d.kpis.unmappedLmsRecords}
-                to="/learning/enrolments?mappingStatus=Unmapped" />
-              <Kpi label={t('dashboard.kpi.failedSyncs')} {...d.kpis.failedSyncs} to="/learning/sync-log?result=error" />
-              <Kpi label={t('dashboard.kpi.lmsCourses')} {...d.kpis.lmsCourses} to="/learning/courses" />
-            </section>
-            </>
-            )}
-
-            {shows('finance') && (
-            <>
-            <h2 className="sec-h">{t('dashboard.section.finance')}</h2>
-            <section className="grid g-kpi">
-              <Kpi label={t('dashboard.kpi.overdueInvoices')} {...d.kpis.overdueInvoices} to="/invoices?status=overdue" />
-              <Kpi
-                label={t('dashboard.kpi.overdueBalance')}
-                {...d.kpis.overdueBalance}
-                to="/invoices?status=overdue"
-                format={(v) => fmtMoney(v, d.kpis.overdueBalance.currency)}
-              />
-              <Kpi label={t('dashboard.kpi.outstandingInvoices')} {...d.kpis.outstandingInvoices} to="/invoices?status=sent" />
-              <Kpi
-                label={t('dashboard.kpi.outstandingBalance')}
-                {...d.kpis.outstandingBalance}
-                to="/invoices"
-                format={(v) => fmtMoney(v, d.kpis.outstandingBalance.currency)}
-              />
-            </section>
-            </>
-            )}
-
-            {shows('support') && (
-            <>
-            <h2 className="sec-h">{t('dashboard.section.support')}</h2>
-            <section className="grid g-kpi">
-              <Kpi label={t('dashboard.kpi.openTickets')} {...d.kpis.openTickets} to="/tickets" />
-              <Kpi label={t('dashboard.kpi.overdueTickets')} {...d.kpis.overdueTickets} to="/tickets?statusType=Open" />
-            </section>
-            </>
-            )}
+            <KpiGrid key={layoutVersion} data={d} hidden={hidden} onHide={toggleKpi} />
 
             <div className="grid g-2">
               <Card

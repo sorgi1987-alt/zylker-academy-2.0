@@ -4,8 +4,10 @@ export default {
     noDataYet: 'No data yet',
     customize: 'Customize',
     customizeTitle: 'Customize dashboard',
-    customizeIntro: 'Choose which sections show on your dashboard. This is remembered on this device only.',
-    allSectionsHidden: 'Every section is hidden. Use Customize to bring one back.',
+    customizeIntro: 'Choose which KPI tiles show on your dashboard, or drag and resize a tile directly on the page. Remembered on this device only.',
+    resetLayout: 'Reset layout',
+    hideKpi: 'Hide this tile',
+    allSectionsHidden: 'No KPI tiles are showing. Use Customize to bring one back.',
     section: {
       admissions: 'Admissions',
       delivery: 'Delivery',

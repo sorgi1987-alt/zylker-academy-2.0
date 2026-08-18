@@ -4,8 +4,10 @@ export default {
     noDataYet: 'Todavía no hay datos',
     customize: 'Personalizar',
     customizeTitle: 'Personalizar el panel',
-    customizeIntro: 'Elige qué secciones se muestran en tu panel. Esto se recuerda solo en este dispositivo.',
-    allSectionsHidden: 'Todas las secciones están ocultas. Usa Personalizar para volver a mostrar alguna.',
+    customizeIntro: 'Elige qué indicadores se muestran en tu panel, o arrastra y cambia el tamaño de uno directamente en la página. Se recuerda solo en este dispositivo.',
+    resetLayout: 'Restablecer diseño',
+    hideKpi: 'Ocultar este indicador',
+    allSectionsHidden: 'No se muestra ningún indicador. Usa Personalizar para volver a mostrar alguno.',
     section: {
       admissions: 'Admisiones',
       delivery: 'Impartición',
