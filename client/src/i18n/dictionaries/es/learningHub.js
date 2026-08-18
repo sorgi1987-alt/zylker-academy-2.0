@@ -1,7 +1,6 @@
 export default {
   learningCourses: {
     pageTitle: 'Centro de aprendizaje',
-    pageIntro: 'Cursos del conector LMS externo y el Programa de CRM al que está asociado cada uno.',
     cardTitle: 'Cursos externos',
     syncAllButton: 'Sincronizar todos los cursos asociados',
     actionErrorTitle: 'Esa acción no se pudo completar',
@@ -115,7 +114,6 @@ export default {
   },
   learningEnrolments: {
     pageTitle: 'Centro de aprendizaje',
-    pageIntro: 'Progreso de los estudiantes desde el conector LMS externo y cómo se asocia cada registro con Zoho CRM.',
     cardTitle: 'Estudiantes',
     searchLabel: 'Buscar',
     searchPlaceholder: 'Id de estudiante, nombre del estudiante, curso o id externo',

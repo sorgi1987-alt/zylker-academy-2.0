@@ -2,7 +2,6 @@
 export default {
   enrolments: {
     pageTitle: 'Enrolments',
-    pageIntro: 'Enrolment records in Zoho CRM, linking a student to a programme and intake.',
     allEnrolments: 'All enrolments',
     newEnrolment: 'New enrolment',
     searchPlaceholder: 'Student name, email or reference',

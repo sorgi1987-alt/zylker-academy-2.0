@@ -35,7 +35,6 @@ export default function Enrolments() {
     <>
       <div className="page-head">
         <h1>{t('enrolments.pageTitle')}</h1>
-        <p>{t('enrolments.pageIntro')}</p>
       </div>
 
       <Card

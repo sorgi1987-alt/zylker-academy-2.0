@@ -1,7 +1,6 @@
 export default {
   applications: {
     pageTitle: 'Solicitudes',
-    pageIntro: 'Solicitudes de admisión guardadas en Zoho CRM, con su etapa actual.',
     cardTitle: 'Todas las solicitudes',
     newApplicationLink: 'Nueva solicitud',
     searchPlaceholder: 'Solicitante, correo electrónico o ID de solicitud',

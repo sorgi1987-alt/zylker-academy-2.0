@@ -144,7 +144,6 @@ export default function Intakes() {
     <>
       <div className="page-head">
         <h1>{t('intakes.pageTitle')}</h1>
-        <p>{t('intakes.pageIntro')}</p>
       </div>
 
       <Card

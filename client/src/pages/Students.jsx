@@ -21,7 +21,6 @@ export default function Students() {
     <>
       <div className="page-head">
         <h1>{t('students.pageTitle')}</h1>
-        <p>{t('students.pageIntro')}</p>
       </div>
 
       <Card

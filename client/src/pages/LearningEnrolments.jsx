@@ -39,7 +39,6 @@ export default function LearningEnrolments() {
     <>
       <div className="page-head">
         <h1>{t('learningEnrolments.pageTitle')}</h1>
-        <p>{t('learningEnrolments.pageIntro')}</p>
       </div>
 
       <LearningNav />

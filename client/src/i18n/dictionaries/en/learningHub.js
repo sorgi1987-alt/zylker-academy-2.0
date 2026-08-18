@@ -1,7 +1,6 @@
 export default {
   learningCourses: {
     pageTitle: 'Learning Hub',
-    pageIntro: 'Courses held by the external LMS connector, and the CRM Programme each one is mapped to.',
     cardTitle: 'External courses',
     syncAllButton: 'Sync all mapped courses',
     actionErrorTitle: 'That action could not be completed',
@@ -115,7 +114,6 @@ export default {
   },
   learningEnrolments: {
     pageTitle: 'Learning Hub',
-    pageIntro: 'Learner progress from the external LMS connector, and how each record maps to Zoho CRM.',
     cardTitle: 'Learners',
     searchLabel: 'Search',
     searchPlaceholder: 'Learner id, student name, course or external id',

@@ -1,7 +1,6 @@
 export default {
   students: {
     pageTitle: 'Students',
-    pageIntro: 'Student records held in Zoho CRM, with their current application and enrolment.',
     allStudents: 'All students',
     addStudent: 'Add student',
     searchLabel: 'Search',

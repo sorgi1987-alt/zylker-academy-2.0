@@ -62,7 +62,6 @@ export default function Applications() {
     <>
       <div className="page-head">
         <h1>{t('applications.pageTitle')}</h1>
-        <p>{t('applications.pageIntro')}</p>
       </div>
 
       <Card

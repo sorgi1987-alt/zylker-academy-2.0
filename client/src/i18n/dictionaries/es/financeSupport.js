@@ -2,7 +2,6 @@
 export default {
   invoices: {
     pageTitle: 'Finanzas',
-    pageIntro: 'Facturas de Zoho Books. Esta aplicación solo lee las facturas — crearlas, editarlas, pagarlas y eliminarlas se hace en Zoho Books.',
     cardTitle: 'Facturas',
     filteredToCustomer: 'Filtrado por cliente de Zoho Books',
     showAllInvoices: 'Mostrar todas las facturas',
@@ -81,7 +80,6 @@ export default {
   },
   tickets: {
     pageTitle: 'Soporte',
-    pageIntro: 'Tickets de Zoho Desk. Esta aplicación solo lee los tickets — crearlos, responderlos y cerrarlos se hace en Zoho Desk.',
     cardTitle: 'Tickets',
     filteredToContact: 'Filtrado por contacto de Zoho Desk',
     showAllTickets: 'Mostrar todos los tickets',

@@ -1,7 +1,6 @@
 export default {
   programmes: {
     pageTitle: 'Programas',
-    pageIntro: 'Programas de estudio guardados en Zoho CRM, con sus convocatorias, solicitudes y matrículas.',
     allProgrammes: 'Todos los programas',
     newProgramme: 'Nuevo programa',
     searchPlaceholder: 'Nombre, código o departamento',
@@ -118,7 +117,6 @@ export default {
   },
   intakes: {
     pageTitle: 'Convocatorias',
-    pageIntro: 'Convocatorias programadas para cada programa, con capacidad y recuentos de matrícula.',
     allIntakes: 'Todas las convocatorias',
     newIntake: 'Nueva convocatoria',
     searchPlaceholder: 'Nombre, año académico o ubicación',

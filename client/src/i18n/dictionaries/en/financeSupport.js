@@ -2,7 +2,6 @@
 export default {
   invoices: {
     pageTitle: 'Finance',
-    pageIntro: 'Invoices from Zoho Books. This application reads invoices only — creating, editing, paying and deleting are done in Zoho Books.',
     cardTitle: 'Invoices',
     filteredToCustomer: 'Filtered to Zoho Books customer',
     showAllInvoices: 'Show all invoices',
@@ -81,7 +80,6 @@ export default {
   },
   tickets: {
     pageTitle: 'Support',
-    pageIntro: 'Tickets from Zoho Desk. This application reads tickets only — creating, replying to and closing them are done in Zoho Desk.',
     cardTitle: 'Tickets',
     filteredToContact: 'Filtered to Zoho Desk contact',
     showAllTickets: 'Show all tickets',

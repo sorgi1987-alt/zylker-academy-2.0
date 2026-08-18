@@ -124,7 +124,6 @@ export default function Programmes() {
     <>
       <div className="page-head">
         <h1>{t('programmes.pageTitle')}</h1>
-        <p>{t('programmes.pageIntro')}</p>
       </div>
 
       <Card

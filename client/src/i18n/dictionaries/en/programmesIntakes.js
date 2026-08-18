@@ -1,7 +1,6 @@
 export default {
   programmes: {
     pageTitle: 'Programmes',
-    pageIntro: 'Programmes of study held in Zoho CRM, with their intakes, applications and enrolments.',
     allProgrammes: 'All programmes',
     newProgramme: 'New programme',
     searchPlaceholder: 'Name, code or department',
@@ -118,7 +117,6 @@ export default {
   },
   intakes: {
     pageTitle: 'Intakes',
-    pageIntro: 'Scheduled intakes for each programme, with capacity and enrolment counts.',
     allIntakes: 'All intakes',
     newIntake: 'New intake',
     searchPlaceholder: 'Name, academic year or location',

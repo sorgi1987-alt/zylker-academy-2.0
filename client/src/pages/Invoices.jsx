@@ -55,7 +55,6 @@ export default function Invoices() {
     <>
       <div className="page-head">
         <h1>{t('invoices.pageTitle')}</h1>
-        <p>{t('invoices.pageIntro')}</p>
       </div>
 
       <Card

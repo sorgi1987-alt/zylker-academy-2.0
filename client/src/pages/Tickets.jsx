@@ -51,7 +51,6 @@ export default function Tickets() {
     <>
       <div className="page-head">
         <h1>{t('tickets.pageTitle')}</h1>
-        <p>{t('tickets.pageIntro')}</p>
       </div>
 
       <Card

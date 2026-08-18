@@ -2,7 +2,6 @@
 export default {
   enrolments: {
     pageTitle: 'Matrículas',
-    pageIntro: 'Registros de matrícula en Zoho CRM, que vinculan a un estudiante con un programa y una convocatoria.',
     allEnrolments: 'Todas las matrículas',
     newEnrolment: 'Nueva matrícula',
     searchPlaceholder: 'Nombre del estudiante, correo electrónico o referencia',

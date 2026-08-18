@@ -1,7 +1,6 @@
 export default {
   students: {
     pageTitle: 'Estudiantes',
-    pageIntro: 'Registros de estudiantes almacenados en Zoho CRM, con su solicitud y matrícula actuales.',
     allStudents: 'Todos los estudiantes',
     addStudent: 'Añadir estudiante',
     searchLabel: 'Buscar',

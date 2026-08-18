@@ -1,7 +1,6 @@
 export default {
   applications: {
     pageTitle: 'Applications',
-    pageIntro: 'Admissions applications held in Zoho CRM, with their current stage.',
     cardTitle: 'All applications',
     newApplicationLink: 'New application',
     searchPlaceholder: 'Applicant, email or application ID',

@@ -55,7 +55,6 @@ export default function LearningCourses() {
     <>
       <div className="page-head">
         <h1>{t('learningCourses.pageTitle')}</h1>
-        <p>{t('learningCourses.pageIntro')}</p>
       </div>
 
       <LearningNav />
