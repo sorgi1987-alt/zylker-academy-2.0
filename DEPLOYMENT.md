@@ -363,12 +363,19 @@ is decided.
   and not portable.** All 3 Cron jobs and all 15 Signals rules (see §1
   above) exist solely on `Zylker-Academy-Signals`'s Development environment
   — they must be recreated by hand for Production or any other project.
-- **The External LMS Connector's Data Store tables don't exist on this
-  project** (`lms_courses`, `lms_enrolments`, `lms_sync_log`) — confirmed
-  live. Out of scope for the read-model PoC (the LMS connector was already
-  Catalyst-native and untouched by design — see `ARCHITECTURE.md` §1), but
-  the Courses page will show empty/unavailable state until those tables are
-  created here independently.
+- **Fixed 2026-08-18: the External LMS Connector's Data Store tables**
+  (`lms_courses`, `lms_enrolments`, `lms_sync_log`) and **`admissions_audit`**
+  (the per-user action log) did not exist on this duplicate project —
+  confirmed live, causing the Learning Hub to show "No such Table" errors
+  and every write's audit entry to silently fail to log (silent because
+  `auth.audit()` is best-effort by design). Both out of scope for the
+  read-model PoC itself (see `ARCHITECTURE.md` §1/§12), but real gaps in
+  this specific project. Recreated with the schema from the original
+  project (`Zylker-Academy`, read-only source), LMS tables repopulated with
+  the original demonstration rows. If duplicating this project again,
+  check for this class of gap generally — any table that predates the
+  read-model PoC's own 7 tables (§4 above) was not part of what this PoC's
+  own setup created, so a fresh duplicate project starts without it.
 - **`BASELINE.md`/`RESULTS.md`** — done: 32 live CRM calls for the kickoff
   prompt's scripted session, down to 0. See `ARCHITECTURE.md` §11 and the
   two documents themselves.

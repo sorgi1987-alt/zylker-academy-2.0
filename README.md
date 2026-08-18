@@ -180,6 +180,10 @@ client/src/
   catalystAuth.js  Catalyst Web SDK wrapper
   api.js           the only place that talks to the backend
   App.jsx          auth gate, navigation, permission-guarded routes
+  components/KpiGrid.jsx  dashboard's drag/resize/hide KPI tile grid (react-grid-layout)
   pages/           Login, Dashboard, Students, Applications, Programmes,
-                   Intakes, Enrolments, Courses, Finance, Support, Integration Status
+                   Intakes, Enrolments, Learning Hub (Courses / Learners /
+                   Synchronisation log), Finance, Support, Activity Log,
+                   Integration Status — plus one Detail and one New/Edit
+                   form page per CRM entity
 ```

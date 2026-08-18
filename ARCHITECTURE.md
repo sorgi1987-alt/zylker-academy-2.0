@@ -105,8 +105,13 @@ against.
 
 ## 4. Datastore schema
 
-7 tables in `Zylker-Academy-Signals` (created via the Catalyst management
-API, verified live — see commit history for exact column definitions):
+7 tables in `Zylker-Academy-Signals` belong to this read-model PoC (created
+via the Catalyst management API, verified live — see commit history for
+exact column definitions). The project also holds 4 more tables that
+predate this PoC and are outside its scope — `lms_courses`,
+`lms_enrolments`, `lms_sync_log` (the External LMS Connector) and
+`admissions_audit` (the per-user action log) — recreated in this
+duplicate project after being found missing; see §12.
 
 - **`crm_students` / `crm_applications` / `crm_programmes` / `crm_intakes` /
   `crm_enrolments`** — one row per CRM record, flattened from
@@ -401,13 +406,29 @@ scoped separately, or genuine gaps this PoC intentionally left alone:
   no required reviewer is configured, so a push to `main` deploys
   immediately. Worth adding before this points at a production org — not
   done here since this PoC's target has stayed Development throughout.
-- **The External LMS Connector's Data Store tables** (`lms_courses`,
-  `lms_enrolments`, `lms_sync_log`) do not exist in `Zylker-Academy-Signals`
-  — confirmed live, out of scope for this PoC (§1: LMS was already
-  Catalyst-native and untouched by design), but worth flagging since the
-  Courses page will show empty/unavailable state on this project until
-  those tables are created, independent of anything in this document.
 - **Whether Catalyst deducts CRM API credits for a delivered Signals
   event** — noted as unconfirmed in §9, and still unconfirmed; not blocking,
   but worth checking before relying on Signals at a much larger event volume
   than this PoC's.
+
+**Fixed since the above was written (2026-08-18):** two tables specific to
+this duplicate project — not part of the read-model PoC's own scope, but
+worth recording here since they were found broken by exactly the same
+"this is a fresh duplicate project, not everything was recreated" pattern
+as everything else in this section:
+- **The External LMS Connector's Data Store tables** (`lms_courses`,
+  `lms_enrolments`, `lms_sync_log`) did not exist in
+  `Zylker-Academy-Signals` — confirmed live, and the Learning Hub showed
+  "No such Table" errors as a result. Recreated with the exact schema from
+  the original project (`Zylker-Academy`, read-only source — never
+  written to) and repopulated with the same demonstration rows, reusing
+  the original `CRM_Programme_ID`/`CRM_Student_ID`/`CRM_Enrolment_ID`
+  values as-is since both projects point at the same live CRM org.
+- **`admissions_audit`** (the per-user action log behind the Activity tab
+  on student/application/enrolment records, and the standalone Activity
+  Log page) was missing the same way. Every write silently failed to log
+  its audit entry the whole time this project has existed — silently,
+  because `auth.audit()` is deliberately best-effort and swallows its own
+  errors so a logging failure can never fail the write it's describing.
+  Recreated with the schema from the original project; a real write now
+  logs correctly, verified live.
