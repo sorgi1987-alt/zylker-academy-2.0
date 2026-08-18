@@ -136,5 +136,27 @@ export default {
     fieldStatusMissing: 'No existe en el CRM',
     note: 'Nota',
     notesCard: 'Notas'
+  },
+  activityLog: {
+    pageTitle: 'Registro de actividad',
+    pageIntro: 'Todas las escrituras que esta aplicación ha realizado sobre un estudiante, solicitud, programa, convocatoria o matrícula — y qué miembro de tu equipo la hizo realmente.',
+    cardTitle: 'Actividad',
+    entityLabel: 'Entidad',
+    allEntities: 'Todas las entidades',
+    entity: {
+      student: 'Estudiante',
+      application: 'Solicitud',
+      programme: 'Programa',
+      intake: 'Convocatoria',
+      enrolment: 'Matrícula'
+    },
+    resultLabel: 'Resultado',
+    allResults: 'Todos los resultados',
+    resultSucceeded: 'Correcto',
+    resultFailed: 'Fallido',
+    emptyTitle: 'Todavía no hay nada registrado',
+    emptyMessage: 'Crea, edita o cambia el estado de un registro y aparecerá aquí.',
+    attributionNote: 'El propio historial de registros de Zoho CRM muestra la única identidad de conexión compartida con la que se autentica esta aplicación en cada escritura — nunca el miembro del equipo que actuó. Este registro es el que realmente indica quién hizo qué.',
+    lmsLogLink: 'Consulta el registro de sincronización del Centro de aprendizaje para la actividad del conector LMS.'
   }
 };

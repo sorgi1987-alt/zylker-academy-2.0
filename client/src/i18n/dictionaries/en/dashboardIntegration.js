@@ -136,5 +136,27 @@ export default {
     fieldStatusMissing: 'Missing on CRM',
     note: 'Note',
     notesCard: 'Notes'
+  },
+  activityLog: {
+    pageTitle: 'Activity Log',
+    pageIntro: 'Every write this application has made to a student, application, programme, intake or enrolment — and which of your staff actually made it.',
+    cardTitle: 'Activity',
+    entityLabel: 'Entity',
+    allEntities: 'All entities',
+    entity: {
+      student: 'Student',
+      application: 'Application',
+      programme: 'Programme',
+      intake: 'Intake',
+      enrolment: 'Enrolment'
+    },
+    resultLabel: 'Result',
+    allResults: 'All results',
+    resultSucceeded: 'Succeeded',
+    resultFailed: 'Failed',
+    emptyTitle: 'Nothing logged yet',
+    emptyMessage: 'Create, edit or transition a record and it will appear here.',
+    attributionNote: 'Zoho CRM\'s own record history shows the one shared connection identity this application authenticates with for every write — never the staff member who acted. This log is the actual record of who did what.',
+    lmsLogLink: 'See the Learning Hub\'s Synchronisation log for LMS connector activity.'
   }
 };

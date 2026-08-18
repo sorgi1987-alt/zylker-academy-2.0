@@ -34,7 +34,8 @@ const ICONS = {
   learning: <Icon d={<><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>} />,
   finance: <Icon d={<><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z" /><path d="M9 8h6M9 12h6M9 16h3" /></>} />,
   support: <Icon d={<><path d="M4 13a8 8 0 0 1 16 0" /><path d="M4 13v4a2 2 0 0 0 2 2h1v-6H5a1 1 0 0 0-1 1z" /><path d="M20 13v4a2 2 0 0 1-2 2h-1v-6h1a1 1 0 0 1 1 1z" /><path d="M14 19a2 2 0 0 1-2 2h-1" /></>} />,
-  integration: <Icon d={<><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.2 10.9 15.8 7.1M8.2 13.1l7.6 3.8" /></>} />
+  integration: <Icon d={<><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.2 10.9 15.8 7.1M8.2 13.1l7.6 3.8" /></>} />,
+  activity: <Icon d={<><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /><path d="M12 7v5l4 2" /></>} />
 };
 
 const IconSearch = <Icon d={<><circle cx="11" cy="11" r="7" /><path d="m20 20-3.6-3.6" /></>} />;
@@ -64,6 +65,7 @@ export const NAV = [
   { to: '/learning/courses', labelKey: 'nav.learningHub', permission: 'lms:read', icon: ICONS.learning },
   { to: '/invoices', labelKey: 'nav.finance', permission: 'invoice:read', icon: ICONS.finance },
   { to: '/tickets', labelKey: 'nav.support', permission: 'ticket:read', icon: ICONS.support },
+  { to: '/activity', labelKey: 'nav.activityLog', permission: 'activity:read', icon: ICONS.activity },
   { to: '/integration', labelKey: 'nav.integrationStatus', permission: 'integration:read', icon: ICONS.integration }
 ];
 
@@ -136,6 +138,7 @@ const SECTION_KEY = {
   'sync-log': 'shell.section.syncLog',
   invoices: 'shell.section.invoices',
   tickets: 'shell.section.tickets',
+  activity: 'shell.section.activity',
   integration: 'shell.section.integration',
   new: 'shell.section.new',
   edit: 'shell.section.edit'

@@ -27,6 +27,7 @@ import InvoiceDetail from './pages/InvoiceDetail.jsx';
 import Tickets from './pages/Tickets.jsx';
 import TicketDetail from './pages/TicketDetail.jsx';
 import IntegrationStatus from './pages/IntegrationStatus.jsx';
+import ActivityLog from './pages/ActivityLog.jsx';
 import { Loading } from './components/Ui.jsx';
 import Logo from './components/Logo.jsx';
 import { Shell, NAV } from './components/Shell.jsx';
@@ -121,6 +122,8 @@ function AppShell() {
 
           <Route path="/tickets" element={<Guarded permission="ticket:read"><Tickets /></Guarded>} />
           <Route path="/tickets/:id" element={<Guarded permission="ticket:read"><TicketDetail /></Guarded>} />
+
+          <Route path="/activity" element={<Guarded permission="activity:read"><ActivityLog /></Guarded>} />
 
           <Route path="/integration" element={<Guarded permission="integration:read"><IntegrationStatus /></Guarded>} />
 

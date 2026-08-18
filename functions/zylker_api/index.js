@@ -1737,11 +1737,13 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
 R('/api/activity', perms.P.ACTIVITY_READ, async (req, res) => {
   const entityType = String(req.query.entityType || '').replace(/[^a-z]/gi, '') || null;
   const recordId = String(req.query.recordId || '').replace(/[^0-9]/g, '') || null;
+  const resultRaw = String(req.query.result || '');
+  const result = resultRaw === 'success' || resultRaw === 'error' ? resultRaw : null;
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   let rows = [];
   let unavailable = null;
   try {
-    rows = await auth.readActivity(req, { entityType, recordId, limit });
+    rows = await auth.readActivity(req, { entityType, recordId, result, limit });
   } catch (err) {
     // A missing or uninitialised audit table must not break the page.
     unavailable = z.redact(err && err.message);
