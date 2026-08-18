@@ -182,6 +182,19 @@ a{color:var(--brand-2)}
 .page-head h1{font-size:23px;margin:0 0 4px;letter-spacing:-.2px}
 .page-head p{margin:0;color:var(--ink-3);font-size:14px}
 
+/* A page-head with no intro copy below it — title and a header action (e.g.
+   the "Needs attention" trigger) share one row instead of the title sitting
+   alone above a paragraph. */
+.page-head-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.page-head-row h1{margin:0}
+.page-head-row .btn{margin-top:0}
+
+/* --- attention trigger button --- */
+.attn-trigger{display:inline-flex;align-items:center;gap:8px}
+.attn-trigger.stop{border-color:var(--stop)}
+.attn-trigger.warn{border-color:var(--warn)}
+.attn-trigger.info{border-color:var(--info)}
+
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 .card-h{padding:14px 18px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:center;gap:12px}
 .card-h h2{font-size:15px;margin:0;font-weight:650}

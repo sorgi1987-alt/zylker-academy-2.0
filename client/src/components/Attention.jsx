@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
 import { useT } from '../i18n/I18nContext.jsx';
-import { Card, Loading, ErrorState, fmtDate, fmtMoney } from './Ui.jsx';
+import { Modal, Loading, ErrorState, fmtDate, fmtMoney } from './Ui.jsx';
 
 /**
  * "Needs attention" — the work queue.
@@ -11,6 +11,12 @@ import { Card, Loading, ErrorState, fmtDate, fmtMoney } from './Ui.jsx';
  * Fetched on its own rather than as part of the dashboard payload, so it loads,
  * fails and retries independently: a Books timeout costs this panel a line, not
  * the whole page.
+ *
+ * Rendered as a button next to the page title rather than an always-open card:
+ * the full queue used to be the tallest thing on the dashboard, pushing every
+ * KPI below the fold on first load. The button's own tone/count already say
+ * whether anything needs a look, so nothing is lost by putting the detail
+ * behind a click.
  *
  * Each row is a link to an already-filtered destination. Severity is carried by
  * a coloured rail AND by a word, because colour alone is not information for
@@ -85,51 +91,86 @@ function Item({ item }) {
 // the least urgent, not an arbitrary slice.
 const COLLAPSED_LIMIT = 5;
 
+/**
+ * The button's own badge: total count across every non-unavailable item, and
+ * a tone matching the worst severity present — so the button itself already
+ * answers "is anything urgent" without opening the modal.
+ */
+function summarise(items) {
+  let total = 0;
+  let worst = null; // null | 'info' | 'warning' | 'critical'
+  const rank = { info: 1, warning: 2, critical: 3 };
+  items.forEach((i) => {
+    if (!i.unavailable && typeof i.count === 'number') total += i.count;
+    const r = rank[i.severity] || 0;
+    if (r > (rank[worst] || 0)) worst = i.severity;
+  });
+  const tone = worst === 'critical' ? 'stop' : worst === 'warning' ? 'warn' : worst ? 'info' : 'mute';
+  return { total, tone };
+}
+
 export default function AttentionPanel() {
   const t = useT();
   const state = useApi((o) => api.attention(o), []);
   const data = state.data;
   const [expanded, setExpanded] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const action = (
-    <button
-      type="button"
-      className="btn"
-      onClick={state.reload}
-      disabled={state.status === 'loading'}
-    >
-      {state.status === 'loading' ? t('common.attention.refreshing') : t('common.attention.refresh')}
-    </button>
-  );
+  const items = (data && data.items) || [];
+  const { total, tone } = summarise(items);
 
   return (
-    <Card title={t('common.attention.cardTitle')} action={action} pad={false}>
-      {state.status === 'loading' && (
-        <div style={{ padding: '16px 18px' }}>
-          <Loading rows={3} label={t('common.attention.loadingLabel')} />
-        </div>
-      )}
+    <>
+      <button
+        type="button"
+        className={`btn attn-trigger ${tone}`}
+        onClick={() => setOpen(true)}
+      >
+        {t('common.attention.cardTitle')}
+        {state.status === 'ready' && (
+          <span className={`pill ${tone}`}>
+            {total > 0 ? total : t('common.attention.allClearShort')}
+          </span>
+        )}
+      </button>
 
-      {state.status === 'error' && (
-        <ErrorState error={state.error} onRetry={state.reload} />
-      )}
-
-      {state.status === 'ready' && data && (
-        data.items.length ? (
-          <div className="attn">
-            {(expanded ? data.items : data.items.slice(0, COLLAPSED_LIMIT)).map((i) => (
-              <Item key={i.key} item={i} />
-            ))}
-            {data.items.length > COLLAPSED_LIMIT && (
-              <button type="button" className="btn attn-toggle" onClick={() => setExpanded((v) => !v)}>
-                {expanded ? t('common.attention.showFewer') : t('common.attention.showAll', { count: data.items.length })}
-              </button>
-            )}
+      {open && (
+        <Modal title={t('common.attention.cardTitle')} onClose={() => setOpen(false)} wide>
+          <div className="head-actions" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn"
+              onClick={state.reload}
+              disabled={state.status === 'loading'}
+            >
+              {state.status === 'loading' ? t('common.attention.refreshing') : t('common.attention.refresh')}
+            </button>
           </div>
-        ) : (
-          <p className="attn-clear">{t('common.attention.allClear')}</p>
-        )
+
+          {state.status === 'loading' && <Loading rows={3} label={t('common.attention.loadingLabel')} />}
+
+          {state.status === 'error' && (
+            <ErrorState error={state.error} onRetry={state.reload} />
+          )}
+
+          {state.status === 'ready' && data && (
+            items.length ? (
+              <div className="attn">
+                {(expanded ? items : items.slice(0, COLLAPSED_LIMIT)).map((i) => (
+                  <Item key={i.key} item={i} />
+                ))}
+                {items.length > COLLAPSED_LIMIT && (
+                  <button type="button" className="btn attn-toggle" onClick={() => setExpanded((v) => !v)}>
+                    {expanded ? t('common.attention.showFewer') : t('common.attention.showAll', { count: items.length })}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p className="attn-clear">{t('common.attention.allClear')}</p>
+            )
+          )}
+        </Modal>
       )}
-    </Card>
+    </>
   );
 }

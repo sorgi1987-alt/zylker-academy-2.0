@@ -2,7 +2,6 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
-import { useAuth } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
   Async, Card, Kpi, BarList, MoneyBarList, Funnel, Pill, ConnDot,
@@ -25,18 +24,15 @@ import AttentionPanel from '../components/Attention.jsx';
  */
 export default function Dashboard() {
   const t = useT();
-  const { user } = useAuth();
   const state = useApi((o) => api.dashboard(o), []);
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head page-head-row">
         <h1>{t('dashboard.pageTitle')}</h1>
-        <p>{t('dashboard.pageIntro', { name: user.name })}</p>
+        {/* Loads on its own request — see the note in Attention.jsx. */}
+        <AttentionPanel />
       </div>
-
-      {/* Loads on its own request — see the note in Attention.jsx. */}
-      <AttentionPanel />
 
       <Async state={state} empty={{ title: t('dashboard.noDataYet') }} emptyWhen={(d) => !d}>
         {(d) => (

@@ -110,6 +110,7 @@ export default {
       balanceOutstanding: 'Saldo pendiente:',
       longestWaiting: 'Esperando desde hace más tiempo:',
       allClear: 'No hay nada pendiente. Las solicitudes, convocatorias, registros de aprendizaje, facturas y tickets están todos dentro de sus umbrales.',
+      allClearShort: '✓',
       showFewer: 'Mostrar menos',
       showAll: 'Mostrar todos ({count})',
       severity: {

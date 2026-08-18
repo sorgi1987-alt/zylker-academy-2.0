@@ -125,6 +125,7 @@ export default {
       balanceOutstanding: 'Balance outstanding:',
       longestWaiting: 'Longest waiting:',
       allClear: 'Nothing is waiting. Applications, intakes, learning records, invoices and tickets are all within their thresholds.',
+      allClearShort: '✓',
       showFewer: 'Show fewer',
       showAll: 'Show all {count}',
       severity: {
