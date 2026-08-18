@@ -178,12 +178,21 @@ function syncLogEntry(r) {
  * Appends one line to the synchronisation history. Never throws: losing a log
  * entry must not fail the operation it was describing, and a caller that has
  * already written to CRM cannot be rolled back by a logging failure.
+ *
+ * `direction` must be passed explicitly by every call site — one of:
+ *   'Internal'    — a Catalyst-only write; nothing left this application
+ *   'CRM to LMS'  — CRM was read (e.g. to validate a mapping) but not written
+ *   'LMS to CRM'  — an actual write/create was sent to Zoho CRM
+ * The default below is deliberately the least alarming value: a missed call
+ * site under-reports as "nothing happened" rather than falsely claiming a
+ * CRM write occurred, since this table is what the shared-connector-identity
+ * story in Zoho CRM's own history cannot tell you on its own.
  */
 async function log(req, event) {
   try {
     await tableOf(req, TABLES.syncLog).insertRow({
       Request_ID: req.requestId || null,
-      Direction: event.direction || 'LMS to CRM',
+      Direction: event.direction || 'Internal',
       Entity_Type: event.entityType || null,
       Provider: event.provider || null,
       External_Record_ID: event.externalRecordId || null,
@@ -300,7 +309,7 @@ async function createCourse(req, body) {
   const created = await getCourse(req, inserted.ROWID);
   if (!created) throw new LmsError(502, 'READBACK_FAILED', 'The course could not be read back after being created.');
   await log(req, {
-    direction: 'LMS to CRM', entityType: 'Course', provider: created.provider,
+    direction: 'Internal', entityType: 'Course', provider: created.provider,
     externalRecordId: created.externalCourseId, operation: 'Create',
     changedFields: Object.keys(row), result: 'success', message: 'Simulated LMS course created in Catalyst.'
   });
@@ -319,7 +328,7 @@ async function updateCourse(req, id, body) {
   await tableOf(req, TABLES.courses).updateRow(row);
   const after = await getCourse(req, current.id);
   await log(req, {
-    entityType: 'Course', provider: after.provider, externalRecordId: after.externalCourseId,
+    direction: 'Internal', entityType: 'Course', provider: after.provider, externalRecordId: after.externalCourseId,
     operation: 'Update', changedFields: Object.keys(row).filter((k) => k !== 'ROWID'),
     result: 'success', message: 'Simulated LMS course updated in Catalyst.'
   });
@@ -331,7 +340,7 @@ async function archiveCourse(req, id) {
   if (!current) throw new LmsError(404, 'NOT_FOUND', 'No LMS course matches that id.');
   await tableOf(req, TABLES.courses).updateRow({ ROWID: current.id, Is_Archived: true });
   await log(req, {
-    entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
+    direction: 'Internal', entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
     operation: 'Update', changedFields: ['Is_Archived'], result: 'success',
     message: 'Demo course archived.'
   });
@@ -355,7 +364,7 @@ async function mapCourse(deps, req, id, programmeId) {
       Mapping_Status: 'Unmapped', Sync_Status: 'Pending'
     });
     await log(req, {
-      entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
+      direction: 'Internal', entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
       operation: 'Map', result: 'success', message: 'Mapping cleared.'
     });
     return await getCourse(req, current.id);
@@ -383,7 +392,7 @@ async function mapCourse(deps, req, id, programmeId) {
     Sync_Status: 'Pending'
   });
   await log(req, {
-    entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
+    direction: 'CRM to LMS', entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
     crmModule: cfg.modules.programmes, crmRecordId: String(rows[0].id),
     operation: 'Map', result: 'success', message: `Mapped to ${rows[0].Product_Name}.`
   });
@@ -451,7 +460,7 @@ async function syncCourseToCrm(deps, req, id) {
       Last_Sync_Message: `Pushed ${Object.keys(payload).join(', ')} to ${after.Product_Name}.`
     });
     await log(req, {
-      entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
+      direction: 'LMS to CRM', entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
       crmModule: cfg.modules.programmes, crmRecordId: String(programmeId), operation: 'Update',
       changedFields: Object.keys(payload), result: 'success',
       message: `Synced to ${after.Product_Name}.`
@@ -463,7 +472,7 @@ async function syncCourseToCrm(deps, req, id) {
       ROWID: current.id, Sync_Status: 'Error', Last_Sync_Time: nowIso(), Last_Sync_Message: message
     });
     await log(req, {
-      entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
+      direction: 'LMS to CRM', entityType: 'Course', provider: current.provider, externalRecordId: current.externalCourseId,
       crmModule: cfg.modules.programmes, crmRecordId: current.crmProgrammeId,
       operation: 'Error', result: 'error', message
     });
@@ -613,7 +622,7 @@ async function createEnrolment(deps, req, body) {
   }
 
   await log(req, {
-    entityType: 'Enrolment', provider: created.provider, externalRecordId: created.externalEnrolmentId,
+    direction: 'Internal', entityType: 'Enrolment', provider: created.provider, externalRecordId: created.externalEnrolmentId,
     operation: 'Create', changedFields: Object.keys(row), result: 'success',
     message: 'Simulated LMS enrolment created in Catalyst.'
   });
@@ -634,7 +643,7 @@ async function updateEnrolment(req, id, body) {
   await tableOf(req, TABLES.enrolments).updateRow(row);
   const after = await getEnrolment(req, current.id);
   await log(req, {
-    entityType: 'Enrolment', provider: after.provider, externalRecordId: after.externalEnrolmentId,
+    direction: 'Internal', entityType: 'Enrolment', provider: after.provider, externalRecordId: after.externalEnrolmentId,
     operation: 'Update', changedFields: Object.keys(row).filter((k) => k !== 'ROWID'),
     result: 'success', message: 'Simulated LMS enrolment updated in Catalyst.'
   });
@@ -664,7 +673,7 @@ async function mapEnrolmentStudent(deps, req, id, body) {
       ROWID: current.id, Mapping_Status: 'Error', Last_Sync_Message: message.slice(0, 200)
     });
     await log(req, {
-      entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+      direction: 'CRM to LMS', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
       operation: 'Error', result: 'error', message
     });
     return await getEnrolment(req, current.id);
@@ -706,6 +715,12 @@ async function mapEnrolmentStudent(deps, req, id, body) {
       ROWID: current.id, Mapping_Status: 'Unmapped',
       Last_Sync_Message: 'No CRM Student could be matched.'
     });
+    // Only reached when the caller supplied nothing to look up (no id,
+    // reference or email), so no CRM read was attempted either.
+    await log(req, {
+      direction: 'Internal', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+      operation: 'Map', result: 'success', message: 'No CRM Student information was supplied; left unmapped.'
+    });
     return await getEnrolment(req, current.id);
   }
 
@@ -717,7 +732,7 @@ async function mapEnrolmentStudent(deps, req, id, body) {
     Last_Sync_Message: `Matched CRM Student ${student.Full_Name}.`
   });
   await log(req, {
-    entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+    direction: 'CRM to LMS', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
     crmModule: cfg.modules.students, crmRecordId: String(student.id),
     operation: 'Map', result: 'success', message: `Mapped to ${student.Full_Name}.`
   });
@@ -737,6 +752,10 @@ async function mapEnrolmentToCrmEnrolment(deps, req, id, crmEnrolmentId) {
     await tableOf(req, TABLES.enrolments).updateRow({
       ROWID: current.id, CRM_Enrolment_ID: null, CRM_Enrolment_Reference: null,
       Mapping_Status: 'Unmapped', Sync_Status: 'Pending'
+    });
+    await log(req, {
+      direction: 'Internal', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+      operation: 'Map', result: 'success', message: 'CRM Enrolment link cleared.'
     });
     return await getEnrolment(req, current.id);
   }
@@ -765,7 +784,7 @@ async function mapEnrolmentToCrmEnrolment(deps, req, id, crmEnrolmentId) {
     Sync_Status: 'Pending'
   });
   await log(req, {
-    entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+    direction: 'CRM to LMS', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
     crmModule: cfg.modules.enrolments, crmRecordId: String(crmEnrolment.id),
     operation: 'Map', result: 'success', message: `Linked to ${crmEnrolment.Name}.`
   });
@@ -847,7 +866,7 @@ async function syncEnrolmentToCrm(deps, req, id) {
       Last_Sync_Message: `Pushed ${Object.keys(payload).join(', ')} to ${after.Name}.`
     });
     await log(req, {
-      entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+      direction: 'LMS to CRM', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
       crmModule: cfg.modules.enrolments, crmRecordId: String(crmId), operation: 'Update',
       changedFields: Object.keys(payload), result: 'success', message: `Synced to ${after.Name}.`
     });
@@ -862,7 +881,7 @@ async function syncEnrolmentToCrm(deps, req, id) {
       ROWID: current.id, Sync_Status: 'Error', Last_Sync_Time: nowIso(), Last_Sync_Message: message
     });
     await log(req, {
-      entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+      direction: 'LMS to CRM', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
       crmModule: cfg.modules.enrolments, crmRecordId: current.crmEnrolmentId,
       operation: 'Error', result: 'error', message
     });
@@ -920,7 +939,7 @@ async function createCrmEnrolmentFor(deps, req, id, body) {
   if (clash && clash.length) {
     const linked = await mapEnrolmentToCrmEnrolment(deps, req, current.id, clash[0].id);
     await log(req, {
-      entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+      direction: 'CRM to LMS', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
       crmModule: cfg.modules.enrolments, crmRecordId: String(clash[0].id), operation: 'Skip',
       result: 'success', message: 'An existing CRM Enrolment matched; linked instead of creating a duplicate.'
     });
@@ -951,7 +970,7 @@ async function createCrmEnrolmentFor(deps, req, id, body) {
     Last_Sync_Message: `CRM Enrolment ${created.Name} created from this LMS record.`
   });
   await log(req, {
-    entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
+    direction: 'LMS to CRM', entityType: 'Enrolment', provider: current.provider, externalRecordId: current.externalEnrolmentId,
     crmModule: cfg.modules.enrolments, crmRecordId: String(created.id), operation: 'Create',
     changedFields: Object.keys(payload), result: 'success', message: `Created CRM Enrolment ${created.Name}.`
   });

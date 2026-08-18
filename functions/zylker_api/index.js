@@ -1714,7 +1714,8 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
       'External LMS information is a normalized demonstration dataset stored in Zoho Catalyst. No connection is made to any LMS product.',
       'Zoho Books is read-only in this phase: invoices cannot be created, edited, paid or deleted from this application.',
       'Zoho Desk is read-only: tickets cannot be created, replied to or closed from this application.',
-      'Six LMS fields have no equivalent on the CRM Enrolments module, so their values are held in Catalyst and shown from there. See recommendedCrmFields.'
+      'Six LMS fields have no equivalent on the CRM Enrolments module, so their values are held in Catalyst and shown from there. See recommendedCrmFields.',
+      'Every write this application makes to Zoho CRM uses one shared connection identity, so Zoho\'s own record history names that identity, not the staff member who acted. This application\'s own Activity log (on student, application and enrolment records) and the Learning Hub\'s Synchronisation log record who actually triggered each action, and whether it reached CRM at all.'
     ],
     /*
      * Read-model PoC (kickoff-prompt.md §2 "Sync health"). Per-entity

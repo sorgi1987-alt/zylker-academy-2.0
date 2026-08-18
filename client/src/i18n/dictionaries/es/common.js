@@ -185,6 +185,12 @@ export default {
       when: 'Cuándo',
       entity: 'Entidad',
       operation: 'Operación',
+      direction: 'Dirección',
+      directionValue: {
+        internal: 'Solo Catalyst',
+        crmToLms: 'Lectura del CRM',
+        lmsToCrm: 'Escritura en el CRM'
+      },
       result: 'Resultado',
       crmRecord: 'Registro de CRM',
       fields: 'Campos',

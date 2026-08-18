@@ -200,6 +200,12 @@ export default {
       when: 'When',
       entity: 'Entity',
       operation: 'Operation',
+      direction: 'Direction',
+      directionValue: {
+        internal: 'Catalyst only',
+        crmToLms: 'Read from CRM',
+        lmsToCrm: 'Written to CRM'
+      },
       result: 'Result',
       crmRecord: 'CRM record',
       fields: 'Fields',

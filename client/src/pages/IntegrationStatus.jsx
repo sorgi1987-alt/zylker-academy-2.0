@@ -48,11 +48,8 @@ export default function IntegrationStatus() {
               <div className="grid g-2">
                 <Card title={t('integration.authCard')}>
                   <dl className="dl">
-                    <dt>{t('integration.provider')}</dt><dd>{d.auth.provider}</dd>
                     <dt>{t('integration.mode')}</dt><dd className="mono">{d.auth.mode}</dd>
                     <dt>{t('integration.yourRole')}</dt><dd>{d.auth.role}</dd>
-                    <dt>{t('integration.roleSource')}</dt><dd className="muted">{d.auth.roleSource}</dd>
-                    <dt>{t('integration.identityResolvedBy')}</dt><dd className="mono">{d.auth.resolvedBy}</dd>
                   </dl>
                   <p className="note">{t('integration.authNote')}</p>
                 </Card>
@@ -142,23 +139,14 @@ export default function IntegrationStatus() {
                 )}
               </Card>
 
+              {/* LMS-side counts are not repeated here — they already live on
+                  the "External LMS connector" card above, next to the
+                  mapping and sync figures they belong with. */}
               <Card title={t('integration.countsCard')}>
                 <dl className="dl">
                   <dt>{t('integration.programmesInCrm')}</dt><dd className="mono">{d.counts.programmes}</dd>
                   <dt>{t('integration.studentsInCrm')}</dt><dd className="mono">{d.counts.students}</dd>
                   <dt>{t('integration.enrolmentsInCrm')}</dt><dd className="mono">{d.counts.enrolments}</dd>
-                  <dt>{t('integration.coursesInConnector')}</dt>
-                  <dd className="mono">
-                    {d.counts.lmsCourses === null
-                      ? <span className="muted">{t('integration.notAvailable')}</span>
-                      : d.counts.lmsCourses}
-                  </dd>
-                  <dt>{t('integration.learnerRecordsInConnector')}</dt>
-                  <dd className="mono">
-                    {d.counts.lmsEnrolments === null
-                      ? <span className="muted">{t('integration.notAvailable')}</span>
-                      : d.counts.lmsEnrolments}
-                  </dd>
                 </dl>
               </Card>
 
@@ -177,48 +165,35 @@ export default function IntegrationStatus() {
                 </Card>
               )}
 
-              <Card title={t('integration.crmFieldsWrittenCard')}>
+              <Card title={t('integration.crmFieldMappingCard')}>
+                <p className="muted">{t('integration.crmFieldMappingNote')}</p>
                 <div className="t-wrap">
                   <table>
                     <thead>
                       <tr>
                         <th scope="col">{t('integration.module')}</th>
                         <th scope="col">{t('integration.field')}</th>
+                        <th scope="col">{t('integration.fieldStatus')}</th>
                         <th scope="col">{t('integration.note')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {d.legacyCrmFields.map((f) => (
-                        <tr key={`${f.module}-${f.apiName}`}>
+                        <tr key={`written-${f.module}-${f.apiName}`}>
                           <td>{f.module}</td>
                           <td className="mono">{f.apiName}</td>
+                          <td><span className="pill ok">{t('integration.fieldStatusWritten')}</span></td>
                           <td className="muted">{f.note || '—'}</td>
                         </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Card>
-
-              <Card title={t('integration.crmFieldsMissingCard')}>
-                <p className="muted">{t('integration.crmFieldsMissingNote')}</p>
-                <div className="t-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th scope="col">{t('integration.module')}</th>
-                        <th scope="col">{t('integration.suggestedField')}</th>
-                        <th scope="col">{t('integration.type')}</th>
-                        <th scope="col">{t('integration.values')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
                       {d.recommendedCrmFields.map((f) => (
-                        <tr key={f.apiName}>
+                        <tr key={`missing-${f.module}-${f.apiName}`}>
                           <td>{f.module}</td>
                           <td className="mono">{f.apiName}</td>
-                          <td>{f.type}</td>
-                          <td className="muted">{f.values ? f.values.join(', ') : '—'}</td>
+                          <td><span className="pill warn">{t('integration.fieldStatusMissing')}</span></td>
+                          <td className="muted">
+                            {f.type}{f.values ? ` — ${f.values.join(', ')}` : ''}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
