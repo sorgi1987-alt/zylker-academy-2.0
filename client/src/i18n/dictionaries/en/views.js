@@ -7,8 +7,7 @@ export default {
     viewLabel: 'View',
     allRecords: 'All records',
     defaultTag: 'default',
-    newView: 'New view',
-    editView: 'Edit view',
+    filterButton: 'Filter',
     setDefault: 'Set as default',
     unsetDefault: 'Unset as default',
     deleteView: 'Delete view',
@@ -32,6 +31,7 @@ export default {
     sortAsc: 'Ascending',
     sortDesc: 'Descending',
     saveView: 'Save view',
+    saveAsNewView: 'Save as new view',
     booleanTrue: 'Yes',
     booleanFalse: 'No',
     operators: {

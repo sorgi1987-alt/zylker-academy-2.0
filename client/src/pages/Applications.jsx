@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { usePagedList, useApi } from '../useApi.js';
+import { usePagedList, useApi, useDebounced } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, ConfirmDialog, fmtDate, fmtMoney
+  Async, Card, Pill, Pagination, SearchBox, FilterChips, SourceBadge, ConfirmDialog, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import ApplicationBoard from '../components/ApplicationBoard.jsx';
-import { useViews, ViewBar, ViewEditorModal } from '../components/ViewManager.jsx';
+import { useViews, useViewDraft, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { APPLICATION_FIELDS } from '../viewFields.js';
 
 // Matches the table this page has always rendered — expectedDecisionDate is
@@ -30,7 +30,9 @@ export default function Applications() {
   const t = useT();
   const can = useCan();
   const [params, setParams] = useSearchParams();
-  // A dashboard card can deep-link into a pre-filtered list.
+  // A dashboard card can deep-link into a pre-filtered list. This is
+  // independent of the view panel's conditions — a plain query param the
+  // dashboard already knows how to build, shown back via FilterChips below.
   const list = usePagedList(api.applications, {
     initialFilters: {
       stage: params.get('stage') || undefined,
@@ -52,19 +54,19 @@ export default function Applications() {
   );
 
   const views = useViews('zylker.views.applications');
-  const [editingView, setEditingView] = useState(null);
+  const [draft, setDraft] = useViewDraft(views.activeView, DEFAULT_COLUMNS);
   const [deletingViewId, setDeletingViewId] = useState(null);
 
+  const debouncedConditions = useDebounced(draft.conditions, 350);
   useEffect(() => {
-    const v = views.activeView;
-    list.setFilter('conditions', v ? JSON.stringify(v.conditions) : undefined);
-    list.setFilter('sortBy', v && v.sort ? v.sort.field : undefined);
-    list.setFilter('sortDir', v && v.sort ? v.sort.direction : undefined);
+    const c = liveConditions(debouncedConditions);
+    list.setFilter('conditions', c.length ? JSON.stringify(c) : undefined);
+    list.setFilter('sortBy', draft.sort ? draft.sort.field : undefined);
+    list.setFilter('sortDir', draft.sort ? draft.sort.direction : undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [views.activeView]);
+  }, [debouncedConditions, draft.sort]);
 
-  const columns = views.activeView ? views.activeView.columns : DEFAULT_COLUMNS;
-  const has = (key) => columns.includes(key);
+  const has = (key) => draft.columns.includes(key);
 
   // The view lives in the URL when a link specifies one — shareable, and a
   // reload doesn't quietly switch what someone was looking at — and falls
@@ -96,57 +98,37 @@ export default function Applications() {
       </div>
 
       <Card
-        title={t('applications.cardTitle')}
-        action={(
-          <div className="head-actions">
-            <div className="view-toggle" role="group" aria-label={t('applications.board.viewToggleLabel')}>
-              <button type="button" className={`view-toggle-opt${view === 'list' ? ' active' : ''}`}
-                aria-pressed={view === 'list'} onClick={() => setView('list')}>
-                {t('applications.board.listView')}
-              </button>
-              <button type="button" className={`view-toggle-opt${view === 'board' ? ' active' : ''}`}
-                aria-pressed={view === 'board'} onClick={() => setView('board')}>
-                {t('applications.board.boardView')}
-              </button>
+        header={(
+          <>
+            <div className="view-header-left">
+              <SearchBox
+                id="application-search"
+                label={t('common.search')}
+                value={list.search}
+                onChange={list.setSearch}
+                placeholder={t('applications.searchPlaceholder')}
+              />
             </div>
-            <SourceBadge source="crm" />
-            {can('application:write') && (
-              <Link className="btn primary" to="/applications/new">{t('applications.newApplicationLink')}</Link>
-            )}
-          </div>
+            <div className="head-actions">
+              <div className="view-toggle" role="group" aria-label={t('applications.board.viewToggleLabel')}>
+                <button type="button" className={`view-toggle-opt${view === 'list' ? ' active' : ''}`}
+                  aria-pressed={view === 'list'} onClick={() => setView('list')}>
+                  {t('applications.board.listView')}
+                </button>
+                <button type="button" className={`view-toggle-opt${view === 'board' ? ' active' : ''}`}
+                  aria-pressed={view === 'board'} onClick={() => setView('board')}>
+                  {t('applications.board.boardView')}
+                </button>
+              </div>
+              <SourceBadge source="crm" />
+              {can('application:write') && (
+                <Link className="btn primary" to="/applications/new">{t('applications.newApplicationLink')}</Link>
+              )}
+            </div>
+          </>
         )}
+        headerClassName="view-header"
       >
-        <ViewBar
-          views={views.views}
-          activeViewId={views.activeViewId}
-          defaultViewId={views.defaultViewId}
-          onSelect={views.selectView}
-          onNew={() => setEditingView({})}
-          onEdit={(v) => setEditingView(v)}
-          onDelete={(id) => setDeletingViewId(id)}
-          onToggleDefault={views.toggleDefaultView}
-        />
-
-        <div className="toolbar">
-          <SearchBox
-            id="application-search"
-            label={t('common.search')}
-            value={list.search}
-            onChange={list.setSearch}
-            placeholder={t('applications.searchPlaceholder')}
-          />
-          {!views.activeView && (
-            <FilterSelect
-              id="application-stage"
-              label={t('applications.stageLabel')}
-              value={list.filters.stage || ''}
-              onChange={(v) => list.setFilter('stage', v)}
-              options={stages}
-              allLabel={t('applications.allStages')}
-            />
-          )}
-        </div>
-
         {/* A dashboard card or attention item may have applied this, so it is
             stated rather than left to be inferred from the row count. */}
         <FilterChips
@@ -167,85 +149,93 @@ export default function Applications() {
           onClearAll={list.clearFilters}
         />
 
-        {view === 'list' ? (
-          <Async
-            state={list}
-            empty={{
-              title: t('applications.empty.title'),
-              message: t('applications.empty.message')
-            }}
-          >
-            {(rows, meta) => (
-              <>
-                <div className="t-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th scope="col">{t('applications.table.application')}</th>
-                        {has('applicantName') && <th scope="col">{t('views.fields.application.applicantName')}</th>}
-                        {has('applicantEmail') && <th scope="col">{t('views.fields.application.applicantEmail')}</th>}
-                        {has('stage') && <th scope="col">{t('applications.table.stage')}</th>}
-                        {has('programme') && <th scope="col">{t('applications.table.programme')}</th>}
-                        {has('intake') && <th scope="col">{t('applications.table.intake')}</th>}
-                        {has('applicationDate') && <th scope="col">{t('applications.table.applied')}</th>}
-                        {has('expectedDecisionDate') && <th scope="col">{t('views.fields.application.expectedDecisionDate')}</th>}
-                        {has('tuitionFee') && <th scope="col">{t('applications.table.fee')}</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((a) => (
-                        <tr key={a.id}>
-                          <td><Link to={`/applications/${a.id}`}>{a.name || a.applicationId || a.id}</Link></td>
-                          {has('applicantName') && <td>{a.applicantName || <span className="muted">—</span>}</td>}
-                          {has('applicantEmail') && <td>{a.applicantEmail || <span className="muted">—</span>}</td>}
-                          {has('stage') && <td><Pill value={a.stage} /></td>}
-                          {has('programme') && <td>{a.programme ? a.programme.name : <span className="muted">—</span>}</td>}
-                          {has('intake') && <td>{a.intake ? a.intake.name : <span className="muted">—</span>}</td>}
-                          {has('applicationDate') && <td>{fmtDate(a.applicationDate)}</td>}
-                          {has('expectedDecisionDate') && <td>{fmtDate(a.expectedDecisionDate)}</td>}
-                          {has('tuitionFee') && <td className="mono">{fmtMoney(a.tuitionFee)}</td>}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+        <div className="view-layout">
+          <ViewFilterPanel
+            fields={applicationFields}
+            views={views.views}
+            activeViewId={views.activeViewId}
+            defaultViewId={views.defaultViewId}
+            draft={draft}
+            onDraftChange={setDraft}
+            onSelectView={views.selectView}
+            onSave={views.saveView}
+            onDelete={(id) => setDeletingViewId(id)}
+            onToggleDefault={views.toggleDefaultView}
+          />
 
-                <Pagination
-                  page={meta.page}
-                  totalPages={meta.totalPages}
-                  total={meta.total}
-                  onPage={list.setPage}
-                  busy={list.status === 'loading'}
-                />
-              </>
+          <div className="view-content">
+            {view === 'list' ? (
+              <Async
+                state={list}
+                empty={{
+                  title: t('applications.empty.title'),
+                  message: t('applications.empty.message')
+                }}
+              >
+                {(rows, meta) => (
+                  <>
+                    <div className="t-wrap">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th scope="col">{t('applications.table.application')}</th>
+                            {has('applicantName') && <th scope="col">{t('views.fields.application.applicantName')}</th>}
+                            {has('applicantEmail') && <th scope="col">{t('views.fields.application.applicantEmail')}</th>}
+                            {has('stage') && <th scope="col">{t('applications.table.stage')}</th>}
+                            {has('programme') && <th scope="col">{t('applications.table.programme')}</th>}
+                            {has('intake') && <th scope="col">{t('applications.table.intake')}</th>}
+                            {has('applicationDate') && <th scope="col">{t('applications.table.applied')}</th>}
+                            {has('expectedDecisionDate') && <th scope="col">{t('views.fields.application.expectedDecisionDate')}</th>}
+                            {has('tuitionFee') && <th scope="col">{t('applications.table.fee')}</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((a) => (
+                            <tr key={a.id}>
+                              <td><Link to={`/applications/${a.id}`}>{a.name || a.applicationId || a.id}</Link></td>
+                              {has('applicantName') && <td>{a.applicantName || <span className="muted">—</span>}</td>}
+                              {has('applicantEmail') && <td>{a.applicantEmail || <span className="muted">—</span>}</td>}
+                              {has('stage') && <td><Pill value={a.stage} /></td>}
+                              {has('programme') && <td>{a.programme ? a.programme.name : <span className="muted">—</span>}</td>}
+                              {has('intake') && <td>{a.intake ? a.intake.name : <span className="muted">—</span>}</td>}
+                              {has('applicationDate') && <td>{fmtDate(a.applicationDate)}</td>}
+                              {has('expectedDecisionDate') && <td>{fmtDate(a.expectedDecisionDate)}</td>}
+                              {has('tuitionFee') && <td className="mono">{fmtMoney(a.tuitionFee)}</td>}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <Pagination
+                      page={meta.page}
+                      totalPages={meta.totalPages}
+                      total={meta.total}
+                      onPage={list.setPage}
+                      busy={list.status === 'loading'}
+                    />
+                  </>
+                )}
+              </Async>
+            ) : (
+              <Async
+                state={board}
+                empty={{ title: t('applications.empty.title'), message: t('applications.empty.message') }}
+                emptyWhen={() => false}
+              >
+                {(rows) => (
+                  <ApplicationBoard
+                    rows={rows}
+                    stages={stages}
+                    canDrag={can('application:transition')}
+                    onReload={() => { board.reload(); list.reload(); }}
+                  />
+                )}
+              </Async>
             )}
-          </Async>
-        ) : (
-          <Async
-            state={board}
-            empty={{ title: t('applications.empty.title'), message: t('applications.empty.message') }}
-            emptyWhen={() => false}
-          >
-            {(rows) => (
-              <ApplicationBoard
-                rows={rows}
-                stages={stages}
-                canDrag={can('application:transition')}
-                onReload={() => { board.reload(); list.reload(); }}
-              />
-            )}
-          </Async>
-        )}
+          </div>
+        </div>
       </Card>
-
-      {editingView && (
-        <ViewEditorModal
-          fields={applicationFields}
-          initial={editingView.id ? editingView : null}
-          onClose={() => setEditingView(null)}
-          onSave={views.saveView}
-        />
-      )}
 
       {deletingViewId && (
         <ConfirmDialog

@@ -408,6 +408,7 @@ input[type=search]{flex:1;min-width:220px}
 .modal{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
   box-shadow:0 12px 40px rgba(18,37,61,.22);width:100%;max-width:440px}
 .modal .card-h h2{font-size:16px}
+
 #loginDivElementId{margin-top:4px;min-height:340px}
 #loginDivElementId iframe{width:100%;border:0;min-height:340px}
 
@@ -580,22 +581,49 @@ input[type=search]{flex:1;min-width:220px}
 .view-toggle-opt:not(.active):hover{background:var(--brand-soft)}
 
 /* ---------- custom views (ViewManager) ---------- */
-.view-bar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.view-bar .field{margin-bottom:0}
-.view-bar-actions{display:flex;gap:8px;flex-wrap:wrap}
-.view-bar-actions .btn{margin-top:0}
-.view-editor-h{font-size:14px;margin:20px 0 8px}
-.view-editor-h:first-of-type{margin-top:4px}
-.view-condition-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-.view-condition-row select,.view-condition-row input{padding:8px 10px;border:1px solid var(--line);
-  border-radius:var(--radius-sm);font:inherit;background:var(--surface);color:var(--ink)}
-.view-condition-remove{margin-top:0;padding:6px 11px;line-height:1;color:var(--ink-3)}
+/* Card header row for Students/Applications/Programmes: the search box sits
+   where a plain page title used to, left-aligned, with the record-scoped
+   actions (Add record, …) on the right — see Card's `header` prop. The view
+   selector and filter builder live in the persistent left panel below
+   (.view-layout), not this row — see the reference (Zoho CRM's own list
+   layout: view tabs + a "Filter by" panel beside the records, not above
+   them). */
+.view-header{flex-wrap:wrap;row-gap:10px}
+.view-header-left{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;flex:1 1 240px;min-width:0}
+.view-header-left .field{margin-bottom:0}
+
+/* Two-column body: a persistent filter panel beside the record table,
+   matching the reference layout instead of a toggled overlay. */
+.view-layout{display:flex;gap:22px;align-items:flex-start}
+.view-panel{flex:0 0 260px;width:260px;border-right:1px solid var(--line-soft);padding-right:18px}
+.view-panel-section{margin-bottom:18px}
+.view-panel-section:last-child{margin-bottom:0}
+.view-panel h3{font-size:12px;margin:0 0 10px;color:var(--ink-3);text-transform:uppercase;
+  font-weight:650;letter-spacing:.05em}
+.view-panel .field{margin-bottom:10px}
+.view-panel-actions{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.view-panel-actions .btn{margin-top:0}
+.view-content{flex:1 1 auto;min-width:0}
+
+.view-condition-row{display:flex;flex-direction:column;align-items:stretch;gap:6px;
+  padding:9px;margin-bottom:8px;background:var(--bg);border:1px solid var(--line-soft);
+  border-radius:var(--radius-sm);position:relative}
+.view-condition-row select,.view-condition-row input{width:100%;padding:7px 9px;border:1px solid var(--line);
+  border-radius:8px;font:inherit;background:var(--surface);color:var(--ink)}
+.view-condition-remove{position:absolute;top:5px;right:5px;margin-top:0;padding:2px 8px;
+  line-height:1.4;color:var(--ink-3);border-radius:8px}
 .view-condition-remove:hover{color:var(--stop);background:var(--stop-soft)}
-.view-columns-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px 14px;margin-bottom:8px}
-.view-col-check{display:flex;align-items:center;gap:7px;font-size:14px}
-.view-sort-row{display:flex;gap:8px;margin-bottom:8px}
-.view-sort-row select{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);
+.view-columns-picker{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.view-col-check{display:flex;align-items:center;gap:7px;font-size:13px}
+.view-sort-row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.view-sort-row select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;
   font:inherit;background:var(--surface);color:var(--ink)}
+
+@media (max-width: 860px){
+  .view-layout{flex-direction:column}
+  .view-panel{width:100%;border-right:0;border-bottom:1px solid var(--line-soft);
+    padding-right:0;padding-bottom:16px}
+}
 
 /* ---------- kanban board ---------- */
 .kanban{display:flex;gap:14px;overflow-x:auto;padding-bottom:6px;align-items:flex-start}

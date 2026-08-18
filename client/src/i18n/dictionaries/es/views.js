@@ -7,8 +7,7 @@ export default {
     viewLabel: 'Vista',
     allRecords: 'Todos los registros',
     defaultTag: 'predeterminada',
-    newView: 'Nueva vista',
-    editView: 'Editar vista',
+    filterButton: 'Filtrar',
     setDefault: 'Establecer como predeterminada',
     unsetDefault: 'Quitar como predeterminada',
     deleteView: 'Eliminar vista',
@@ -32,6 +31,7 @@ export default {
     sortAsc: 'Ascendente',
     sortDesc: 'Descendente',
     saveView: 'Guardar vista',
+    saveAsNewView: 'Guardar como nueva vista',
     booleanTrue: 'Sí',
     booleanFalse: 'No',
     operators: {

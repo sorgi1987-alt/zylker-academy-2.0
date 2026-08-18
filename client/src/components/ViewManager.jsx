@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n/I18nContext.jsx';
-import { Modal } from './Ui.jsx';
-import { Field, FormActions } from './Form.jsx';
+import { Field } from './Form.jsx';
 
 /**
  * "Custom views" for a list page — named, saved combinations of filter
  * conditions (AND-combined), visible columns and sort, closest in spirit to
- * Zoho CRM's own list views.
+ * Zoho CRM's own list views. The editor lives in a persistent panel beside
+ * the record table (ViewFilterPanel), not a dialog: picking a field/operator/
+ * value applies live, and "Save view" only matters once you want to keep it.
  *
  * Storage follows the same localStorage, per-device, best-effort pattern
  * already established for the Applications Kanban/List toggle
@@ -59,13 +60,16 @@ export function useViews(storageKey) {
   const selectView = (id) => setStore((s) => ({ ...s, activeViewId: id || null }));
 
   const saveView = ({ id, name, conditions, columns, sort }) => {
+    let savedId = id;
     setStore((s) => {
       if (id) {
         return { ...s, views: s.views.map((v) => (v.id === id ? { ...v, name, conditions, columns, sort } : v)) };
       }
       const created = { id: newViewId(), name, conditions, columns, sort };
+      savedId = created.id;
       return { ...s, views: [...s.views, created], activeViewId: created.id };
     });
+    return savedId;
   };
 
   const deleteView = (id) => setStore((s) => ({
@@ -89,37 +93,35 @@ export function useViews(storageKey) {
   };
 }
 
-/** View selector + new/edit/delete/default controls, sits in the page toolbar. */
-export function ViewBar({ views, activeViewId, defaultViewId, onSelect, onNew, onEdit, onDelete, onToggleDefault }) {
-  const t = useT();
-  const activeView = views.find((v) => v.id === activeViewId) || null;
-  return (
-    <div className="view-bar">
-      <div className="field">
-        <label htmlFor="view-select">{t('views.viewLabel')}</label>
-        <select id="view-select" value={activeViewId || ''} onChange={(e) => onSelect(e.target.value)}>
-          <option value="">{t('views.allRecords')}</option>
-          {views.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}{v.id === defaultViewId ? ` — ${t('views.defaultTag')}` : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="view-bar-actions">
-        <button type="button" className="btn" onClick={onNew}>{t('views.newView')}</button>
-        {activeView && (
-          <>
-            <button type="button" className="btn" onClick={() => onEdit(activeView)}>{t('views.editView')}</button>
-            <button type="button" className="btn" onClick={() => onToggleDefault(activeView.id)}>
-              {activeView.id === defaultViewId ? t('views.unsetDefault') : t('views.setDefault')}
-            </button>
-            <button type="button" className="btn danger" onClick={() => onDelete(activeView.id)}>{t('views.deleteView')}</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
+/** An unsaved-or-saved view's live editing state — see useViewDraft below. */
+export const blankDraft = (columns) => ({ id: null, name: '', conditions: [], columns, sort: null });
+
+/**
+ * Tracks the panel's working copy of the active view (or a fresh blank draft
+ * for "All records"), reseeded whenever a different saved view is picked so
+ * in-progress edits to view A don't leak into view B — but NOT reseeded on
+ * every store change, so editing the currently-open view doesn't fight the
+ * user's own typing.
+ */
+export function useViewDraft(activeView, defaultColumns) {
+  const [draft, setDraft] = useState(() => (
+    activeView
+      ? { id: activeView.id, name: activeView.name, conditions: activeView.conditions, columns: activeView.columns, sort: activeView.sort }
+      : blankDraft(defaultColumns)
+  ));
+  const seededFor = useRef(activeView ? activeView.id : null);
+
+  useEffect(() => {
+    const id = activeView ? activeView.id : null;
+    if (seededFor.current === id) return;
+    seededFor.current = id;
+    setDraft(activeView
+      ? { id: activeView.id, name: activeView.name, conditions: activeView.conditions, columns: activeView.columns, sort: activeView.sort }
+      : blankDraft(defaultColumns));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView]);
+
+  return [draft, setDraft];
 }
 
 const OPERATORS_BY_TYPE = {
@@ -129,7 +131,7 @@ const OPERATORS_BY_TYPE = {
   date: ['before', 'after', 'is_empty', 'is_not_empty'],
   boolean: ['equals']
 };
-const NO_VALUE_OPERATORS = new Set(['is_empty', 'is_not_empty']);
+export const NO_VALUE_OPERATORS = new Set(['is_empty', 'is_not_empty']);
 
 const fieldByKey = (fields, key) => fields.find((f) => f.key === key) || fields[0];
 
@@ -137,6 +139,14 @@ const emptyCondition = (fields) => {
   const f = fields[0];
   return { field: f.key, operator: OPERATORS_BY_TYPE[f.type][0], value: '' };
 };
+
+/**
+ * The conditions a draft would actually apply — an operator that needs a
+ * value but has none yet (someone is mid-edit) is dropped rather than sent
+ * to the server as a broken filter.
+ */
+export const liveConditions = (conditions) =>
+  conditions.filter((c) => NO_VALUE_OPERATORS.has(c.operator) || String(c.value ?? '').trim() !== '');
 
 /** One condition row: field, operator, and (when the operator needs one) a value input shaped by the field's type. */
 function ConditionRow({ condition, fields, onChange, onRemove }) {
@@ -192,56 +202,60 @@ function ConditionRow({ condition, fields, onChange, onRemove }) {
 }
 
 /**
- * Create/edit a saved view: name, filter conditions, column visibility, and
- * sort. `fields` is one of the registries in viewFields.js (or a copy with
+ * The persistent left-hand panel beside the record table: view switcher,
+ * live filter/column/sort builder, and save/default/delete for the current
+ * draft — matching the reference (Zoho CRM's own view tabs + "Filter by"
+ * panel sitting beside the list, not above it or behind a dialog).
+ *
+ * `fields` is one of the registries in viewFields.js (or a copy with
  * `options` overridden for a dynamic enum, e.g. live application stages).
+ * `draft`/`onDraftChange` is the working copy (see useViewDraft) — every
+ * edit here calls back immediately so the page can apply it live.
  */
-export function ViewEditorModal({ fields, initial, onClose, onSave }) {
+export function ViewFilterPanel({
+  fields, views, activeViewId, defaultViewId, draft, onDraftChange, onSelectView, onSave, onDelete, onToggleDefault
+}) {
   const t = useT();
   const hideable = fields.filter((f) => !f.primary);
   const primary = fields.find((f) => f.primary);
-
-  const [name, setName] = useState((initial && initial.name) || '');
-  const [conditions, setConditions] = useState((initial && initial.conditions) || []);
-  const [visibleColumns, setVisibleColumns] = useState(
-    (initial && initial.columns) || hideable.map((f) => f.key)
-  );
-  const [sortField, setSortField] = useState((initial && initial.sort && initial.sort.field) || '');
-  const [sortDir, setSortDir] = useState((initial && initial.sort && initial.sort.direction) || 'asc');
   const [touched, setTouched] = useState(false);
+  const nameError = !draft.name.trim() ? t('views.nameRequired') : null;
 
-  const nameError = !name.trim() ? t('views.nameRequired') : null;
-
-  const updateCondition = (i, next) => setConditions((c) => c.map((cond, idx) => (idx === i ? next : cond)));
-  const removeCondition = (i) => setConditions((c) => c.filter((_, idx) => idx !== i));
-  const toggleColumn = (key) => setVisibleColumns((cols) => (
-    cols.includes(key) ? cols.filter((c) => c !== key) : [...cols, key]
-  ));
+  const updateCondition = (i, next) => onDraftChange({ ...draft, conditions: draft.conditions.map((c, idx) => (idx === i ? next : c)) });
+  const removeCondition = (i) => onDraftChange({ ...draft, conditions: draft.conditions.filter((_, idx) => idx !== i) });
+  const addCondition = () => onDraftChange({ ...draft, conditions: [...draft.conditions, emptyCondition(fields)] });
+  const toggleColumn = (key) => onDraftChange({
+    ...draft,
+    columns: draft.columns.includes(key) ? draft.columns.filter((c) => c !== key) : [...draft.columns, key]
+  });
+  const setSortField = (field) => onDraftChange({ ...draft, sort: field ? { field, direction: (draft.sort && draft.sort.direction) || 'asc' } : null });
+  const setSortDir = (direction) => onDraftChange({ ...draft, sort: draft.sort ? { ...draft.sort, direction } : null });
 
   const submit = (e) => {
     e.preventDefault();
     setTouched(true);
     if (nameError) return;
-    onSave({
-      id: initial && initial.id,
-      name: name.trim(),
-      conditions: conditions.filter((c) => NO_VALUE_OPERATORS.has(c.operator) || String(c.value ?? '').trim() !== ''),
-      columns: visibleColumns,
-      sort: sortField ? { field: sortField, direction: sortDir } : null
-    });
-    onClose();
+    onSave({ ...draft, name: draft.name.trim(), conditions: liveConditions(draft.conditions) });
   };
 
   return (
-    <Modal title={initial ? t('views.editViewTitle') : t('views.newViewTitle')} onClose={onClose} wide>
-      <form onSubmit={submit} noValidate>
-        <Field id="view-name" label={t('views.nameLabel')} required error={touched ? nameError : null}>
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
+    <form className="view-panel" onSubmit={submit} noValidate>
+      <div className="view-panel-section">
+        <h3>{t('views.viewLabel')}</h3>
+        <select aria-label={t('views.viewLabel')} value={activeViewId || ''} onChange={(e) => onSelectView(e.target.value)}>
+          <option value="">{t('views.allRecords')}</option>
+          {views.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}{v.id === defaultViewId ? ` — ${t('views.defaultTag')}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        <h3 className="view-editor-h">{t('views.filtersHeading')}</h3>
-        {conditions.length === 0 && <p className="muted small">{t('views.noConditions')}</p>}
-        {conditions.map((cond, i) => (
+      <div className="view-panel-section">
+        <h3>{t('views.filtersHeading')}</h3>
+        {draft.conditions.length === 0 && <p className="muted small">{t('views.noConditions')}</p>}
+        {draft.conditions.map((cond, i) => (
           <ConditionRow
             key={i}
             condition={cond}
@@ -250,11 +264,11 @@ export function ViewEditorModal({ fields, initial, onClose, onSave }) {
             onRemove={() => removeCondition(i)}
           />
         ))}
-        <button type="button" className="btn" onClick={() => setConditions((c) => [...c, emptyCondition(fields)])}>
-          {t('views.addCondition')}
-        </button>
+        <button type="button" className="btn" onClick={addCondition}>{t('views.addCondition')}</button>
+      </div>
 
-        <h3 className="view-editor-h">{t('views.columnsHeading')}</h3>
+      <div className="view-panel-section">
+        <h3>{t('views.columnsHeading')}</h3>
         <div className="view-columns-picker">
           {primary && (
             <label className="view-col-check">
@@ -264,26 +278,46 @@ export function ViewEditorModal({ fields, initial, onClose, onSave }) {
           )}
           {hideable.map((f) => (
             <label className="view-col-check" key={f.key}>
-              <input type="checkbox" checked={visibleColumns.includes(f.key)} onChange={() => toggleColumn(f.key)} />
+              <input type="checkbox" checked={draft.columns.includes(f.key)} onChange={() => toggleColumn(f.key)} />
               {t(f.labelKey)}
             </label>
           ))}
         </div>
+      </div>
 
-        <h3 className="view-editor-h">{t('views.sortHeading')}</h3>
+      <div className="view-panel-section">
+        <h3>{t('views.sortHeading')}</h3>
         <div className="view-sort-row">
-          <select value={sortField} onChange={(e) => setSortField(e.target.value)}>
+          <select value={(draft.sort && draft.sort.field) || ''} onChange={(e) => setSortField(e.target.value)}>
             <option value="">{t('views.noSort')}</option>
             {fields.map((f) => <option key={f.key} value={f.key}>{t(f.labelKey)}</option>)}
           </select>
-          <select value={sortDir} onChange={(e) => setSortDir(e.target.value)} disabled={!sortField}>
+          <select value={(draft.sort && draft.sort.direction) || 'asc'} onChange={(e) => setSortDir(e.target.value)} disabled={!draft.sort}>
             <option value="asc">{t('views.sortAsc')}</option>
             <option value="desc">{t('views.sortDesc')}</option>
           </select>
         </div>
+      </div>
 
-        <FormActions busy={false} submitLabel={t('views.saveView')} onCancel={onClose} />
-      </form>
-    </Modal>
+      <div className="view-panel-section">
+        <Field id="view-panel-name" label={t('views.nameLabel')} error={touched ? nameError : null}>
+          <input value={draft.name} onChange={(e) => onDraftChange({ ...draft, name: e.target.value })} />
+        </Field>
+      </div>
+
+      <div className="view-panel-actions">
+        <button type="submit" className="btn primary">
+          {draft.id ? t('views.saveView') : t('views.saveAsNewView')}
+        </button>
+        {draft.id && (
+          <>
+            <button type="button" className="btn" onClick={() => onToggleDefault(draft.id)}>
+              {draft.id === defaultViewId ? t('views.unsetDefault') : t('views.setDefault')}
+            </button>
+            <button type="button" className="btn danger" onClick={() => onDelete(draft.id)}>{t('views.deleteView')}</button>
+          </>
+        )}
+      </div>
+    </form>
   );
 }

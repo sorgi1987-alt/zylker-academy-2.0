@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { usePagedList, useAction } from '../useApi.js';
+import { usePagedList, useAction, useDebounced } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, Modal, ConfirmDialog, useToast, fmtMoney
+  Async, Card, Pill, Pagination, SearchBox, SourceBadge, Modal, ConfirmDialog, useToast, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
-import { useViews, ViewBar, ViewEditorModal } from '../components/ViewManager.jsx';
+import { useViews, useViewDraft, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { PROGRAMME_FIELDS } from '../viewFields.js';
 
 const LEVELS = ['Foundation', 'Certificate', 'Diploma', 'Undergraduate', 'Postgraduate', 'Professional', 'Other'];
@@ -113,19 +113,19 @@ export default function Programmes() {
     initialFilters: { active: params.get('active') || undefined }
   });
   const views = useViews('zylker.views.programmes');
-  const [editingView, setEditingView] = useState(null);
+  const [draft, setDraft] = useViewDraft(views.activeView, DEFAULT_COLUMNS);
   const [deletingViewId, setDeletingViewId] = useState(null);
 
+  const debouncedConditions = useDebounced(draft.conditions, 350);
   useEffect(() => {
-    const v = views.activeView;
-    list.setFilter('conditions', v ? JSON.stringify(v.conditions) : undefined);
-    list.setFilter('sortBy', v && v.sort ? v.sort.field : undefined);
-    list.setFilter('sortDir', v && v.sort ? v.sort.direction : undefined);
+    const c = liveConditions(debouncedConditions);
+    list.setFilter('conditions', c.length ? JSON.stringify(c) : undefined);
+    list.setFilter('sortBy', draft.sort ? draft.sort.field : undefined);
+    list.setFilter('sortDir', draft.sort ? draft.sort.direction : undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [views.activeView]);
+  }, [debouncedConditions, draft.sort]);
 
-  const columns = views.activeView ? views.activeView.columns : DEFAULT_COLUMNS;
-  const has = (key) => columns.includes(key);
+  const has = (key) => draft.columns.includes(key);
 
   /*
    * The global Create menu links here with ?new=1 rather than to a separate
@@ -149,132 +149,117 @@ export default function Programmes() {
       </div>
 
       <Card
-        title={t('programmes.allProgrammes')}
-        action={(
-          <div className="head-actions">
-            <SourceBadge source="crm" />
-            {can('programme:write') && (
-              <button type="button" className="btn primary" onClick={() => setCreating(true)}>
-                {t('programmes.newProgramme')}
-              </button>
-            )}
-          </div>
-        )}
-      >
-        <ViewBar
-          views={views.views}
-          activeViewId={views.activeViewId}
-          defaultViewId={views.defaultViewId}
-          onSelect={views.selectView}
-          onNew={() => setEditingView({})}
-          onEdit={(v) => setEditingView(v)}
-          onDelete={(id) => setDeletingViewId(id)}
-          onToggleDefault={views.toggleDefaultView}
-        />
-
-        <div className="toolbar">
-          <SearchBox
-            id="programme-search"
-            label={t('common.search')}
-            value={list.search}
-            onChange={list.setSearch}
-            placeholder={t('programmes.searchPlaceholder')}
-          />
-          {!views.activeView && (
-            <FilterSelect
-              id="programme-active"
-              label={t('programmes.availabilityLabel')}
-              value={list.filters.active || ''}
-              onChange={(v) => list.setFilter('active', v)}
-              options={[
-                { value: 'true', label: t('programmes.activeOption') },
-                { value: 'false', label: t('programmes.inactiveOption') }
-              ]}
-              allLabel={t('common.all')}
-            />
-          )}
-        </div>
-
-        <Async state={list} empty={{ title: t('programmes.noMatch') }}>
-          {(rows, meta) => (
-            <>
-              <div className="t-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('programmes.table.programme')}</th>
-                      {has('code') && <th scope="col">{t('programmes.table.code')}</th>}
-                      {has('academicLevel') && <th scope="col">{t('programmes.table.level')}</th>}
-                      {has('status') && <th scope="col">{t('programmes.table.status')}</th>}
-                      {has('active') && <th scope="col">{t('views.fields.programme.active')}</th>}
-                      {has('department') && <th scope="col">{t('views.fields.programme.department')}</th>}
-                      {has('tuitionFee') && <th scope="col">{t('programmes.table.fee')}</th>}
-                      {has('intakeCount') && <th scope="col">{t('programmes.table.intakes')}</th>}
-                      {has('enrolmentCount') && <th scope="col">{t('programmes.table.enrolments')}</th>}
-                      {has('applicationCount') && <th scope="col">{t('views.fields.programme.applicationCount')}</th>}
-                      <th scope="col">{t('programmes.table.lmsCourse')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((p) => (
-                      <tr key={p.id}>
-                        <td><Link to={`/programmes/${p.id}`}>{p.name}</Link></td>
-                        {has('code') && <td className="mono">{p.code || <span className="muted">—</span>}</td>}
-                        {has('academicLevel') && <td>{p.academicLevel || <span className="muted">—</span>}</td>}
-                        {has('status') && (
-                          <td>
-                            <Pill value={p.status} />
-                            {!p.active && <span className="pill mute">{t('programmes.inactiveBadge')}</span>}
-                          </td>
-                        )}
-                        {has('active') && <td>{p.active ? t('views.booleanTrue') : t('views.booleanFalse')}</td>}
-                        {has('department') && <td>{p.department || <span className="muted">—</span>}</td>}
-                        {has('tuitionFee') && <td className="mono">{fmtMoney(p.tuitionFee)}</td>}
-                        {has('intakeCount') && <td className="mono">{p.counts.intakes}</td>}
-                        {has('enrolmentCount') && <td className="mono">{p.counts.enrolments}</td>}
-                        {has('applicationCount') && <td className="mono">{p.counts.applications}</td>}
-                        <td>
-                          {p.lmsCourse
-                            ? <Link to={`/learning/courses/${p.lmsCourse.id}`}>{p.lmsCourse.name}</Link>
-                            : <span className="muted">{t('programmes.notMapped')}</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {meta.lmsDemonstrationDataset && (
-                <p className="note">
-                  {t('programmes.lmsNote')}
-                </p>
-              )}
-
-              <Pagination
-                page={meta.page}
-                totalPages={meta.totalPages}
-                total={meta.total}
-                onPage={list.setPage}
-                busy={list.status === 'loading'}
+        header={(
+          <>
+            <div className="view-header-left">
+              <SearchBox
+                id="programme-search"
+                label={t('common.search')}
+                value={list.search}
+                onChange={list.setSearch}
+                placeholder={t('programmes.searchPlaceholder')}
               />
-            </>
-          )}
-        </Async>
+            </div>
+            <div className="head-actions">
+              <SourceBadge source="crm" />
+              {can('programme:write') && (
+                <button type="button" className="btn primary" onClick={() => setCreating(true)}>
+                  {t('programmes.newProgramme')}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        headerClassName="view-header"
+      >
+        <div className="view-layout">
+          <ViewFilterPanel
+            fields={PROGRAMME_FIELDS}
+            views={views.views}
+            activeViewId={views.activeViewId}
+            defaultViewId={views.defaultViewId}
+            draft={draft}
+            onDraftChange={setDraft}
+            onSelectView={views.selectView}
+            onSave={views.saveView}
+            onDelete={(id) => setDeletingViewId(id)}
+            onToggleDefault={views.toggleDefaultView}
+          />
+
+          <div className="view-content">
+            <Async state={list} empty={{ title: t('programmes.noMatch') }}>
+              {(rows, meta) => (
+                <>
+                  <div className="t-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">{t('programmes.table.programme')}</th>
+                          {has('code') && <th scope="col">{t('programmes.table.code')}</th>}
+                          {has('academicLevel') && <th scope="col">{t('programmes.table.level')}</th>}
+                          {has('status') && <th scope="col">{t('programmes.table.status')}</th>}
+                          {has('active') && <th scope="col">{t('views.fields.programme.active')}</th>}
+                          {has('department') && <th scope="col">{t('views.fields.programme.department')}</th>}
+                          {has('tuitionFee') && <th scope="col">{t('programmes.table.fee')}</th>}
+                          {has('intakeCount') && <th scope="col">{t('programmes.table.intakes')}</th>}
+                          {has('enrolmentCount') && <th scope="col">{t('programmes.table.enrolments')}</th>}
+                          {has('applicationCount') && <th scope="col">{t('views.fields.programme.applicationCount')}</th>}
+                          <th scope="col">{t('programmes.table.lmsCourse')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((p) => (
+                          <tr key={p.id}>
+                            <td><Link to={`/programmes/${p.id}`}>{p.name}</Link></td>
+                            {has('code') && <td className="mono">{p.code || <span className="muted">—</span>}</td>}
+                            {has('academicLevel') && <td>{p.academicLevel || <span className="muted">—</span>}</td>}
+                            {has('status') && (
+                              <td>
+                                <Pill value={p.status} />
+                                {!p.active && <span className="pill mute">{t('programmes.inactiveBadge')}</span>}
+                              </td>
+                            )}
+                            {has('active') && <td>{p.active ? t('views.booleanTrue') : t('views.booleanFalse')}</td>}
+                            {has('department') && <td>{p.department || <span className="muted">—</span>}</td>}
+                            {has('tuitionFee') && <td className="mono">{fmtMoney(p.tuitionFee)}</td>}
+                            {has('intakeCount') && <td className="mono">{p.counts.intakes}</td>}
+                            {has('enrolmentCount') && <td className="mono">{p.counts.enrolments}</td>}
+                            {has('applicationCount') && <td className="mono">{p.counts.applications}</td>}
+                            <td>
+                              {p.lmsCourse
+                                ? <Link to={`/learning/courses/${p.lmsCourse.id}`}>{p.lmsCourse.name}</Link>
+                                : <span className="muted">{t('programmes.notMapped')}</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {meta.lmsDemonstrationDataset && (
+                    <p className="note">
+                      {t('programmes.lmsNote')}
+                    </p>
+                  )}
+
+                  <Pagination
+                    page={meta.page}
+                    totalPages={meta.totalPages}
+                    total={meta.total}
+                    onPage={list.setPage}
+                    busy={list.status === 'loading'}
+                  />
+                </>
+              )}
+            </Async>
+          </div>
+        </div>
       </Card>
 
       {creating && (
         <NewProgrammeDialog
           onClose={() => setCreating(false)}
           onDone={async () => { await list.reload(); }}
-        />
-      )}
-
-      {editingView && (
-        <ViewEditorModal
-          fields={PROGRAMME_FIELDS}
-          initial={editingView.id ? editingView : null}
-          onClose={() => setEditingView(null)}
-          onSave={views.saveView}
         />
       )}
 

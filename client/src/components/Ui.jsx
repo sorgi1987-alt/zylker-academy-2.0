@@ -134,9 +134,18 @@ export const DemoDataBadge = () => {
 export const RefBadge = ({ reference }) =>
   reference ? <span className="pill mute mono" title="External reference">{reference}</span> : null;
 
-export const Card = ({ title, action, children, pad = true }) => (
+/**
+ * `header`, when given, replaces the default `<h2>{title}</h2>{action}` row
+ * entirely with custom content (e.g. a view selector + inline search box) —
+ * used by the Students/Applications/Programmes list pages, whose "view" is
+ * no longer just a page title. Every other caller keeps using `title`/
+ * `action` unchanged.
+ */
+export const Card = ({ title, action, header, headerClassName, children, pad = true }) => (
   <section className="card">
-    {title && <div className="card-h"><h2>{title}</h2>{action}</div>}
+    {header
+      ? <div className={`card-h${headerClassName ? ` ${headerClassName}` : ''}`}>{header}</div>
+      : (title && <div className="card-h"><h2>{title}</h2>{action}</div>)}
     <div className={pad ? 'card-b' : ''}>{children}</div>
   </section>
 );
