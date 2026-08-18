@@ -391,8 +391,12 @@ async function applicationCreate(deps, req) {
   if (trimOrNull(b.studyMode)) payload.Preferred_Study_Mode = trimOrNull(b.studyMode);
 
   const details = await deps.zoho.crmCreate(req, cfg.modules.applications, payload);
-  const data = await readBack(deps, req, cfg.modules.applications, details.id, RB.application, n.application);
-  return { data, meta: { studentId }, audit: { action: 'application:create', entityType: 'application', recordId: String(details.id), changedFields: Object.keys(payload), result: 'success' } };
+  const raw = await readBackRaw(deps, req, cfg.modules.applications, details.id, RB.application);
+  const data = n.application(raw);
+  return {
+    data, meta: { studentId },
+    audit: auditEvent('application:create', 'application', cfg.modules.applications, details.id, Object.keys(payload), null, raw)
+  };
 }
 
 async function applicationUpdate(deps, req) {
@@ -598,7 +602,10 @@ async function applicationDelete(deps, req) {
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.applications, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
   await writeThroughDelete(deps, req, cfg.modules.applications, id);
-  return { data: { id, deleted: true }, audit: { action: 'application:delete', entityType: 'application', recordId: id, changedFields: [], result: 'success' } };
+  return {
+    data: { id, deleted: true },
+    audit: auditEvent('application:delete', 'application', cfg.modules.applications, id, [], current, null)
+  };
 }
 
 async function studentCreate(deps, req) {
@@ -629,8 +636,12 @@ async function studentCreate(deps, req) {
   if (email) payload.Email = normEmail(email);
 
   const details = await deps.zoho.crmCreate(req, cfg.modules.students, payload);
-  const data = await readBack(deps, req, cfg.modules.students, details.id, RB.student, n.student);
-  return { data, audit: { action: 'student:create', entityType: 'student', recordId: String(details.id), changedFields: Object.keys(payload), result: 'success' } };
+  const raw = await readBackRaw(deps, req, cfg.modules.students, details.id, RB.student);
+  const data = n.student(raw);
+  return {
+    data,
+    audit: auditEvent('student:create', 'student', cfg.modules.students, details.id, Object.keys(payload), null, raw)
+  };
 }
 
 async function studentUpdate(deps, req) {
@@ -672,8 +683,12 @@ async function enrolmentCreate(deps, req) {
     const existing = await deps.zoho.crmQuery(req,
       `select id from ${cfg.modules.enrolments} where Application = ${applicationId} limit 1`);
     if (existing && existing.length) {
-      const data = await readBack(deps, req, cfg.modules.enrolments, existing[0].id, RB.enrolment, n.enrolment);
-      return { data, meta: { idempotent: true, learnAccess: MANUAL_ACTION }, audit: { action: 'enrolment:create', entityType: 'enrolment', recordId: String(existing[0].id), changedFields: [], result: 'idempotent' } };
+      const raw = await readBackRaw(deps, req, cfg.modules.enrolments, existing[0].id, RB.enrolment);
+      const data = n.enrolment(raw);
+      return {
+        data, meta: { idempotent: true, learnAccess: MANUAL_ACTION },
+        audit: auditEvent('enrolment:create', 'enrolment', cfg.modules.enrolments, existing[0].id, [], null, raw, 'idempotent')
+      };
     }
   }
 
@@ -708,12 +723,13 @@ async function enrolmentCreate(deps, req) {
   if (trimOrNull(b.startDate)) payload.Start_Date = dateOrNull(b.startDate, 'Start date');
 
   const details = await deps.zoho.crmCreate(req, cfg.modules.enrolments, payload);
-  const data = await readBack(deps, req, cfg.modules.enrolments, details.id, RB.enrolment, n.enrolment);
+  const raw = await readBackRaw(deps, req, cfg.modules.enrolments, details.id, RB.enrolment);
+  const data = n.enrolment(raw);
   await activateStudent(deps, req, studentId);
   return {
     data,
     meta: { lmsProvisioning: MANUAL_ACTION, capacity },
-    audit: { action: 'enrolment:create', entityType: 'enrolment', recordId: String(details.id), changedFields: Object.keys(payload), result: 'success' }
+    audit: auditEvent('enrolment:create', 'enrolment', cfg.modules.enrolments, details.id, Object.keys(payload), null, raw)
   };
 }
 
@@ -957,7 +973,7 @@ async function studentArchive(deps, req) {
 async function studentDelete(deps, req) {
   const id = numericId(req.params.id);
   if (!id) throw new AppError(400, 'INVALID_ID', 'A numeric record id is required.');
-  await loadRecord(deps, req, cfg.modules.students, id, RB.student, 'No student matches that id.');
+  const current = await loadRecord(deps, req, cfg.modules.students, id, RB.student, 'No student matches that id.');
 
   const [apps, enrols] = await Promise.all([
     deps.zoho.crmQuery(req, `select id from ${cfg.modules.applications} where Contact_Name = ${id} limit 5`),
@@ -975,20 +991,26 @@ async function studentDelete(deps, req) {
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.students, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
   await writeThroughDelete(deps, req, cfg.modules.students, id);
-  return { data: { id, deleted: true }, audit: { action: 'student:delete', entityType: 'student', recordId: id, changedFields: [], result: 'success' } };
+  return {
+    data: { id, deleted: true },
+    audit: auditEvent('student:delete', 'student', cfg.modules.students, id, [], current, null)
+  };
 }
 
 /** Deletes a demo enrolment. Nothing depends on an enrolment, so no blockers. */
 async function enrolmentDelete(deps, req) {
   const id = numericId(req.params.id);
   if (!id) throw new AppError(400, 'INVALID_ID', 'A numeric record id is required.');
-  await loadRecord(deps, req, cfg.modules.enrolments, id, RB.enrolment, 'No enrolment matches that id.');
+  const current = await loadRecord(deps, req, cfg.modules.enrolments, id, RB.enrolment, 'No enrolment matches that id.');
 
   await deps.zoho.crmDelete(req, cfg.modules.enrolments, id);
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.enrolments, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
   await writeThroughDelete(deps, req, cfg.modules.enrolments, id);
-  return { data: { id, deleted: true }, audit: { action: 'enrolment:delete', entityType: 'enrolment', recordId: id, changedFields: [], result: 'success' } };
+  return {
+    data: { id, deleted: true },
+    audit: auditEvent('enrolment:delete', 'enrolment', cfg.modules.enrolments, id, [], current, null)
+  };
 }
 
 
@@ -1031,7 +1053,7 @@ async function programmeSetActive(deps, req) {
 async function programmeDelete(deps, req) {
   const id = numericId(req.params.id);
   if (!id) throw new AppError(400, 'INVALID_ID', 'A numeric record id is required.');
-  await loadRecord(deps, req, cfg.modules.programmes, id, RB2.programme, 'No programme matches that id.');
+  const current = await loadRecord(deps, req, cfg.modules.programmes, id, RB2.programme, 'No programme matches that id.');
 
   const [intakes, apps, enrols] = await Promise.all([
     deps.zoho.crmQuery(req, `select id from ${cfg.modules.intakes} where Programme = ${id} limit 5`),
@@ -1051,7 +1073,10 @@ async function programmeDelete(deps, req) {
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.programmes, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
   await writeThroughDelete(deps, req, cfg.modules.programmes, id);
-  return { data: { id, deleted: true }, audit: { action: 'programme:delete', entityType: 'programme', recordId: id, changedFields: [], result: 'success' } };
+  return {
+    data: { id, deleted: true },
+    audit: auditEvent('programme:delete', 'programme', cfg.modules.programmes, id, [], current, null)
+  };
 }
 
 /** Opens or closes an intake using the real Intake_Status picklist values. */
@@ -1076,7 +1101,7 @@ async function intakeSetStatus(deps, req) {
 async function intakeDelete(deps, req) {
   const id = numericId(req.params.id);
   if (!id) throw new AppError(400, 'INVALID_ID', 'A numeric record id is required.');
-  await loadRecord(deps, req, cfg.modules.intakes, id, RB2.intake, 'No intake matches that id.');
+  const current = await loadRecord(deps, req, cfg.modules.intakes, id, RB2.intake, 'No intake matches that id.');
 
   const [apps, enrols] = await Promise.all([
     deps.zoho.crmQuery(req, `select id from ${cfg.modules.applications} where Intake = ${id} limit 5`),
@@ -1094,7 +1119,10 @@ async function intakeDelete(deps, req) {
   const stillThere = await deps.zoho.crmGetRecord(req, cfg.modules.intakes, id, 'id');
   if (stillThere) throw new AppError(502, 'DELETE_UNCONFIRMED', 'The record still exists after the delete call.');
   await writeThroughDelete(deps, req, cfg.modules.intakes, id);
-  return { data: { id, deleted: true }, audit: { action: 'intake:delete', entityType: 'intake', recordId: id, changedFields: [], result: 'success' } };
+  return {
+    data: { id, deleted: true },
+    audit: auditEvent('intake:delete', 'intake', cfg.modules.intakes, id, [], current, null)
+  };
 }
 
 /**

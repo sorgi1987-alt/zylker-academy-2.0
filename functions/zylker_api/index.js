@@ -1739,11 +1739,13 @@ R('/api/activity', perms.P.ACTIVITY_READ, async (req, res) => {
   const recordId = String(req.query.recordId || '').replace(/[^0-9]/g, '') || null;
   const resultRaw = String(req.query.result || '');
   const result = resultRaw === 'success' || resultRaw === 'error' ? resultRaw : null;
+  const operationRaw = String(req.query.operation || '');
+  const operation = ['create', 'update', 'delete'].includes(operationRaw) ? operationRaw : null;
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   let rows = [];
   let unavailable = null;
   try {
-    rows = await auth.readActivity(req, { entityType, recordId, result, limit });
+    rows = await auth.readActivity(req, { entityType, recordId, result, operation, limit });
   } catch (err) {
     // A missing or uninitialised audit table must not break the page.
     unavailable = z.redact(err && err.message);

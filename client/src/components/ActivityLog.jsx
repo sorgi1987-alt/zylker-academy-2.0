@@ -1,5 +1,33 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useT, getLocale } from '../i18n/I18nContext.jsx';
+
+/** Where each entity's own detail page lives, for linking straight to a record. */
+const ENTITY_PATH = {
+  student: 'students',
+  application: 'applications',
+  enrolment: 'enrolments',
+  programme: 'programmes',
+  intake: 'intakes'
+};
+
+function recordLink(a) {
+  const path = ENTITY_PATH[a.entityType];
+  return path && a.recordId ? `/${path}/${a.recordId}` : null;
+}
+
+/**
+ * `action` is always `<entity>:<verb>` — 'create'/'delete' are exact verb
+ * matches; every other verb (update, transition, archive, activate,
+ * deactivate, status, complete, note) changes an existing record rather
+ * than adding or removing one, so it's bucketed as 'update'.
+ */
+function operationOf(action) {
+  if (!action) return 'update';
+  if (action.endsWith(':create')) return 'create';
+  if (action.endsWith(':delete')) return 'delete';
+  return 'update';
+}
 
 const ACTION_KEY = {
   'application:create': 'applicationCreate',
@@ -67,46 +95,59 @@ export default function ActivityLog({ rows, unavailable }) {
 
   return (
     <ol className="timeline">
-      {rows.map((a) => (
-        <li key={a.id}>
-          <div>
-            <strong>{(ACTION_KEY[a.action] && t(`common.activity.action.${ACTION_KEY[a.action]}`)) || a.action}</strong>{' '}
-            {a.result !== 'success' && <span className="pill stop">{a.result}</span>}
-            {a.recordRef && <span className="mono muted small"> · {a.recordRef}</span>}
-          </div>
-          <div className="muted small">
-            {a.occurredAt ? new Date(a.occurredAt).toLocaleString(getLocale()) : '—'}
-            {a.actor ? ` · ${a.actor}` : ''}
-            {a.actorRole ? ` (${a.actorRole})` : ''}
-            {a.requestId ? ` · ${a.requestId}` : ''}
-          </div>
-          {/* A comment left with an action, or a standalone internal note.
-              Rendered as text, never as a changed field, because nothing on the
-              CRM record changed to hold it. */}
-          {a.note && <p className="act-note">{a.note}</p>}
-          {(() => {
-            const changed = realChanges(a);
-            if (!changed.length) return null;
-            return (
-              <ul className="chg">
-                {changed.map((f) => {
-                  const before = a.before ? a.before[f] : undefined;
-                  const after = a.after ? a.after[f] : undefined;
-                  if (before === undefined && after === undefined) {
-                    return <li key={f}><span className="mono">{f}</span></li>;
-                  }
-                  return (
-                    <li key={f}>
-                      <span className="mono">{f}</span>: <span className="was">{fmt(before)}</span>
-                      {' → '}<strong>{fmt(after)}</strong>
-                    </li>
-                  );
-                })}
-              </ul>
-            );
-          })()}
-        </li>
-      ))}
+      {rows.map((a) => {
+        const op = operationOf(a.action);
+        const link = recordLink(a);
+        return (
+          <li key={a.id} className={`op-${op}`}>
+            <div>
+              <strong>{(ACTION_KEY[a.action] && t(`common.activity.action.${ACTION_KEY[a.action]}`)) || a.action}</strong>{' '}
+              {a.result !== 'success' && <span className="pill stop">{a.result}</span>}
+              {a.recordRef && (
+                <span className="mono muted small">
+                  {' · '}{link ? <Link to={link}>{a.recordRef}</Link> : a.recordRef}
+                </span>
+              )}
+            </div>
+            <div className="muted small">
+              {a.occurredAt ? new Date(a.occurredAt).toLocaleString(getLocale()) : '—'}
+              {a.actor ? ` · ${a.actor}` : ''}
+              {a.actorRole ? ` (${a.actorRole})` : ''}
+              {a.requestId ? ` · ${a.requestId}` : ''}
+            </div>
+            {/* A comment left with an action, or a standalone internal note.
+                Rendered as text, never as a changed field, because nothing on the
+                CRM record changed to hold it. */}
+            {a.note && <p className="act-note">{a.note}</p>}
+            {/* A create's "changed fields" are just the whole submitted payload —
+                not a meaningful diff, since there's no before state to compare
+                against. The record link above (or the plain reference, if this
+                entity has no detail route) already answers "which record", so
+                the field list is dropped entirely rather than shown as noise. */}
+            {op !== 'create' && (() => {
+              const changed = realChanges(a);
+              if (!changed.length) return null;
+              return (
+                <ul className="chg">
+                  {changed.map((f) => {
+                    const before = a.before ? a.before[f] : undefined;
+                    const after = a.after ? a.after[f] : undefined;
+                    if (before === undefined && after === undefined) {
+                      return <li key={f}><span className="mono">{f}</span></li>;
+                    }
+                    return (
+                      <li key={f}>
+                        <span className="mono">{f}</span>: <span className="was">{fmt(before)}</span>
+                        {' → '}<strong>{fmt(after)}</strong>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
+          </li>
+        );
+      })}
     </ol>
   );
 }

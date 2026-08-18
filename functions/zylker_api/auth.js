@@ -287,7 +287,7 @@ async function audit(req, event) {
  * Reads recent activity. Optional filters narrow to one record or entity type.
  * Returns rows shaped for the UI; never returns credentials of any kind.
  */
-async function readActivity(req, { entityType, recordId, result, limit = 50 } = {}) {
+async function readActivity(req, { entityType, recordId, result, operation, limit = 50 } = {}) {
   const app = catalyst.initialize(req);
   const tableName = process.env.AUDIT_TABLE || 'admissions_audit';
   const where = [];
@@ -297,7 +297,16 @@ async function readActivity(req, { entityType, recordId, result, limit = 50 } = 
   // result_status holds the literal 'success' on success, but 'error:CODE' on
   // failure (the code varies), so "Error" is a prefix match, not an equality.
   if (result === 'success') where.push("result_status = 'success'");
-  if (result === 'error') where.push("result_status like 'error%'");
+  if (result === 'error') where.push("result_status like 'error*'");
+  // action is '<entity>:<verb>' (e.g. 'application:create', 'intake:status'),
+  // so "created"/"deleted" are exact verb matches and "updated" is everything
+  // else — every other verb (update, transition, archive, activate,
+  // deactivate, status, complete, note) is a change to an existing record,
+  // not a new or removed one.
+  // ZCQL's LIKE wildcard is '*', not SQL's '%'.
+  if (operation === 'create') where.push("action like '*:create'");
+  if (operation === 'delete') where.push("action like '*:delete'");
+  if (operation === 'update') where.push("action not like '*:create' and action not like '*:delete'");
   const clause = where.length ? ` where ${where.join(' and ')}` : '';
   const n = Math.min(Number(limit) || 50, 200);
   const rows = await app.zcql().executeZCQLQuery(

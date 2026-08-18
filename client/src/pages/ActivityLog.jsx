@@ -23,9 +23,15 @@ export default function ActivityLog() {
   const t = useT();
   const [entityType, setEntityType] = useState('');
   const [result, setResult] = useState('');
+  const [operation, setOperation] = useState('');
   const state = useApi(
-    (o) => api.activity({ limit: 100, entityType: entityType || undefined, result: result || undefined }, o),
-    [entityType, result]
+    (o) => api.activity({
+      limit: 100,
+      entityType: entityType || undefined,
+      result: result || undefined,
+      operation: operation || undefined
+    }, o),
+    [entityType, result, operation]
   );
 
   const entityOptions = ENTITY_TYPES.map((v) => ({ value: v, label: t(`activityLog.entity.${v}`) }));
@@ -57,6 +63,18 @@ export default function ActivityLog() {
               { value: 'error', label: t('activityLog.resultFailed') }
             ]}
             allLabel={t('activityLog.allResults')}
+          />
+          <FilterSelect
+            id="activity-operation"
+            label={t('activityLog.operationLabel')}
+            value={operation}
+            onChange={setOperation}
+            options={[
+              { value: 'create', label: t('activityLog.operationCreated') },
+              { value: 'update', label: t('activityLog.operationUpdated') },
+              { value: 'delete', label: t('activityLog.operationDeleted') }
+            ]}
+            allLabel={t('activityLog.allOperations')}
           />
         </div>
 

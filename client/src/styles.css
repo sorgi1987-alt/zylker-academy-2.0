@@ -394,6 +394,12 @@ input[type=search]{flex:1;min-width:220px}
 .timeline li:last-child{padding-bottom:0}
 .timeline li::before{content:'';position:absolute;left:-6px;top:4px;width:10px;height:10px;
   border-radius:50%;background:var(--warn);border:2px solid #fff}
+/* Create/update/delete, colour-coded the same way a Pill's ok/warn/stop
+   tones already are elsewhere — green for a new record, amber for a change
+   to an existing one, red for gone. */
+.timeline li.op-create::before{background:var(--ok)}
+.timeline li.op-update::before{background:var(--warn)}
+.timeline li.op-delete::before{background:var(--stop)}
 
 
 /* ---------- Sign-in modal ---------- */
