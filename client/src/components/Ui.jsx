@@ -222,7 +222,15 @@ export const Pill = ({ value, tone }) => {
  * available" means the source did not answer, and must never be allowed to read
  * as "there are none".
  */
-export const Kpi = ({ label, value, unavailable, source, to, partial, format }) => {
+/**
+ * Memoized: the dashboard renders up to 23 of these in one grid, and a
+ * KPI's own props (value/label/format/etc, all sourced from the one stable
+ * `data` object useApi hands back) never change just because something
+ * elsewhere on the page did — Customize, hiding a tile, or dragging one
+ * around all re-render Dashboard/KpiGrid, and without this every other tile
+ * would re-render along with them for no reason.
+ */
+export const Kpi = React.memo(({ label, value, unavailable, source, to, partial, format }) => {
   const t = useT();
   const body = (
     <>
@@ -245,7 +253,7 @@ export const Kpi = ({ label, value, unavailable, source, to, partial, format }) 
   return to
     ? <Link className="card kpi kpi-link" to={to}>{body}</Link>
     : <div className="card kpi">{body}</div>;
-};
+});
 
 /** Page-through control for a server-paginated list. */
 export const Pagination = ({ page, totalPages, hasMore, total, onPage, busy }) => {
@@ -360,7 +368,7 @@ export const SectionUnavailable = ({ system, detail, onRetry }) => {
  * the drop is stated in words beside each bar so it does not have to be
  * eyeballed from the bar lengths.
  */
-export const Funnel = ({ steps = [], emptyText }) => {
+export const Funnel = React.memo(({ steps = [], emptyText }) => {
   const t = useT();
   if (!steps.length || !steps[0].count) {
     return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText || t('common.noApplicationsRecorded')}</p>;
@@ -386,10 +394,10 @@ export const Funnel = ({ steps = [], emptyText }) => {
       })}
     </div>
   );
-};
+});
 
 /** Bar list of currency amounts, used for invoice ageing. */
-export const MoneyBarList = ({ data, order, currency, emptyText }) => {
+export const MoneyBarList = React.memo(({ data, order, currency, emptyText }) => {
   const t = useT();
   const keys = order || Object.keys(data || {});
   const values = keys.map((k) => Number((data || {})[k] || 0));
@@ -408,9 +416,9 @@ export const MoneyBarList = ({ data, order, currency, emptyText }) => {
       ))}
     </div>
   );
-};
+});
 
-export const BarList = ({ data, emptyText }) => {
+export const BarList = React.memo(({ data, emptyText }) => {
   const t = useT();
   const entries = Object.entries(data || {});
   if (!entries.length) return <p className="muted" style={{ margin: 0, fontSize: 14 }}>{emptyText || t('common.noDataYet')}</p>;
@@ -426,9 +434,9 @@ export const BarList = ({ data, emptyText }) => {
       ))}
     </div>
   );
-};
+});
 
-export const ConnDot = ({ label, status, detail }) => {
+export const ConnDot = React.memo(({ label, status, detail }) => {
   const t = useT();
   return (
     <div className="conn">
@@ -437,7 +445,7 @@ export const ConnDot = ({ label, status, detail }) => {
       <span className="muted">{status === 'connected' ? t('common.connected') : detail || t('common.unavailable')}</span>
     </div>
   );
-};
+});
 
 /**
  * Learning progress.

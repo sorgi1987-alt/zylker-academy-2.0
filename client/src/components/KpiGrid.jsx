@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import GridLayout, { WidthProvider } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -220,8 +220,15 @@ const DEFAULT_POSITIONS = KPI_DEFS.reduce((acc, def, idx) => {
  * two separate, independently-persisted pieces of state: hiding a tile must
  * not lose its position, so unhiding it later puts it back roughly where it
  * was rather than at whatever slot is next free.
+ *
+ * Memoized: rebuilding react-grid-layout's 23-tile layout is real work, and
+ * Dashboard re-renders for reasons that have nothing to do with this grid
+ * (opening the Customize modal, the attention panel, anything below it) —
+ * without this, every one of those re-renders this component too as long as
+ * `data`/`hidden`/`onHide` happen to be referentially stable, which they are
+ * (see Dashboard.jsx's useCallback on onHide).
  */
-export default function KpiGrid({ data, hidden, onHide }) {
+export default memo(function KpiGrid({ data, hidden, onHide }) {
   const t = useT();
   const [overrides, setOverrides] = useState(() => readJSON(LAYOUT_STORAGE_KEY, {}));
 
@@ -278,4 +285,4 @@ export default function KpiGrid({ data, hidden, onHide }) {
       ))}
     </ReactGridLayout>
   );
-}
+});

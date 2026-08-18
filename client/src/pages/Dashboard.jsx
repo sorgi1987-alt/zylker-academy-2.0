@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
@@ -11,6 +11,182 @@ import AttentionPanel from '../components/Attention.jsx';
 import KpiGrid, { KPI_DEFS, readHiddenKpis, writeHiddenKpis, resetKpiLayout } from '../components/KpiGrid.jsx';
 
 const SECTIONS = ['admissions', 'delivery', 'learning', 'finance', 'support'];
+
+/**
+ * Everything below the KPI grid — funnel, bar lists, tables, connection
+ * status. Split out and memoized purely so it does not re-render when
+ * Dashboard's own UI state changes (opening Customize, hiding a KPI tile,
+ * dragging one around): none of that affects this section, but without a
+ * memo boundary here every one of those clicks would re-render this whole
+ * block anyway, since it's a sibling in the same component. `data` is the
+ * one prop, and it only ever changes once — when the initial fetch resolves.
+ */
+const DashboardCharts = memo(function DashboardCharts({ data: d, t }) {
+  return (
+    <>
+      <div className="grid g-2">
+        <Card
+          title={t('dashboard.card.admissionsFunnel')}
+          action={<SourceBadge source="crm" />}
+        >
+          <Funnel steps={d.admissionsFunnel} />
+          <p className="field-hint" style={{ marginTop: 12 }}>
+            {t('dashboard.funnelNote')}
+            {t('dashboard.funnelExits', {
+              rejected: d.admissionsExits.Rejected || 0,
+              withdrawn: d.admissionsExits.Withdrawn || 0,
+              deferred: d.admissionsExits.Deferred || 0
+            })}
+          </p>
+        </Card>
+
+        <Card title={t('dashboard.card.activeEnrolmentsByProgramme')} action={<SourceBadge source="crm" />}>
+          <BarList data={d.enrolmentsByProgramme} emptyText={t('dashboard.noActiveEnrolments')} />
+        </Card>
+      </div>
+
+      <div className="grid g-2">
+        <Card title={t('dashboard.card.applicationsByStage')} action={<SourceBadge source="crm" />}>
+          <BarList data={d.applicationsByStage} emptyText={t('common.noApplicationsRecorded')} />
+        </Card>
+
+        <Card
+          title={t('dashboard.card.invoiceAgeing')}
+          action={(
+            <div className="head-actions">
+              <SourceBadge source="books" />
+              <Link className="btn" to="/invoices">{t('dashboard.allInvoices')}</Link>
+            </div>
+          )}
+        >
+          {d.invoiceAgeing
+            ? (
+              <MoneyBarList
+                data={d.invoiceAgeing}
+                order={['Not yet due', '1–30 days', '31–60 days', '61–90 days', 'Over 90 days']}
+                currency={d.invoiceAgeingCurrency}
+                emptyText={t('dashboard.nothingOutstanding')}
+              />
+            )
+            : <p className="muted">{t('dashboard.booksUnavailable')}</p>}
+        </Card>
+
+        <Card
+          title={t('dashboard.card.ticketsByStatus')}
+          action={(
+            <div className="head-actions">
+              <SourceBadge source="desk" />
+              <Link className="btn" to="/tickets">{t('dashboard.allTickets')}</Link>
+            </div>
+          )}
+        >
+          {d.ticketsByStatus
+            ? <BarList data={d.ticketsByStatus} emptyText={t('dashboard.noTicketsRecorded')} />
+            : <p className="muted">{t('dashboard.deskUnavailable')}</p>}
+        </Card>
+      </div>
+
+      {d.intakeCapacity && d.intakeCapacity.length > 0 && (
+        <Card
+          title={t('dashboard.card.intakesNearCapacity')}
+          action={<Link className="btn" to="/intakes?capacity=at-risk">{t('dashboard.seeAll')}</Link>}
+        >
+          <ul className="plain-list">
+            {d.intakeCapacity.map((i) => {
+              const full = i.activeEnrolments >= i.capacity;
+              return (
+                <li key={i.id}>
+                  <Link to={`/intakes/${i.id}`}>{i.name}</Link>
+                  <span className="muted"> · {t('dashboard.startsOn', { date: fmtDate(i.startDate) })} · </span>
+                  <span className="mono">{t('common.ofCount', { used: i.activeEnrolments, total: i.capacity })}</span>
+                  <span className={`pill ${full ? 'stop' : 'warn'}`}>
+                    {full ? t('dashboard.atCapacity') : t('dashboard.nearCapacity')}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
+      <div className="grid g-2">
+        <Card
+          title={t('dashboard.card.lmsCoursesByProvider')}
+          action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
+        >
+          {d.lmsCoursesByProvider
+            ? <BarList data={d.lmsCoursesByProvider} emptyText={t('dashboard.noCoursesRecorded')} />
+            : <p className="muted">{t('dashboard.lmsUnavailable')}</p>}
+        </Card>
+        <Card
+          title={t('dashboard.card.learnersByLmsStatus')}
+          action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
+        >
+          {d.learnersByLmsStatus
+            ? <BarList data={d.learnersByLmsStatus} emptyText={t('dashboard.noLearnerRecords')} />
+            : <p className="muted">{t('dashboard.lmsUnavailable')}</p>}
+        </Card>
+      </div>
+
+      <Card
+        title={t('dashboard.card.recentAdmissionsActivity')}
+        action={<Link className="btn" to="/applications">{t('dashboard.allApplications')}</Link>}
+      >
+        {d.recentApplications.length ? (
+          <div className="t-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">{t('dashboard.table.application')}</th>
+                  <th scope="col">{t('dashboard.table.stage')}</th>
+                  <th scope="col">{t('dashboard.table.programme')}</th>
+                  <th scope="col">{t('dashboard.table.applied')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.recentApplications.map((a) => (
+                  <tr key={a.id}>
+                    <td><Link to={`/applications/${a.id}`}>{a.name || a.applicationId || a.id}</Link></td>
+                    <td><Pill value={a.stage} /></td>
+                    <td>{a.programme ? a.programme.name : <span className="muted">—</span>}</td>
+                    <td>{fmtDate(a.applicationDate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="muted">{t('dashboard.noApplicationsYet')}</p>}
+      </Card>
+
+      <div className="grid g-2">
+        <Card title={t('dashboard.card.upcomingIntakes')} action={<Link className="btn" to="/intakes">{t('dashboard.allIntakes')}</Link>}>
+          {d.upcomingIntakes.length ? (
+            <ul className="plain-list">
+              {d.upcomingIntakes.map((i) => (
+                <li key={i.id}>
+                  <Link to={`/intakes/${i.id}`}>{i.name}</Link>
+                  <span className="muted"> · {t('dashboard.startsOn', { date: fmtDate(i.startDate) })} </span>
+                  <Pill value={i.status} />
+                </li>
+              ))}
+            </ul>
+          ) : <p className="muted">{t('dashboard.noIntakesScheduled')}</p>}
+        </Card>
+
+        <Card title={t('dashboard.card.integrationStatus')} action={<Link className="btn" to="/integration">{t('dashboard.details')}</Link>}>
+          <ConnDot label={t('dashboard.conn.crm')} status={d.connections.crm.status} detail={d.connections.crm.detail} />
+          <ConnDot
+            label={t('dashboard.conn.lms')}
+            status={d.connections.lms.status}
+            detail={d.connections.lms.detail}
+          />
+          <ConnDot label={t('dashboard.conn.books')} status={d.connections.books.status} detail={d.connections.books.detail} />
+          <ConnDot label={t('dashboard.conn.desk')} status={d.connections.desk.status} detail={d.connections.desk.detail} />
+        </Card>
+      </div>
+    </>
+  );
+});
 
 /**
  * Dashboard — an operational workspace rather than a summary.
@@ -35,13 +211,17 @@ export default function Dashboard() {
   // through to a component whose whole point is owning that state itself.
   const [layoutVersion, setLayoutVersion] = useState(0);
 
-  const toggleKpi = (key) => {
+  // Stable identity: passed to KpiGrid as `onHide`, and KpiGrid is memoized
+  // specifically so that opening Customize or anything else on this page
+  // doesn't re-render its 23 tiles — a new function reference here on every
+  // Dashboard render would defeat that regardless of the memo.
+  const toggleKpi = useCallback((key) => {
     setHidden((prev) => {
       const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
       writeHiddenKpis(next);
       return next;
     });
-  };
+  }, []);
   const resetLayout = () => {
     resetKpiLayout();
     setLayoutVersion((v) => v + 1);
@@ -99,166 +279,7 @@ export default function Dashboard() {
           <>
             <KpiGrid key={layoutVersion} data={d} hidden={hidden} onHide={toggleKpi} />
 
-            <div className="grid g-2">
-              <Card
-                title={t('dashboard.card.admissionsFunnel')}
-                action={<SourceBadge source="crm" />}
-              >
-                <Funnel steps={d.admissionsFunnel} />
-                <p className="field-hint" style={{ marginTop: 12 }}>
-                  {t('dashboard.funnelNote')}
-                  {t('dashboard.funnelExits', {
-                    rejected: d.admissionsExits.Rejected || 0,
-                    withdrawn: d.admissionsExits.Withdrawn || 0,
-                    deferred: d.admissionsExits.Deferred || 0
-                  })}
-                </p>
-              </Card>
-
-              <Card title={t('dashboard.card.activeEnrolmentsByProgramme')} action={<SourceBadge source="crm" />}>
-                <BarList data={d.enrolmentsByProgramme} emptyText={t('dashboard.noActiveEnrolments')} />
-              </Card>
-            </div>
-
-            <div className="grid g-2">
-              <Card title={t('dashboard.card.applicationsByStage')} action={<SourceBadge source="crm" />}>
-                <BarList data={d.applicationsByStage} emptyText={t('common.noApplicationsRecorded')} />
-              </Card>
-
-              <Card
-                title={t('dashboard.card.invoiceAgeing')}
-                action={(
-                  <div className="head-actions">
-                    <SourceBadge source="books" />
-                    <Link className="btn" to="/invoices">{t('dashboard.allInvoices')}</Link>
-                  </div>
-                )}
-              >
-                {d.invoiceAgeing
-                  ? (
-                    <MoneyBarList
-                      data={d.invoiceAgeing}
-                      order={['Not yet due', '1–30 days', '31–60 days', '61–90 days', 'Over 90 days']}
-                      currency={d.invoiceAgeingCurrency}
-                      emptyText={t('dashboard.nothingOutstanding')}
-                    />
-                  )
-                  : <p className="muted">{t('dashboard.booksUnavailable')}</p>}
-              </Card>
-
-              <Card
-                title={t('dashboard.card.ticketsByStatus')}
-                action={(
-                  <div className="head-actions">
-                    <SourceBadge source="desk" />
-                    <Link className="btn" to="/tickets">{t('dashboard.allTickets')}</Link>
-                  </div>
-                )}
-              >
-                {d.ticketsByStatus
-                  ? <BarList data={d.ticketsByStatus} emptyText={t('dashboard.noTicketsRecorded')} />
-                  : <p className="muted">{t('dashboard.deskUnavailable')}</p>}
-              </Card>
-            </div>
-
-            {d.intakeCapacity && d.intakeCapacity.length > 0 && (
-              <Card
-                title={t('dashboard.card.intakesNearCapacity')}
-                action={<Link className="btn" to="/intakes?capacity=at-risk">{t('dashboard.seeAll')}</Link>}
-              >
-                <ul className="plain-list">
-                  {d.intakeCapacity.map((i) => {
-                    const full = i.activeEnrolments >= i.capacity;
-                    return (
-                      <li key={i.id}>
-                        <Link to={`/intakes/${i.id}`}>{i.name}</Link>
-                        <span className="muted"> · {t('dashboard.startsOn', { date: fmtDate(i.startDate) })} · </span>
-                        <span className="mono">{t('common.ofCount', { used: i.activeEnrolments, total: i.capacity })}</span>
-                        <span className={`pill ${full ? 'stop' : 'warn'}`}>
-                          {full ? t('dashboard.atCapacity') : t('dashboard.nearCapacity')}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </Card>
-            )}
-
-            <div className="grid g-2">
-              <Card
-                title={t('dashboard.card.lmsCoursesByProvider')}
-                action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
-              >
-                {d.lmsCoursesByProvider
-                  ? <BarList data={d.lmsCoursesByProvider} emptyText={t('dashboard.noCoursesRecorded')} />
-                  : <p className="muted">{t('dashboard.lmsUnavailable')}</p>}
-              </Card>
-              <Card
-                title={t('dashboard.card.learnersByLmsStatus')}
-                action={<div className="head-actions"><SourceBadge source="lms" /><DemoDataBadge /></div>}
-              >
-                {d.learnersByLmsStatus
-                  ? <BarList data={d.learnersByLmsStatus} emptyText={t('dashboard.noLearnerRecords')} />
-                  : <p className="muted">{t('dashboard.lmsUnavailable')}</p>}
-              </Card>
-            </div>
-
-            <Card
-              title={t('dashboard.card.recentAdmissionsActivity')}
-              action={<Link className="btn" to="/applications">{t('dashboard.allApplications')}</Link>}
-            >
-              {d.recentApplications.length ? (
-                <div className="t-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th scope="col">{t('dashboard.table.application')}</th>
-                        <th scope="col">{t('dashboard.table.stage')}</th>
-                        <th scope="col">{t('dashboard.table.programme')}</th>
-                        <th scope="col">{t('dashboard.table.applied')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {d.recentApplications.map((a) => (
-                        <tr key={a.id}>
-                          <td><Link to={`/applications/${a.id}`}>{a.name || a.applicationId || a.id}</Link></td>
-                          <td><Pill value={a.stage} /></td>
-                          <td>{a.programme ? a.programme.name : <span className="muted">—</span>}</td>
-                          <td>{fmtDate(a.applicationDate)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : <p className="muted">{t('dashboard.noApplicationsYet')}</p>}
-            </Card>
-
-            <div className="grid g-2">
-              <Card title={t('dashboard.card.upcomingIntakes')} action={<Link className="btn" to="/intakes">{t('dashboard.allIntakes')}</Link>}>
-                {d.upcomingIntakes.length ? (
-                  <ul className="plain-list">
-                    {d.upcomingIntakes.map((i) => (
-                      <li key={i.id}>
-                        <Link to={`/intakes/${i.id}`}>{i.name}</Link>
-                        <span className="muted"> · {t('dashboard.startsOn', { date: fmtDate(i.startDate) })} </span>
-                        <Pill value={i.status} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : <p className="muted">{t('dashboard.noIntakesScheduled')}</p>}
-              </Card>
-
-              <Card title={t('dashboard.card.integrationStatus')} action={<Link className="btn" to="/integration">{t('dashboard.details')}</Link>}>
-                <ConnDot label={t('dashboard.conn.crm')} status={d.connections.crm.status} detail={d.connections.crm.detail} />
-                <ConnDot
-                  label={t('dashboard.conn.lms')}
-                  status={d.connections.lms.status}
-                  detail={d.connections.lms.detail}
-                />
-                <ConnDot label={t('dashboard.conn.books')} status={d.connections.books.status} detail={d.connections.books.detail} />
-                <ConnDot label={t('dashboard.conn.desk')} status={d.connections.desk.status} detail={d.connections.desk.detail} />
-              </Card>
-            </div>
+            <DashboardCharts data={d} t={t} />
           </>
         )}
       </Async>
