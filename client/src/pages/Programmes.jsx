@@ -5,12 +5,20 @@ import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, Modal, useToast, fmtMoney
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, SourceBadge, Modal, ConfirmDialog, useToast, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
+import { useViews, ViewBar, ViewEditorModal } from '../components/ViewManager.jsx';
+import { PROGRAMME_FIELDS } from '../viewFields.js';
 
 const LEVELS = ['Foundation', 'Certificate', 'Diploma', 'Undergraduate', 'Postgraduate', 'Professional', 'Other'];
 const STATUSES = ['Draft', 'Open for Applications', 'Running', 'Suspended', 'Archived'];
+
+// Matches the table this page has always rendered. "LMS course" is a link to
+// another page's record, not a plain field, so it is never part of the
+// toggle system — it stays a fixed trailing column, like the primary name
+// column is a fixed leading one.
+const DEFAULT_COLUMNS = ['code', 'academicLevel', 'status', 'tuitionFee', 'intakeCount', 'enrolmentCount'];
 
 function NewProgrammeDialog({ onClose, onDone }) {
   const t = useT();
@@ -104,6 +112,20 @@ export default function Programmes() {
   const list = usePagedList(api.programmes, {
     initialFilters: { active: params.get('active') || undefined }
   });
+  const views = useViews('zylker.views.programmes');
+  const [editingView, setEditingView] = useState(null);
+  const [deletingViewId, setDeletingViewId] = useState(null);
+
+  useEffect(() => {
+    const v = views.activeView;
+    list.setFilter('conditions', v ? JSON.stringify(v.conditions) : undefined);
+    list.setFilter('sortBy', v && v.sort ? v.sort.field : undefined);
+    list.setFilter('sortDir', v && v.sort ? v.sort.direction : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views.activeView]);
+
+  const columns = views.activeView ? views.activeView.columns : DEFAULT_COLUMNS;
+  const has = (key) => columns.includes(key);
 
   /*
    * The global Create menu links here with ?new=1 rather than to a separate
@@ -139,6 +161,17 @@ export default function Programmes() {
           </div>
         )}
       >
+        <ViewBar
+          views={views.views}
+          activeViewId={views.activeViewId}
+          defaultViewId={views.defaultViewId}
+          onSelect={views.selectView}
+          onNew={() => setEditingView({})}
+          onEdit={(v) => setEditingView(v)}
+          onDelete={(id) => setDeletingViewId(id)}
+          onToggleDefault={views.toggleDefaultView}
+        />
+
         <div className="toolbar">
           <SearchBox
             id="programme-search"
@@ -147,17 +180,19 @@ export default function Programmes() {
             onChange={list.setSearch}
             placeholder={t('programmes.searchPlaceholder')}
           />
-          <FilterSelect
-            id="programme-active"
-            label={t('programmes.availabilityLabel')}
-            value={list.filters.active || ''}
-            onChange={(v) => list.setFilter('active', v)}
-            options={[
-              { value: 'true', label: t('programmes.activeOption') },
-              { value: 'false', label: t('programmes.inactiveOption') }
-            ]}
-            allLabel={t('common.all')}
-          />
+          {!views.activeView && (
+            <FilterSelect
+              id="programme-active"
+              label={t('programmes.availabilityLabel')}
+              value={list.filters.active || ''}
+              onChange={(v) => list.setFilter('active', v)}
+              options={[
+                { value: 'true', label: t('programmes.activeOption') },
+                { value: 'false', label: t('programmes.inactiveOption') }
+              ]}
+              allLabel={t('common.all')}
+            />
+          )}
         </div>
 
         <Async state={list} empty={{ title: t('programmes.noMatch') }}>
@@ -168,12 +203,15 @@ export default function Programmes() {
                   <thead>
                     <tr>
                       <th scope="col">{t('programmes.table.programme')}</th>
-                      <th scope="col">{t('programmes.table.code')}</th>
-                      <th scope="col">{t('programmes.table.level')}</th>
-                      <th scope="col">{t('programmes.table.status')}</th>
-                      <th scope="col">{t('programmes.table.fee')}</th>
-                      <th scope="col">{t('programmes.table.intakes')}</th>
-                      <th scope="col">{t('programmes.table.enrolments')}</th>
+                      {has('code') && <th scope="col">{t('programmes.table.code')}</th>}
+                      {has('academicLevel') && <th scope="col">{t('programmes.table.level')}</th>}
+                      {has('status') && <th scope="col">{t('programmes.table.status')}</th>}
+                      {has('active') && <th scope="col">{t('views.fields.programme.active')}</th>}
+                      {has('department') && <th scope="col">{t('views.fields.programme.department')}</th>}
+                      {has('tuitionFee') && <th scope="col">{t('programmes.table.fee')}</th>}
+                      {has('intakeCount') && <th scope="col">{t('programmes.table.intakes')}</th>}
+                      {has('enrolmentCount') && <th scope="col">{t('programmes.table.enrolments')}</th>}
+                      {has('applicationCount') && <th scope="col">{t('views.fields.programme.applicationCount')}</th>}
                       <th scope="col">{t('programmes.table.lmsCourse')}</th>
                     </tr>
                   </thead>
@@ -181,15 +219,20 @@ export default function Programmes() {
                     {rows.map((p) => (
                       <tr key={p.id}>
                         <td><Link to={`/programmes/${p.id}`}>{p.name}</Link></td>
-                        <td className="mono">{p.code || <span className="muted">—</span>}</td>
-                        <td>{p.academicLevel || <span className="muted">—</span>}</td>
-                        <td>
-                          <Pill value={p.status} />
-                          {!p.active && <span className="pill mute">{t('programmes.inactiveBadge')}</span>}
-                        </td>
-                        <td className="mono">{fmtMoney(p.tuitionFee)}</td>
-                        <td className="mono">{p.counts.intakes}</td>
-                        <td className="mono">{p.counts.enrolments}</td>
+                        {has('code') && <td className="mono">{p.code || <span className="muted">—</span>}</td>}
+                        {has('academicLevel') && <td>{p.academicLevel || <span className="muted">—</span>}</td>}
+                        {has('status') && (
+                          <td>
+                            <Pill value={p.status} />
+                            {!p.active && <span className="pill mute">{t('programmes.inactiveBadge')}</span>}
+                          </td>
+                        )}
+                        {has('active') && <td>{p.active ? t('views.booleanTrue') : t('views.booleanFalse')}</td>}
+                        {has('department') && <td>{p.department || <span className="muted">—</span>}</td>}
+                        {has('tuitionFee') && <td className="mono">{fmtMoney(p.tuitionFee)}</td>}
+                        {has('intakeCount') && <td className="mono">{p.counts.intakes}</td>}
+                        {has('enrolmentCount') && <td className="mono">{p.counts.enrolments}</td>}
+                        {has('applicationCount') && <td className="mono">{p.counts.applications}</td>}
                         <td>
                           {p.lmsCourse
                             ? <Link to={`/learning/courses/${p.lmsCourse.id}`}>{p.lmsCourse.name}</Link>
@@ -223,6 +266,25 @@ export default function Programmes() {
         <NewProgrammeDialog
           onClose={() => setCreating(false)}
           onDone={async () => { await list.reload(); }}
+        />
+      )}
+
+      {editingView && (
+        <ViewEditorModal
+          fields={PROGRAMME_FIELDS}
+          initial={editingView.id ? editingView : null}
+          onClose={() => setEditingView(null)}
+          onSave={views.saveView}
+        />
+      )}
+
+      {deletingViewId && (
+        <ConfirmDialog
+          title={t('views.deleteConfirmTitle')}
+          message={t('views.deleteConfirmMessage')}
+          confirmLabel={t('views.deleteView')}
+          onConfirm={() => { views.deleteView(deletingViewId); setDeletingViewId(null); }}
+          onCancel={() => setDeletingViewId(null)}
         />
       )}
     </>

@@ -1,13 +1,20 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { usePagedList, useApi } from '../useApi.js';
 import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, fmtDate, fmtMoney
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, ConfirmDialog, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import ApplicationBoard from '../components/ApplicationBoard.jsx';
+import { useViews, ViewBar, ViewEditorModal } from '../components/ViewManager.jsx';
+import { APPLICATION_FIELDS } from '../viewFields.js';
+
+// Matches the table this page has always rendered — expectedDecisionDate is
+// a real, registered field (so a saved view can add it) but was never a
+// default column.
+const DEFAULT_COLUMNS = ['applicantName', 'applicantEmail', 'stage', 'programme', 'intake', 'applicationDate', 'tuitionFee'];
 
 const VIEW_STORAGE_KEY = 'zylker.applications.view';
 // Reading/writing localStorage can throw (private browsing, storage disabled) —
@@ -34,6 +41,30 @@ export default function Applications() {
   });
 
   const stages = (list.meta && list.meta.stages) || [];
+
+  // The filter builder's "Stage" field is an enum whose options come from
+  // the API's own stage list rather than a second hard-coded copy — the
+  // registry ships with an empty options array precisely so this can fill it
+  // in once the list has loaded.
+  const applicationFields = useMemo(
+    () => APPLICATION_FIELDS.map((f) => (f.key === 'stage' ? { ...f, options: stages } : f)),
+    [stages]
+  );
+
+  const views = useViews('zylker.views.applications');
+  const [editingView, setEditingView] = useState(null);
+  const [deletingViewId, setDeletingViewId] = useState(null);
+
+  useEffect(() => {
+    const v = views.activeView;
+    list.setFilter('conditions', v ? JSON.stringify(v.conditions) : undefined);
+    list.setFilter('sortBy', v && v.sort ? v.sort.field : undefined);
+    list.setFilter('sortDir', v && v.sort ? v.sort.direction : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views.activeView]);
+
+  const columns = views.activeView ? views.activeView.columns : DEFAULT_COLUMNS;
+  const has = (key) => columns.includes(key);
 
   // The view lives in the URL when a link specifies one — shareable, and a
   // reload doesn't quietly switch what someone was looking at — and falls
@@ -85,6 +116,17 @@ export default function Applications() {
           </div>
         )}
       >
+        <ViewBar
+          views={views.views}
+          activeViewId={views.activeViewId}
+          defaultViewId={views.defaultViewId}
+          onSelect={views.selectView}
+          onNew={() => setEditingView({})}
+          onEdit={(v) => setEditingView(v)}
+          onDelete={(id) => setDeletingViewId(id)}
+          onToggleDefault={views.toggleDefaultView}
+        />
+
         <div className="toolbar">
           <SearchBox
             id="application-search"
@@ -93,14 +135,16 @@ export default function Applications() {
             onChange={list.setSearch}
             placeholder={t('applications.searchPlaceholder')}
           />
-          <FilterSelect
-            id="application-stage"
-            label={t('applications.stageLabel')}
-            value={list.filters.stage || ''}
-            onChange={(v) => list.setFilter('stage', v)}
-            options={stages}
-            allLabel={t('applications.allStages')}
-          />
+          {!views.activeView && (
+            <FilterSelect
+              id="application-stage"
+              label={t('applications.stageLabel')}
+              value={list.filters.stage || ''}
+              onChange={(v) => list.setFilter('stage', v)}
+              options={stages}
+              allLabel={t('applications.allStages')}
+            />
+          )}
         </div>
 
         {/* A dashboard card or attention item may have applied this, so it is
@@ -138,27 +182,28 @@ export default function Applications() {
                     <thead>
                       <tr>
                         <th scope="col">{t('applications.table.application')}</th>
-                        <th scope="col">{t('applications.table.applicant')}</th>
-                        <th scope="col">{t('applications.table.stage')}</th>
-                        <th scope="col">{t('applications.table.programme')}</th>
-                        <th scope="col">{t('applications.table.intake')}</th>
-                        <th scope="col">{t('applications.table.applied')}</th>
-                        <th scope="col">{t('applications.table.fee')}</th>
+                        {has('applicantName') && <th scope="col">{t('views.fields.application.applicantName')}</th>}
+                        {has('applicantEmail') && <th scope="col">{t('views.fields.application.applicantEmail')}</th>}
+                        {has('stage') && <th scope="col">{t('applications.table.stage')}</th>}
+                        {has('programme') && <th scope="col">{t('applications.table.programme')}</th>}
+                        {has('intake') && <th scope="col">{t('applications.table.intake')}</th>}
+                        {has('applicationDate') && <th scope="col">{t('applications.table.applied')}</th>}
+                        {has('expectedDecisionDate') && <th scope="col">{t('views.fields.application.expectedDecisionDate')}</th>}
+                        {has('tuitionFee') && <th scope="col">{t('applications.table.fee')}</th>}
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((a) => (
                         <tr key={a.id}>
                           <td><Link to={`/applications/${a.id}`}>{a.name || a.applicationId || a.id}</Link></td>
-                          <td>
-                            {a.applicantName || <span className="muted">—</span>}
-                            {a.applicantEmail && <div className="muted small">{a.applicantEmail}</div>}
-                          </td>
-                          <td><Pill value={a.stage} /></td>
-                          <td>{a.programme ? a.programme.name : <span className="muted">—</span>}</td>
-                          <td>{a.intake ? a.intake.name : <span className="muted">—</span>}</td>
-                          <td>{fmtDate(a.applicationDate)}</td>
-                          <td className="mono">{fmtMoney(a.tuitionFee)}</td>
+                          {has('applicantName') && <td>{a.applicantName || <span className="muted">—</span>}</td>}
+                          {has('applicantEmail') && <td>{a.applicantEmail || <span className="muted">—</span>}</td>}
+                          {has('stage') && <td><Pill value={a.stage} /></td>}
+                          {has('programme') && <td>{a.programme ? a.programme.name : <span className="muted">—</span>}</td>}
+                          {has('intake') && <td>{a.intake ? a.intake.name : <span className="muted">—</span>}</td>}
+                          {has('applicationDate') && <td>{fmtDate(a.applicationDate)}</td>}
+                          {has('expectedDecisionDate') && <td>{fmtDate(a.expectedDecisionDate)}</td>}
+                          {has('tuitionFee') && <td className="mono">{fmtMoney(a.tuitionFee)}</td>}
                         </tr>
                       ))}
                     </tbody>
@@ -192,6 +237,25 @@ export default function Applications() {
           </Async>
         )}
       </Card>
+
+      {editingView && (
+        <ViewEditorModal
+          fields={applicationFields}
+          initial={editingView.id ? editingView : null}
+          onClose={() => setEditingView(null)}
+          onSave={views.saveView}
+        />
+      )}
+
+      {deletingViewId && (
+        <ConfirmDialog
+          title={t('views.deleteConfirmTitle')}
+          message={t('views.deleteConfirmMessage')}
+          confirmLabel={t('views.deleteView')}
+          onConfirm={() => { views.deleteView(deletingViewId); setDeletingViewId(null); }}
+          onCancel={() => setDeletingViewId(null)}
+        />
+      )}
     </>
   );
 }

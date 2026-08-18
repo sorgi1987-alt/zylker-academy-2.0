@@ -28,6 +28,8 @@ const reconciliation = require('./reconciliation');
 const signals = require('./signals');
 const cache = require('./cache');
 const syncHealth = require('./syncHealth');
+const viewFilter = require('./viewFilter');
+const viewFields = require('./viewFields');
 
 const app = express();
 app.disable('x-powered-by');
@@ -229,6 +231,18 @@ function environmentOf(req) {
   if (/\.development\./i.test(host)) return { name: 'development', label: 'Development' };
   if (host) return { name: 'production', label: 'Production' };
   return { name: 'unknown', label: 'Unknown environment' };
+}
+
+/**
+ * Applies a custom view's filter conditions and sort to `rows`, ahead of the
+ * page's own simple filters/search — so a saved view (e.g. "Withdrawn
+ * students added this year") narrows the same way a quick status filter
+ * does, and free-text search still searches only within it. `fieldTypes` is
+ * one of the per-entity allowlists in viewFields.js.
+ */
+function applyView(rows, req, fieldTypes) {
+  const filtered = viewFilter.applyConditions(rows, req.query.conditions, fieldTypes);
+  return viewFilter.applySort(filtered, req.query.sortBy, req.query.sortDir, fieldTypes);
 }
 
 /** Case-insensitive substring match over the named fields of a record. */
@@ -855,6 +869,7 @@ R('/api/students', perms.P.STUDENT_READ, async (req, res) => {
   const status = req.query.status;
   if (status) students = students.filter((s) => s.status === status);
   students = students.filter((s) => matches(s, req.query.search, ['fullName', 'email', 'studentId', 'externalReference']));
+  students = applyView(students, req, viewFields.STUDENT_FIELDS);
 
   const { items, meta } = paginate(students, req, {
     byStatus: groupBy(students, (s) => s.status),
@@ -953,6 +968,7 @@ R('/api/applications', perms.P.APPLICATION_READ, async (req, res) => {
     data = data.filter((a) => actionStages.has(a.stage));
   }
   data = data.filter((a) => matches(a, req.query.search, ['name', 'applicationId', 'applicantName', 'applicantEmail', 'externalReference']));
+  data = applyView(data, req, viewFields.APPLICATION_FIELDS);
 
   const { items, meta } = paginate(data, req, { byStage, stages: [...writes.ALL_STAGES], source: 'crm', capped: false });
   ok(res, items, meta);
@@ -1092,6 +1108,7 @@ R('/api/programmes', perms.P.PROGRAMME_READ, async (req, res) => {
   if (req.query.active === 'true') data = data.filter((p) => p.active);
   if (req.query.active === 'false') data = data.filter((p) => !p.active);
   data = data.filter((p) => matches(p, req.query.search, ['name', 'code', 'department', 'academicLevel']));
+  data = applyView(data, req, viewFields.PROGRAMME_FIELDS);
 
   const { items, meta } = paginate(data, req, { source: 'crm', lmsDemonstrationDataset: true, capped: false });
   ok(res, items, meta);

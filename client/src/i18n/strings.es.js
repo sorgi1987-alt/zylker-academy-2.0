@@ -8,6 +8,7 @@ import enrolments from './dictionaries/es/enrolments.js';
 import programmesIntakes from './dictionaries/es/programmesIntakes.js';
 import learningHub from './dictionaries/es/learningHub.js';
 import financeSupport from './dictionaries/es/financeSupport.js';
+import views from './dictionaries/es/views.js';
 
 export default {
   ...common,
@@ -19,5 +20,6 @@ export default {
   ...enrolments,
   ...programmesIntakes,
   ...learningHub,
-  ...financeSupport
+  ...financeSupport,
+  ...views
 };
