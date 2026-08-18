@@ -33,6 +33,22 @@ const ACTION_KEY = {
 const fmt = (v) => (v === null || v === undefined || v === '' ? '—' : String(v));
 
 /**
+ * The audit entry's `changedFields` names every field the edit *submitted*,
+ * not every field whose value actually moved — a save that re-sends a field
+ * untouched still lists it. Keeps a field only when before/after truly
+ * differ; a field with no before/after captured at all (e.g. an archive
+ * action) has nothing to compare, so it is kept rather than guessed away.
+ */
+function realChanges(a) {
+  return (a.changedFields || []).filter((f) => {
+    const hasBefore = a.before && Object.prototype.hasOwnProperty.call(a.before, f);
+    const hasAfter = a.after && Object.prototype.hasOwnProperty.call(a.after, f);
+    if (!hasBefore && !hasAfter) return true;
+    return fmt(a.before ? a.before[f] : undefined) !== fmt(a.after ? a.after[f] : undefined);
+  });
+}
+
+/**
  * Renders an audit trail.
  *
  * Presentational only: the rows come from whichever detail endpoint already
@@ -68,23 +84,27 @@ export default function ActivityLog({ rows, unavailable }) {
               Rendered as text, never as a changed field, because nothing on the
               CRM record changed to hold it. */}
           {a.note && <p className="act-note">{a.note}</p>}
-          {a.changedFields && a.changedFields.length > 0 && (
-            <ul className="chg">
-              {a.changedFields.map((f) => {
-                const before = a.before ? a.before[f] : undefined;
-                const after = a.after ? a.after[f] : undefined;
-                if (before === undefined && after === undefined) {
-                  return <li key={f}><span className="mono">{f}</span></li>;
-                }
-                return (
-                  <li key={f}>
-                    <span className="mono">{f}</span>: <span className="was">{fmt(before)}</span>
-                    {' → '}<strong>{fmt(after)}</strong>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          {(() => {
+            const changed = realChanges(a);
+            if (!changed.length) return null;
+            return (
+              <ul className="chg">
+                {changed.map((f) => {
+                  const before = a.before ? a.before[f] : undefined;
+                  const after = a.after ? a.after[f] : undefined;
+                  if (before === undefined && after === undefined) {
+                    return <li key={f}><span className="mono">{f}</span></li>;
+                  }
+                  return (
+                    <li key={f}>
+                      <span className="mono">{f}</span>: <span className="was">{fmt(before)}</span>
+                      {' → '}<strong>{fmt(after)}</strong>
+                    </li>
+                  );
+                })}
+              </ul>
+            );
+          })()}
         </li>
       ))}
     </ol>
