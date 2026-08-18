@@ -5,10 +5,10 @@ import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterChips, SourceBadge, ConfirmDialog, fmtDate, fmtMoney
+  Async, Card, Pill, Pagination, FilterChips, SourceBadge, ConfirmDialog, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import ApplicationBoard from '../components/ApplicationBoard.jsx';
-import { useViews, useViewDraft, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
+import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { APPLICATION_FIELDS } from '../viewFields.js';
 
 // Matches the table this page has always rendered — expectedDecisionDate is
@@ -93,20 +93,19 @@ export default function Applications() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>{t('applications.pageTitle')}</h1>
-      </div>
+      {/* The active nav item already names this page; a repeated visible
+          heading was pure redundancy. The h1 stays for screen readers. */}
+      <h1 className="sr-only">{t('applications.pageTitle')}</h1>
 
       <Card
         header={(
           <>
             <div className="view-header-left">
-              <SearchBox
-                id="application-search"
-                label={t('common.search')}
-                value={list.search}
-                onChange={list.setSearch}
-                placeholder={t('applications.searchPlaceholder')}
+              <ViewSelect
+                views={views.views}
+                activeViewId={views.activeViewId}
+                defaultViewId={views.defaultViewId}
+                onSelect={views.selectView}
               />
             </div>
             <div className="head-actions">
@@ -140,10 +139,6 @@ export default function Applications() {
             list.filters.awaitingAction === 'true' && {
               key: 'awaitingAction', label: t('applications.filters.queue'), value: t('applications.filters.awaitingOurAction'),
               onClear: () => list.setFilter('awaitingAction', '')
-            },
-            list.search && {
-              key: 'search', label: t('common.search'), value: list.search,
-              onClear: () => list.setSearch('')
             }
           ]}
           onClearAll={list.clearFilters}
@@ -152,12 +147,9 @@ export default function Applications() {
         <div className="view-layout">
           <ViewFilterPanel
             fields={applicationFields}
-            views={views.views}
-            activeViewId={views.activeViewId}
             defaultViewId={views.defaultViewId}
             draft={draft}
             onDraftChange={setDraft}
-            onSelectView={views.selectView}
             onSave={views.saveView}
             onDelete={(id) => setDeletingViewId(id)}
             onToggleDefault={views.toggleDefaultView}

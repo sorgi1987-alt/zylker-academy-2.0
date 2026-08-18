@@ -202,19 +202,41 @@ function ConditionRow({ condition, fields, onChange, onRemove }) {
 }
 
 /**
- * The persistent left-hand panel beside the record table: view switcher,
- * live filter/column/sort builder, and save/default/delete for the current
- * draft — matching the reference (Zoho CRM's own view tabs + "Filter by"
- * panel sitting beside the list, not above it or behind a dialog).
+ * The view dropdown alone — sits where a plain page title/search box used to
+ * (Card's `header`), on the same line the reference (Zoho CRM) uses for its
+ * own view tabs. A visually-hidden label keeps it accessible without
+ * repeating "View" next to a control that's the first thing on the page.
+ */
+export function ViewSelect({ views, activeViewId, defaultViewId, onSelect }) {
+  const t = useT();
+  return (
+    <div className="field view-select-field">
+      <label htmlFor="view-select" className="sr-only">{t('views.viewLabel')}</label>
+      <select id="view-select" value={activeViewId || ''} onChange={(e) => onSelect(e.target.value)}>
+        <option value="">{t('views.allRecords')}</option>
+        {views.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.name}{v.id === defaultViewId ? ` — ${t('views.defaultTag')}` : ''}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * The persistent left-hand panel beside the record table: live filter/
+ * column/sort builder, and save/default/delete for the current draft —
+ * matching the reference (Zoho CRM's own "Filter by" panel sitting beside
+ * the list, not above it or behind a dialog). The view switcher itself lives
+ * in the page header (ViewSelect above), not here.
  *
  * `fields` is one of the registries in viewFields.js (or a copy with
  * `options` overridden for a dynamic enum, e.g. live application stages).
  * `draft`/`onDraftChange` is the working copy (see useViewDraft) — every
  * edit here calls back immediately so the page can apply it live.
  */
-export function ViewFilterPanel({
-  fields, views, activeViewId, defaultViewId, draft, onDraftChange, onSelectView, onSave, onDelete, onToggleDefault
-}) {
+export function ViewFilterPanel({ fields, defaultViewId, draft, onDraftChange, onSave, onDelete, onToggleDefault }) {
   const t = useT();
   const hideable = fields.filter((f) => !f.primary);
   const primary = fields.find((f) => f.primary);
@@ -240,18 +262,6 @@ export function ViewFilterPanel({
 
   return (
     <form className="view-panel" onSubmit={submit} noValidate>
-      <div className="view-panel-section">
-        <h3>{t('views.viewLabel')}</h3>
-        <select aria-label={t('views.viewLabel')} value={activeViewId || ''} onChange={(e) => onSelectView(e.target.value)}>
-          <option value="">{t('views.allRecords')}</option>
-          {views.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}{v.id === defaultViewId ? ` — ${t('views.defaultTag')}` : ''}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <div className="view-panel-section">
         <h3>{t('views.filtersHeading')}</h3>
         {draft.conditions.length === 0 && <p className="muted small">{t('views.noConditions')}</p>}

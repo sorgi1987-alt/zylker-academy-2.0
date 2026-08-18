@@ -591,6 +591,7 @@ input[type=search]{flex:1;min-width:220px}
 .view-header{flex-wrap:wrap;row-gap:10px}
 .view-header-left{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;flex:1 1 240px;min-width:0}
 .view-header-left .field{margin-bottom:0}
+.view-select-field select{min-width:200px}
 
 /* Two-column body: a persistent filter panel beside the record table,
    matching the reference layout instead of a toggled overlay. */

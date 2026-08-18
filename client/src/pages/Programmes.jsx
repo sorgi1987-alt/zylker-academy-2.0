@@ -5,10 +5,10 @@ import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, SourceBadge, Modal, ConfirmDialog, useToast, fmtMoney
+  Async, Card, Pill, Pagination, SourceBadge, Modal, ConfirmDialog, useToast, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
-import { useViews, useViewDraft, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
+import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { PROGRAMME_FIELDS } from '../viewFields.js';
 
 const LEVELS = ['Foundation', 'Certificate', 'Diploma', 'Undergraduate', 'Postgraduate', 'Professional', 'Other'];
@@ -144,20 +144,19 @@ export default function Programmes() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>{t('programmes.pageTitle')}</h1>
-      </div>
+      {/* The active nav item already names this page; a repeated visible
+          heading was pure redundancy. The h1 stays for screen readers. */}
+      <h1 className="sr-only">{t('programmes.pageTitle')}</h1>
 
       <Card
         header={(
           <>
             <div className="view-header-left">
-              <SearchBox
-                id="programme-search"
-                label={t('common.search')}
-                value={list.search}
-                onChange={list.setSearch}
-                placeholder={t('programmes.searchPlaceholder')}
+              <ViewSelect
+                views={views.views}
+                activeViewId={views.activeViewId}
+                defaultViewId={views.defaultViewId}
+                onSelect={views.selectView}
               />
             </div>
             <div className="head-actions">
@@ -175,12 +174,9 @@ export default function Programmes() {
         <div className="view-layout">
           <ViewFilterPanel
             fields={PROGRAMME_FIELDS}
-            views={views.views}
-            activeViewId={views.activeViewId}
             defaultViewId={views.defaultViewId}
             draft={draft}
             onDraftChange={setDraft}
-            onSelectView={views.selectView}
             onSave={views.saveView}
             onDelete={(id) => setDeletingViewId(id)}
             onToggleDefault={views.toggleDefaultView}

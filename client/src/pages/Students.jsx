@@ -5,9 +5,9 @@ import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, SourceBadge, ConfirmDialog, fmtDate
+  Async, Card, Pill, Pagination, SourceBadge, ConfirmDialog, fmtDate
 } from '../components/Ui.jsx';
-import { useViews, useViewDraft, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
+import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { STUDENT_FIELDS } from '../viewFields.js';
 
 // The columns shown with no custom view selected — matches the table this
@@ -40,20 +40,19 @@ export default function Students() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>{t('students.pageTitle')}</h1>
-      </div>
+      {/* The active nav item already names this page; a repeated visible
+          heading was pure redundancy. The h1 stays for screen readers. */}
+      <h1 className="sr-only">{t('students.pageTitle')}</h1>
 
       <Card
         header={(
           <>
             <div className="view-header-left">
-              <SearchBox
-                id="student-search"
-                label={t('students.searchLabel')}
-                value={list.search}
-                onChange={list.setSearch}
-                placeholder={t('students.searchPlaceholder')}
+              <ViewSelect
+                views={views.views}
+                activeViewId={views.activeViewId}
+                defaultViewId={views.defaultViewId}
+                onSelect={views.selectView}
               />
             </div>
             <div className="head-actions">
@@ -67,12 +66,9 @@ export default function Students() {
         <div className="view-layout">
           <ViewFilterPanel
             fields={STUDENT_FIELDS}
-            views={views.views}
-            activeViewId={views.activeViewId}
             defaultViewId={views.defaultViewId}
             draft={draft}
             onDraftChange={setDraft}
-            onSelectView={views.selectView}
             onSave={views.saveView}
             onDelete={(id) => setDeletingViewId(id)}
             onToggleDefault={views.toggleDefaultView}
@@ -83,7 +79,7 @@ export default function Students() {
               state={list}
               empty={{
                 title: t('students.empty.title'),
-                message: list.search || draft.conditions.length
+                message: draft.conditions.length
                   ? t('students.empty.filtered')
                   : t('students.empty.default')
               }}
