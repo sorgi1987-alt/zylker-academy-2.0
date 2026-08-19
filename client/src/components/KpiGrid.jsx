@@ -192,9 +192,22 @@ const writeJSON = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* best-effort */ }
 };
 
+// Out of the box every tile used to show at once — 23 of them, before anyone
+// had a chance to trim it. This curated set is what a fresh dashboard shows
+// instead: the numbers "Needs attention" already treats as operationally
+// urgent, plus the two clearest headline counts (students, active
+// enrolments). Everything else is a deliberate opt-in via Customize rather
+// than something new users have to opt out of one tile at a time.
+const DEFAULT_VISIBLE_KPIS = [
+  'applicationsAwaitingAction', 'offersAwaitingResponse', 'students',
+  'activeEnrolments', 'enrolmentsWithoutLmsMapping', 'intakeCapacityWarnings',
+  'learnersNoRecentActivity', 'failedSyncs', 'overdueInvoices', 'overdueTickets'
+];
+const DEFAULT_HIDDEN_KPIS = KPI_DEFS.map((d) => d.key).filter((k) => !DEFAULT_VISIBLE_KPIS.includes(k));
+
 export const readHiddenKpis = () => {
-  const raw = readJSON(HIDDEN_STORAGE_KEY, []);
-  return Array.isArray(raw) ? raw.filter((k) => KNOWN_KEYS.has(k)) : [];
+  const raw = readJSON(HIDDEN_STORAGE_KEY, null);
+  return Array.isArray(raw) ? raw.filter((k) => KNOWN_KEYS.has(k)) : DEFAULT_HIDDEN_KPIS;
 };
 export const writeHiddenKpis = (keys) => writeJSON(HIDDEN_STORAGE_KEY, keys);
 export const resetKpiLayout = () => { try { localStorage.removeItem(LAYOUT_STORAGE_KEY); } catch { /* best-effort */ } };

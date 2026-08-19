@@ -189,8 +189,15 @@ a{color:var(--brand-2)}
 .page-head-row h1{margin:0}
 .page-head-row .btn{margin-top:0}
 
-/* --- dashboard refresh --- */
-.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0}
+/* --- dashboard refresh ---
+   `.btn.icon-btn` (not plain `.icon-btn`): the button carries both classes,
+   and .btn's own padding/margin-top (defined later in this file) has equal
+   specificity to a single-class .icon-btn rule — same-specificity ties go to
+   whichever rule is LAST in source order, which was .btn, silently
+   overriding padding:0 back to .btn's 8px/15px and pushing the icon off
+   the button's true centre. Two classes on the selector outranks one
+   regardless of order. */
+.btn.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;margin-top:0}
 .icon-btn:disabled{opacity:.6;cursor:default}
 .icon-btn.spinning .ic{animation:spin .8s linear infinite}
 .dash-updated{white-space:nowrap}
