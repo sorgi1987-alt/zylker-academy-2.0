@@ -225,6 +225,16 @@ a{color:var(--brand-2)}
   display:flex;align-items:center;justify-content:center;z-index:2;padding:0}
 .kpi-grid-item:hover .kpi-hide-btn{opacity:1}
 .kpi-hide-btn:hover{background:var(--stop-soft);color:var(--stop);border-color:var(--stop)}
+/* The only part of a tile that starts a drag (draggableHandle in
+   KpiGrid.jsx) — everything else on the tile, including the link, is a
+   plain click with no drag ambiguity to lose to. */
+.kpi-drag-handle{position:absolute;bottom:8px;left:8px;width:22px;height:22px;border-radius:50%;
+  border:1px solid var(--line);background:#fff;color:var(--ink-3);
+  opacity:0;transition:opacity .12s,background .12s,color .12s,border-color .12s;
+  display:flex;align-items:center;justify-content:center;z-index:2;cursor:grab}
+.kpi-grid-item:hover .kpi-drag-handle{opacity:1}
+.kpi-drag-handle:hover{background:var(--brand-soft);color:var(--brand);border-color:var(--brand)}
+.kpi-drag-handle:active{cursor:grabbing}
 .kpi-section-tag{position:absolute;bottom:9px;right:12px;font-size:10px;text-transform:uppercase;
   letter-spacing:.05em;color:var(--ink-3);opacity:.55;pointer-events:none}
 /* react-grid-layout's own resize handle: recoloured to match the app's ink

@@ -10,9 +10,10 @@ export default {
     updatedHoursAgo: 'Actualizado hace {hours} h',
     customize: 'Personalizar',
     customizeTitle: 'Personalizar el panel',
-    customizeIntro: 'Elige qué indicadores se muestran en tu panel, o arrastra y cambia el tamaño de uno directamente en la página. Se recuerda solo en este dispositivo.',
+    customizeIntro: 'Elige qué indicadores se muestran en tu panel. En la página, arrastra un indicador por su asa para moverlo, o usa la esquina para cambiar su tamaño. Se recuerda solo en este dispositivo.',
     resetLayout: 'Restablecer diseño',
     hideKpi: 'Ocultar este indicador',
+    dragHandle: 'Arrastra para mover este indicador',
     allSectionsHidden: 'No se muestra ningún indicador. Usa Personalizar para volver a mostrar alguno.',
     section: {
       admissions: 'Admisiones',

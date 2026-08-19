@@ -15,9 +15,10 @@ export default {
     updatedHoursAgo: 'Updated {hours}h ago',
     customize: 'Customize',
     customizeTitle: 'Customize dashboard',
-    customizeIntro: 'Choose which KPI tiles show on your dashboard, or drag and resize a tile directly on the page. Remembered on this device only.',
+    customizeIntro: 'Choose which KPI tiles show on your dashboard. On the page, drag a tile by its handle to move it, or use the corner to resize it. Remembered on this device only.',
     resetLayout: 'Reset layout',
     hideKpi: 'Hide this tile',
+    dragHandle: 'Drag to move this tile',
     allSectionsHidden: 'No KPI tiles are showing. Use Customize to bring one back.',
     section: {
       admissions: 'Admissions',

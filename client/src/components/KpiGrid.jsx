@@ -13,6 +13,19 @@ const TILE_H = 3;
 const ROW_HEIGHT = 34;
 const TILES_PER_ROW = GRID_COLS / TILE_W;
 
+// Six dots read as a grip regardless of locale or icon familiarity — no text
+// label to translate, no risk of being mistaken for anything actionable.
+const IconGrip = () => (
+  <svg className="ic" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">
+    <circle cx="5" cy="3" r="1.3" />
+    <circle cx="11" cy="3" r="1.3" />
+    <circle cx="5" cy="8" r="1.3" />
+    <circle cx="11" cy="8" r="1.3" />
+    <circle cx="5" cy="13" r="1.3" />
+    <circle cx="11" cy="13" r="1.3" />
+  </svg>
+);
+
 /**
  * Every KPI tile, flattened into one list instead of grouped by section in
  * JSX. A flat list with a stable `key` per tile is what makes free drag,
@@ -277,7 +290,7 @@ export default memo(function KpiGrid({ data, hidden, onHide }) {
       isResizable
       isDraggable
       resizeHandles={['se']}
-      draggableCancel=".kpi-hide-btn"
+      draggableHandle=".kpi-drag-handle"
       onDragStop={persist}
       onResizeStop={persist}
     >
@@ -285,6 +298,16 @@ export default memo(function KpiGrid({ data, hidden, onHide }) {
         <div key={def.key} className="kpi-grid-item">
           {def.render(t, data)}
           <span className="kpi-section-tag">{t(`dashboard.section.${def.section}`)}</span>
+          {/*
+           * Dragging used to fire on the whole tile, which is also a link —
+           * a click that moved even a pixel got swallowed as a drag instead
+           * of navigating, and a click that didn't move looked like it had
+           * hesitated. Scoping drag to this handle (draggableHandle above)
+           * means the tile's own click always just navigates.
+           */}
+          <span className="kpi-drag-handle" title={t('dashboard.dragHandle')} aria-hidden="true">
+            <IconGrip />
+          </span>
           <button
             type="button"
             className="kpi-hide-btn"
