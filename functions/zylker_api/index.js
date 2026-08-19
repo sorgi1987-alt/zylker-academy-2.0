@@ -635,48 +635,32 @@ function buildCrmDashboardAggregate(S, A, P, I, E) {
   };
 }
 
+/*
+ * Split in two so the client can render each half as soon as it's ready
+ * instead of one waterfall blocking the whole grid behind whichever source
+ * is slowest (kickoff-prompt.md §2/§3 phases 4 and 9's own reasoning,
+ * extended client-side): /api/dashboard is CRM + LMS — a shared cache entry
+ * (dashboard:aggregate, ~4 min TTL) on top of Datastore projections already
+ * at 0 Zoho calls, plus LMS's own Datastore-backed status — both fast
+ * regardless of cache state. /api/dashboard/external is Books + Desk, the
+ * two sources that stay on a live-underneath read per kickoff-prompt.md §1
+ * (no projection/Signals pipeline for those two) and were measured to be
+ * the dominant cost of a dashboard load (~3-4s each) even behind the same
+ * short-TTL cache used here (cache.TTL.EXTERNAL_TOTALS_MS, ~2 min) — this
+ * endpoint, /api/attention and /api/integration-status all read the same
+ * two cache keys, so a hit here is a hit for all three.
+ */
 R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
-  // Read-model + cache PoC (kickoff-prompt.md §2/§3 phases 4 and 9): the
-  // CRM-only half is a shared cache entry (dashboard:aggregate, ~4 min TTL —
-  // one institutional rollup serves every session, not one per teacher) on
-  // top of the Datastore projections (already 0 Zoho calls as of phase 4).
-  // Books/Desk stay on a live-underneath read per kickoff-prompt.md §1 (no
-  // projection/Signals pipeline for those two) — but the live calls
-  // themselves sit behind the same short-TTL cache.readThrough used above
-  // (cache.TTL.EXTERNAL_TOTALS_MS, ~2 min), since they were measured to be
-  // the dominant cost of a dashboard load (~3-4s each) and this endpoint,
-  // /api/attention and /api/integration-status all ask for the same two
-  // numbers — a cache hit here is a cache hit for all three.
-  const [crmAggregate, [lmsStatus, booksTotals, booksHealth, deskTotals, deskHealth]] = await Promise.all([
+  const [crmAggregate, lmsStatus] = await Promise.all([
     cache.readThrough(req, cache.KEYS.DASHBOARD_AGGREGATE, cache.TTL.DASHBOARD_AGGREGATE_MS, async () => {
       const [S, A, P, I, E] = await Promise.all([
         readStudents(req), readApplications(req), readProgrammes(req), readIntakes(req), readEnrolments(req)
       ]);
       return buildCrmDashboardAggregate(S, A, P, I, E);
     }),
-    // The LMS connector, Books and Desk are settled independently and never
-    // rejected, so a failure in any one degrades one card instead of the
-    // whole dashboard. A cache miss/expiry still propagates a real failure
-    // here rather than caching it — see cache.readThrough's contract.
-    Promise.all([
-      lms.status(req),
-      cfg.books.organizationId
-        ? cache.readThrough(req, cache.KEYS.BOOKS_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => books.invoiceTotals(z, req))
-          .catch((err) => ({ error: z.safeError(err, 'books') }))
-        : Promise.resolve(null),
-      cache.readThrough(req, cache.KEYS.BOOKS_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => books.health(z, req))
-        .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
-      cfg.desk.organizationId
-        ? cache.readThrough(req, cache.KEYS.DESK_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.ticketTotals(z, req))
-          .catch((err) => ({ error: z.safeError(err, 'desk') }))
-        : Promise.resolve(null),
-      cache.readThrough(req, cache.KEYS.DESK_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.health(z, req))
-        .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
-    ])
+    lms.status(req)
   ]);
 
-  const booksOk = booksTotals && !booksTotals.error;
-  const deskOk = deskTotals && !deskTotals.error;
   const lmsOk = lmsStatus && lmsStatus.status === 'connected' && lmsStatus.counts;
 
   ok(res, {
@@ -711,7 +695,55 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
       inactiveLearners: {
         value: lmsOk ? lmsStatus.counts.inactiveLearners : null,
         source: 'lms', unavailable: !lmsOk
-      },
+      }
+    },
+    applicationsByStage: crmAggregate.applicationsByStage,
+    enrolmentsByStatus: crmAggregate.enrolmentsByStatus,
+    /*
+     * Admissions funnel. Ordered by the pipeline rather than by size, and
+     * cumulative — each step counts everyone who reached it, including those who
+     * have since moved past it, which is what makes the drop between steps
+     * meaningful. Rejected and Withdrawn are exits, not steps, so they are
+     * reported beside the funnel instead of inside it.
+     */
+    admissionsFunnel: crmAggregate.admissionsFunnel,
+    admissionsExits: crmAggregate.admissionsExits,
+    enrolmentsByProgramme: crmAggregate.enrolmentsByProgramme,
+    intakeCapacity: crmAggregate.intakeCapacity,
+    lmsCoursesByProvider: lmsOk ? lmsStatus.coursesByProvider : null,
+    learnersByLmsStatus: lmsOk ? lmsStatus.learnersByStatus : null,
+    recentApplications: crmAggregate.recentApplications,
+    upcomingIntakes: crmAggregate.upcomingIntakesList,
+    recentStudents: crmAggregate.recentStudents,
+    connections: {
+      crm: { status: 'connected', label: 'Connected' },
+      lms: { status: lmsStatus.status, label: lmsStatus.label, detail: lmsStatus.detail || null, demonstrationDataset: true }
+    }
+  });
+});
+
+/** The Books/Desk half of the dashboard — see the split rationale above. */
+R('/api/dashboard/external', perms.P.DASHBOARD_READ, async (req, res) => {
+  const [booksTotals, booksHealth, deskTotals, deskHealth] = await Promise.all([
+    cfg.books.organizationId
+      ? cache.readThrough(req, cache.KEYS.BOOKS_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => books.invoiceTotals(z, req))
+        .catch((err) => ({ error: z.safeError(err, 'books') }))
+      : Promise.resolve(null),
+    cache.readThrough(req, cache.KEYS.BOOKS_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => books.health(z, req))
+      .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
+    cfg.desk.organizationId
+      ? cache.readThrough(req, cache.KEYS.DESK_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.ticketTotals(z, req))
+        .catch((err) => ({ error: z.safeError(err, 'desk') }))
+      : Promise.resolve(null),
+    cache.readThrough(req, cache.KEYS.DESK_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.health(z, req))
+      .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+  ]);
+
+  const booksOk = booksTotals && !booksTotals.error;
+  const deskOk = deskTotals && !deskTotals.error;
+
+  ok(res, {
+    kpis: {
       outstandingInvoices: {
         value: booksOk ? booksTotals.outstandingCount : null,
         source: 'books', unavailable: !booksOk
@@ -743,32 +775,12 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
         partial: deskOk ? deskTotals.truncated === true : false
       }
     },
-    applicationsByStage: crmAggregate.applicationsByStage,
-    enrolmentsByStatus: crmAggregate.enrolmentsByStatus,
-    /*
-     * Admissions funnel. Ordered by the pipeline rather than by size, and
-     * cumulative — each step counts everyone who reached it, including those who
-     * have since moved past it, which is what makes the drop between steps
-     * meaningful. Rejected and Withdrawn are exits, not steps, so they are
-     * reported beside the funnel instead of inside it.
-     */
-    admissionsFunnel: crmAggregate.admissionsFunnel,
-    admissionsExits: crmAggregate.admissionsExits,
-    enrolmentsByProgramme: crmAggregate.enrolmentsByProgramme,
     // Money outstanding by how long it has been outstanding. Null, not an empty
     // object, when Books did not answer — so the card can say so.
     invoiceAgeing: booksOk ? booksTotals.ageing : null,
     invoiceAgeingCurrency: booksOk ? booksTotals.currency : null,
     ticketsByStatus: deskOk ? deskTotals.byStatus : null,
-    intakeCapacity: crmAggregate.intakeCapacity,
-    lmsCoursesByProvider: lmsOk ? lmsStatus.coursesByProvider : null,
-    learnersByLmsStatus: lmsOk ? lmsStatus.learnersByStatus : null,
-    recentApplications: crmAggregate.recentApplications,
-    upcomingIntakes: crmAggregate.upcomingIntakesList,
-    recentStudents: crmAggregate.recentStudents,
     connections: {
-      crm: { status: 'connected', label: 'Connected' },
-      lms: { status: lmsStatus.status, label: lmsStatus.label, detail: lmsStatus.detail || null, demonstrationDataset: true },
       books: booksHealth,
       desk: deskHealth
     }

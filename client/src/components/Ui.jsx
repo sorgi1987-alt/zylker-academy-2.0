@@ -230,7 +230,7 @@ export const Pill = ({ value, tone }) => {
  * around all re-render Dashboard/KpiGrid, and without this every other tile
  * would re-render along with them for no reason.
  */
-export const Kpi = React.memo(({ label, value, unavailable, source, to, partial, format }) => {
+export const Kpi = React.memo(({ label, value, unavailable, source, to, partial, format, loading }) => {
   const t = useT();
   const body = (
     <>
@@ -240,10 +240,20 @@ export const Kpi = React.memo(({ label, value, unavailable, source, to, partial,
         <span className="label-text" title={label}>{label}</span>
         {source && <SourceBadge source={source} />}
       </div>
-      {unavailable
-        ? <div className="value na" title={t('common.notAvailableTitle')}>{t('common.notAvailable')}</div>
-        : <div className="value mono">{format ? format(value) : (value ?? 0)}</div>}
-      {partial && !unavailable && (
+      {/*
+       * Distinct from `unavailable`: this source hasn't answered YET (its own
+       * independent request is still in flight, e.g. Books/Desk loading
+       * after the CRM-backed tiles have already rendered — see Dashboard.jsx)
+       * rather than having answered with a failure. Showing "Not available"
+       * here would be a false claim about a source that just hasn't been
+       * asked yet.
+       */}
+      {loading
+        ? <div className="skel" style={{ width: '55%', height: 30, marginTop: 6 }} />
+        : unavailable
+          ? <div className="value na" title={t('common.notAvailableTitle')}>{t('common.notAvailable')}</div>
+          : <div className="value mono">{format ? format(value) : (value ?? 0)}</div>}
+      {partial && !unavailable && !loading && (
         <div className="field-hint">{t('common.partial')}</div>
       )}
     </>
@@ -436,13 +446,20 @@ export const BarList = React.memo(({ data, emptyText }) => {
   );
 });
 
+// 'checking' is a client-side-only status (Dashboard.jsx, while the Books/
+// Desk half of the dashboard is still loading independently of the CRM/LMS
+// half) — never something a health-check route itself reports.
 export const ConnDot = React.memo(({ label, status, detail }) => {
   const t = useT();
   return (
     <div className="conn">
       <span className={`dot ${status === 'connected' ? 'ok' : status === 'unavailable' ? 'stop' : 'mute'}`} />
       <strong>{label}</strong>
-      <span className="muted">{status === 'connected' ? t('common.connected') : detail || t('common.unavailable')}</span>
+      <span className="muted">
+        {status === 'connected' ? t('common.connected')
+          : status === 'checking' ? t('common.checking')
+          : detail || t('common.unavailable')}
+      </span>
     </div>
   );
 });

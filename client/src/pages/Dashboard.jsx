@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
@@ -28,11 +28,17 @@ function timeAgo(date, t) {
   return t('dashboard.updatedHoursAgo', { hours });
 }
 
+// A single-arrow arc (like the nav's "activity" glyph) reads as visually
+// off-centre in a small square button — its own ink is concentrated in one
+// corner, so a flexbox-centred bounding box still looks lopsided. Two arrows
+// (top-right and bottom-left) balance the icon's weight around its centre
+// instead.
 const IconRefresh = () => (
   <svg className="ic" viewBox="0 0 24 24" width="16" height="16" fill="none"
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M3 12a9 9 0 1 0 3-6.7" />
-    <path d="M3 4v5h5" />
+    <polyline points="23 4 23 10 17 10" />
+    <polyline points="1 20 1 14 7 14" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
   </svg>
 );
 
@@ -45,7 +51,7 @@ const IconRefresh = () => (
  * block anyway, since it's a sibling in the same component. `data` is the
  * one prop, and it only ever changes once — when the initial fetch resolves.
  */
-const DashboardCharts = memo(function DashboardCharts({ data: d, t }) {
+const DashboardCharts = memo(function DashboardCharts({ data: d, externalReady, t }) {
   return (
     <>
       <div className="grid g-2">
@@ -83,16 +89,18 @@ const DashboardCharts = memo(function DashboardCharts({ data: d, t }) {
             </div>
           )}
         >
-          {d.invoiceAgeing
-            ? (
-              <MoneyBarList
-                data={d.invoiceAgeing}
-                order={['Not yet due', '1–30 days', '31–60 days', '61–90 days', 'Over 90 days']}
-                currency={d.invoiceAgeingCurrency}
-                emptyText={t('dashboard.nothingOutstanding')}
-              />
-            )
-            : <p className="muted">{t('dashboard.booksUnavailable')}</p>}
+          {!externalReady
+            ? <div className="skel" style={{ height: 90 }} />
+            : d.invoiceAgeing
+              ? (
+                <MoneyBarList
+                  data={d.invoiceAgeing}
+                  order={['Not yet due', '1–30 days', '31–60 days', '61–90 days', 'Over 90 days']}
+                  currency={d.invoiceAgeingCurrency}
+                  emptyText={t('dashboard.nothingOutstanding')}
+                />
+              )
+              : <p className="muted">{t('dashboard.booksUnavailable')}</p>}
         </Card>
 
         <Card
@@ -104,9 +112,11 @@ const DashboardCharts = memo(function DashboardCharts({ data: d, t }) {
             </div>
           )}
         >
-          {d.ticketsByStatus
-            ? <BarList data={d.ticketsByStatus} emptyText={t('dashboard.noTicketsRecorded')} />
-            : <p className="muted">{t('dashboard.deskUnavailable')}</p>}
+          {!externalReady
+            ? <div className="skel" style={{ height: 90 }} />
+            : d.ticketsByStatus
+              ? <BarList data={d.ticketsByStatus} emptyText={t('dashboard.noTicketsRecorded')} />
+              : <p className="muted">{t('dashboard.deskUnavailable')}</p>}
         </Card>
       </div>
 
@@ -212,14 +222,24 @@ const DashboardCharts = memo(function DashboardCharts({ data: d, t }) {
   );
 });
 
+// Which KPI keys come from the Books/Desk half, and which source badge each
+// carries — used to fill in a loading placeholder for these specific tiles
+// while /api/dashboard/external is still in flight, so KpiGrid's flat
+// KPI_DEFS list (which assumes every tile's data already exists) never sees
+// an undefined entry.
+const EXTERNAL_KPI_SOURCE = {
+  outstandingInvoices: 'books', overdueInvoices: 'books', outstandingBalance: 'books', overdueBalance: 'books',
+  openTickets: 'desk', overdueTickets: 'desk'
+};
+
 /**
  * Dashboard — an operational workspace rather than a summary.
  *
- * Two independent requests: the attention queue and the figures. They load and
- * fail separately, so a slow Books aggregation delays one panel instead of the
- * page, and within the figures each source is settled on its own — an
- * unreachable Books reads "Not available" on its own cards while the CRM ones
- * carry on.
+ * Three independent requests: the attention queue, the CRM+LMS figures, and
+ * the Books+Desk figures. They load and fail separately, so a slow Books
+ * aggregation delays its own tiles/cards instead of the whole page, and an
+ * unreachable Books reads "Not available" on its own cards while the CRM
+ * ones carry on.
  *
  * Every card is a link to the list it summarises, already filtered, and the
  * destination shows a chip naming that filter. A number here is the start of a
@@ -227,7 +247,16 @@ const DashboardCharts = memo(function DashboardCharts({ data: d, t }) {
  */
 export default function Dashboard() {
   const t = useT();
+  // Two independent requests for two independently-slow halves of the same
+  // page (kickoff-prompt.md §2/§3's own reasoning for /api/attention,
+  // extended here): CRM+LMS is fast and mostly cache-backed; Books/Desk can
+  // still take a few seconds on a cold cache. Waiting for both before
+  // rendering anything would mean the whole grid sits behind whichever one
+  // is slower — instead the CRM-backed tiles/charts render as soon as
+  // `state` resolves, and only the Books/Desk-derived tiles show their own
+  // loading placeholder until `externalState` catches up.
   const state = useApi((o) => api.dashboard(o), []);
+  const externalState = useApi((o) => api.dashboardExternal(o), []);
   const [hidden, setHidden] = useState(readHiddenKpis);
   const [customizing, setCustomizing] = useState(false);
   // Bumped to force KpiGrid to remount and re-read localStorage after a
@@ -235,21 +264,61 @@ export default function Dashboard() {
   // through to a component whose whole point is owning that state itself.
   const [layoutVersion, setLayoutVersion] = useState(0);
 
-  // Stamped whenever a fetch (initial load or a manual Refresh) resolves —
-  // this is when the browser last heard from the server, not when the
-  // server's own cache entry was computed, but it's what "Refresh" can
-  // actually promise: a new request, not a guarantee the cache happened to
-  // be stale.
+  // Stamped whenever either fetch (initial load or a manual Refresh)
+  // resolves — this is when the browser last heard from the server, not
+  // when the server's own cache entry was computed, but it's what "Refresh"
+  // can actually promise: a new request, not a guarantee the cache happened
+  // to be stale. With two independent requests this naturally settles on
+  // whichever of the two finished more recently.
   const [lastUpdated, setLastUpdated] = useState(null);
   useEffect(() => {
-    if (state.status === 'ready') setLastUpdated(new Date());
-  }, [state.status, state.data]);
+    if (state.status === 'ready' || externalState.status === 'ready') setLastUpdated(new Date());
+  }, [state.status, state.data, externalState.status, externalState.data]);
   // Re-renders the "Xm ago" text as time passes, without which it would only
   // ever update on some unrelated interaction re-rendering the page.
   const [, forceTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => forceTick((n) => n + 1), 30000);
     return () => clearInterval(id);
+  }, []);
+
+  // One merged object for KpiGrid/DashboardCharts, memoized so opening
+  // Customize or hiding a tile — neither of which touches this data — does
+  // not defeat their own memoization by handing them a freshly-built object
+  // every render (the same reasoning DashboardCharts' own memo comment
+  // explains).
+  const mergedData = useMemo(() => {
+    if (!state.data) return null;
+    const kpis = { ...state.data.kpis };
+    if (externalState.data) {
+      Object.assign(kpis, externalState.data.kpis);
+    } else {
+      const loading = externalState.status !== 'error';
+      Object.keys(EXTERNAL_KPI_SOURCE).forEach((key) => {
+        kpis[key] = { value: null, loading, unavailable: !loading, source: EXTERNAL_KPI_SOURCE[key] };
+      });
+    }
+    const checking = { status: externalState.status === 'error' ? 'unavailable' : 'checking', label: null, detail: null };
+    return {
+      ...state.data,
+      kpis,
+      invoiceAgeing: externalState.data ? externalState.data.invoiceAgeing : null,
+      invoiceAgeingCurrency: externalState.data ? externalState.data.invoiceAgeingCurrency : null,
+      ticketsByStatus: externalState.data ? externalState.data.ticketsByStatus : null,
+      connections: {
+        ...state.data.connections,
+        books: (externalState.data && externalState.data.connections.books) || checking,
+        desk: (externalState.data && externalState.data.connections.desk) || checking
+      }
+    };
+  }, [state.data, externalState.data, externalState.status]);
+  const externalReady = Boolean(externalState.data);
+
+  const refreshing = state.status === 'loading' || externalState.status === 'loading';
+  const refreshAll = useCallback(() => {
+    state.reload();
+    externalState.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Stable identity: passed to KpiGrid as `onHide`, and KpiGrid is memoized
@@ -275,11 +344,11 @@ export default function Dashboard() {
         <div className="head-actions">
           <button
             type="button"
-            className={`btn icon-btn${state.status === 'loading' ? ' spinning' : ''}`}
-            onClick={state.reload}
-            disabled={state.status === 'loading'}
-            title={state.status === 'loading' ? t('dashboard.refreshing') : t('dashboard.refresh')}
-            aria-label={state.status === 'loading' ? t('dashboard.refreshing') : t('dashboard.refresh')}
+            className={`btn icon-btn${refreshing ? ' spinning' : ''}`}
+            onClick={refreshAll}
+            disabled={refreshing}
+            title={refreshing ? t('dashboard.refreshing') : t('dashboard.refresh')}
+            aria-label={refreshing ? t('dashboard.refreshing') : t('dashboard.refresh')}
           >
             <IconRefresh />
           </button>
@@ -326,12 +395,17 @@ export default function Dashboard() {
         </p>
       )}
 
-      <Async state={state} empty={{ title: t('dashboard.noDataYet') }} emptyWhen={(d) => !d}>
-        {(d) => (
+      {/* Gated on `state` (CRM+LMS) alone — that's the half without which
+          almost nothing on this page can render at all. `externalState`
+          (Books/Desk) is never awaited here; its own loading/failure shows
+          up per-tile and per-card inside KpiGrid/DashboardCharts instead,
+          via the placeholders built into `mergedData` above. */}
+      <Async state={state} empty={{ title: t('dashboard.noDataYet') }} emptyWhen={() => !mergedData}>
+        {() => (
           <>
-            <KpiGrid key={layoutVersion} data={d} hidden={hidden} onHide={toggleKpi} />
+            <KpiGrid key={layoutVersion} data={mergedData} hidden={hidden} onHide={toggleKpi} />
 
-            <DashboardCharts data={d} t={t} />
+            <DashboardCharts data={mergedData} externalReady={externalReady} t={t} />
           </>
         )}
       </Async>

@@ -41,6 +41,7 @@ export default {
     noApplicationsRecorded: 'No applications recorded.',
     noDataYet: 'No data yet.',
     connected: 'Connected',
+    checking: 'Checking…',
     unavailable: 'Unavailable',
     notRecorded: 'Not recorded',
     percentComplete: '{pct} per cent complete',

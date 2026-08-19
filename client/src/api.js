@@ -120,6 +120,10 @@ export const api = {
 
   /* dashboard + status */
   dashboard: (o) => get('/api/dashboard', o),
+  // Books/Desk half — fetched separately so the CRM-backed figures above can
+  // render as soon as they're ready instead of waiting on Zoho Books/Desk's
+  // own latency (functions/zylker_api/index.js has the full rationale).
+  dashboardExternal: (o) => get('/api/dashboard/external', o),
   /*
    * The attention queue is fetched separately from the dashboard so the panel
    * loads, fails and retries on its own — a slow Books call must not hold up

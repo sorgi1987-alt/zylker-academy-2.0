@@ -36,6 +36,7 @@ export default {
     noApplicationsRecorded: 'No hay solicitudes registradas.',
     noDataYet: 'Todavía no hay datos.',
     connected: 'Conectado',
+    checking: 'Comprobando…',
     unavailable: 'No disponible',
     notRecorded: 'No registrado',
     percentComplete: '{pct} por ciento completado',
