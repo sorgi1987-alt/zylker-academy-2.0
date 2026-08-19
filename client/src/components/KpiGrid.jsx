@@ -1,4 +1,4 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useEffect, useState } from 'react';
 import GridLayout, { WidthProvider } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -239,6 +239,23 @@ const DEFAULT_POSITIONS = KPI_DEFS.reduce((acc, def, idx) => {
   return acc;
 }, {});
 
+// react-grid-layout's columns are a fixed pixel/column grid built for desktop
+// — below this width a 3-column tile just gets clipped rather than reflowing,
+// so narrow viewports fall back to a plain stacked list instead (below) and
+// skip the grid entirely. Matches the layout's own effective column collapse
+// point better than a generic device breakpoint would.
+const NARROW_QUERY = '(max-width: 640px)';
+const useNarrowViewport = () => {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(NARROW_QUERY);
+    const onChange = (e) => setNarrow(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return narrow;
+};
+
 /**
  * The dashboard's KPI area as a free drag/resize/hide grid.
  *
@@ -257,6 +274,7 @@ const DEFAULT_POSITIONS = KPI_DEFS.reduce((acc, def, idx) => {
 export default memo(function KpiGrid({ data, hidden, onHide }) {
   const t = useT();
   const [overrides, setOverrides] = useState(() => readJSON(LAYOUT_STORAGE_KEY, {}));
+  const narrow = useNarrowViewport();
 
   const visible = KPI_DEFS.filter((def) => !hidden.includes(def.key));
   const layout = visible.map((def) => ({
@@ -279,6 +297,31 @@ export default memo(function KpiGrid({ data, hidden, onHide }) {
       return merged;
     });
   };
+
+  // Drag-to-rearrange and resize are desktop-mouse features with nothing
+  // equivalent worth building for a stacked single column — the layout
+  // overrides above simply don't apply here, so this branch skips
+  // react-grid-layout entirely rather than fighting its fixed-column grid.
+  if (narrow) {
+    return (
+      <div className="kpi-grid-mobile">
+        {visible.map((def) => (
+          <div key={def.key} className="kpi-grid-mobile-item">
+            {def.render(t, data)}
+            <span className="kpi-section-tag">{t(`dashboard.section.${def.section}`)}</span>
+            <button
+              type="button"
+              className="kpi-hide-btn"
+              title={t('dashboard.hideKpi')}
+              onClick={() => onHide(def.key)}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <ReactGridLayout

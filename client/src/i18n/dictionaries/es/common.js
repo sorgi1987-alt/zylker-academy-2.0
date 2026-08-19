@@ -26,6 +26,7 @@ export default {
     pageOnly: 'Página {page}',
     recordsCount: '{total} registros',
     search: 'Buscar',
+    exportCsv: 'Exportar CSV',
     all: 'Todos',
     filteredBy: 'Filtrado por',
     activeFilters: 'Filtros activos',

@@ -5,16 +5,30 @@ import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SourceBadge, ConfirmDialog, fmtDate
+  Async, Card, Pill, Pagination, SourceBadge, ConfirmDialog, ExportCsvButton, fmtDate
 } from '../components/Ui.jsx';
 import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { STUDENT_FIELDS } from '../viewFields.js';
+import { toCsv, downloadCsv } from '../csv.js';
 
 // The columns shown with no custom view selected — matches the table this
 // page has always rendered. externalReference is a real, registered field
 // (so a saved view can add it) but was never a default column, so it stays
 // opt-in rather than appearing for everyone the day this shipped.
 const DEFAULT_COLUMNS = ['studentId', 'email', 'status', 'programme', 'enrolmentStatus', 'createdTime'];
+
+// Export mirrors exactly what the table itself can show — one entry per
+// optional column, keyed the same as DEFAULT_COLUMNS/draft.columns, plus
+// the primary (name) column added separately since it's never optional.
+const EXPORT_COLUMNS = {
+  studentId: { labelKey: 'students.table.studentId', value: (s) => s.studentId || '' },
+  email: { labelKey: 'students.table.email', value: (s) => s.email || '' },
+  status: { labelKey: 'students.table.status', value: (s) => s.status || '' },
+  programme: { labelKey: 'students.table.programme', value: (s) => (s.programme ? s.programme.name : '') },
+  enrolmentStatus: { labelKey: 'students.table.enrolment', value: (s) => s.enrolmentStatus || '' },
+  externalReference: { labelKey: 'views.fields.student.externalReference', value: (s) => s.externalReference || '' },
+  createdTime: { labelKey: 'students.table.added', value: (s) => fmtDate(s.createdTime) }
+};
 
 export default function Students() {
   const t = useT();
@@ -38,6 +52,21 @@ export default function Students() {
 
   const has = (key) => draft.columns.includes(key);
 
+  // The row cap matches every other place in this app that reads "all
+  // matching records" at once (e.g. the Applications board) — an export
+  // beyond that ceiling is the same known limit meta.capped already warns
+  // about on the table itself, not a new one introduced here.
+  const exportStudents = async () => {
+    const res = await api.students({ ...list.params, page: 1, perPage: 200 });
+    const columns = [
+      { label: t('students.table.name'), value: (s) => s.fullName || t('students.unnamed') },
+      ...draft.columns
+        .filter((k) => EXPORT_COLUMNS[k])
+        .map((k) => ({ label: t(EXPORT_COLUMNS[k].labelKey), value: EXPORT_COLUMNS[k].value }))
+    ];
+    downloadCsv('students.csv', toCsv(res.data || [], columns));
+  };
+
   return (
     <>
       {/* The active nav item already names this page; a repeated visible
@@ -57,6 +86,7 @@ export default function Students() {
             </div>
             <div className="head-actions">
               <SourceBadge source="crm" />
+              <ExportCsvButton onExport={exportStudents} />
               {can('student:write') && <Link className="btn primary" to="/students/new">{t('students.addStudent')}</Link>}
             </div>
           </>

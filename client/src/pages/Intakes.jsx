@@ -5,9 +5,10 @@ import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, Modal, useToast, fmtDate
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, Modal, ExportCsvButton, useToast, fmtDate
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
+import { toCsv, downloadCsv } from '../csv.js';
 
 const STATUSES = ['Planning', 'Open', 'Full', 'In Progress', 'Completed', 'Cancelled'];
 const DELIVERY = ['On Campus', 'Online', 'Hybrid'];
@@ -140,6 +141,23 @@ export default function Intakes() {
     setParams(next, { replace: true });
   }, [wantsNew, can, params, setParams]);
 
+  // This page has no column picker (unlike Students/Applications/Programmes)
+  // so the export always mirrors the one, fixed table exactly.
+  const exportIntakes = async () => {
+    const res = await api.intakes({ ...list.params, page: 1, perPage: 200 });
+    const columns = [
+      { label: t('intakes.table.intake'), value: (i) => i.name },
+      { label: t('intakes.table.programme'), value: (i) => (i.programme ? i.programme.name : '') },
+      { label: t('intakes.table.status'), value: (i) => i.status || '' },
+      { label: t('intakes.table.starts'), value: (i) => fmtDate(i.startDate) },
+      { label: t('intakes.table.capacity'), value: (i) => (i.capacity === null ? '' : `${i.counts.activeEnrolments} / ${i.capacity}`) },
+      { label: t('intakes.table.applications'), value: (i) => i.counts.applications },
+      { label: t('intakes.table.enrolments'), value: (i) => i.counts.enrolments },
+      { label: t('intakes.table.delivery'), value: (i) => i.deliveryMode || '' }
+    ];
+    downloadCsv('intakes.csv', toCsv(res.data || [], columns));
+  };
+
   return (
     <>
       <div className="page-head">
@@ -151,6 +169,7 @@ export default function Intakes() {
         action={(
           <div className="head-actions">
             <SourceBadge source="crm" />
+            <ExportCsvButton onExport={exportIntakes} />
             {can('intake:write') && (
               <button type="button" className="btn primary" onClick={() => setCreating(true)}>{t('intakes.newIntake')}</button>
             )}

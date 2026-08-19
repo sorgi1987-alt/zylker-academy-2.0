@@ -1681,12 +1681,19 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
       .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
   ]);
 
+  // Unlike the listProgrammes() call above (a deliberate live probe: this
+  // page's whole point is to show whether the live CRM connection itself is
+  // actually reachable, not just whether the projection is fresh), these two
+  // counts have no such reason to bypass the projection — they were simply
+  // missed by phases 4/5, the same class of gap RESULTS.md documents finding
+  // and fixing for /api/attention. readStudents/readEnrolments already
+  // return normalised rows, so no n.student/n.enrolment mapping is needed.
   let students = [];
   let enrolments = [];
   if (crmStatus.status === 'connected') {
     [students, enrolments] = await Promise.all([
-      listStudents(req).then((r) => r.map(n.student)),
-      listEnrolments(req).then((r) => r.map(n.enrolment))
+      readStudents(req),
+      readEnrolments(req)
     ]);
   }
 

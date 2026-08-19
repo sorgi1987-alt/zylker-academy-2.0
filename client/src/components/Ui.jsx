@@ -298,6 +298,34 @@ export const Pagination = ({ page, totalPages, hasMore, total, onPage, busy }) =
   );
 };
 
+/**
+ * `onExport` does the fetch-all-matching-rows + serialize + download work
+ * (page-specific: which fields, which columns); this just owns the busy
+ * state and turns a thrown error into a toast, the same shape every other
+ * async button action in this app already uses.
+ */
+export const ExportCsvButton = ({ onExport, label }) => {
+  const t = useT();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onExport();
+    } catch {
+      toast(t('common.errors.genericFetchError'), 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button type="button" className="btn" onClick={run} disabled={busy}>
+      {busy ? t('common.working') : (label || t('common.exportCsv'))}
+    </button>
+  );
+};
+
 /** Labelled search box that submits on enter and can be cleared. */
 export const SearchBox = ({ id = 'search', label, value, onChange, placeholder }) => {
   const t = useT();
@@ -499,6 +527,13 @@ export const fmtDate = (d) => {
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return d;
   return dt.toLocaleDateString(getLocale(), { day: '2-digit', month: 'short', year: 'numeric' });
+};
+/** Same as fmtDate, plus a time — for sync/event timestamps where "today" isn't precise enough. */
+export const fmtDateTime = (d) => {
+  if (!d) return '—';
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return d;
+  return dt.toLocaleString(getLocale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 /**
  * Formats money in the currency the source system reported. Defaults to EUR

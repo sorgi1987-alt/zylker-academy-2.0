@@ -31,6 +31,7 @@ export default {
     pageOnly: 'Page {page}',
     recordsCount: '{total} records',
     search: 'Search',
+    exportCsv: 'Export CSV',
     all: 'All',
     filteredBy: 'Filtered by',
     activeFilters: 'Active filters',

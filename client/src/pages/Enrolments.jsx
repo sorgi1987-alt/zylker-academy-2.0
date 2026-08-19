@@ -5,8 +5,9 @@ import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, fmtDate
+  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, ExportCsvButton, fmtDate
 } from '../components/Ui.jsx';
+import { toCsv, downloadCsv } from '../csv.js';
 
 export default function Enrolments() {
   const t = useT();
@@ -31,6 +32,23 @@ export default function Enrolments() {
   const statuses = (list.meta && list.meta.statuses) || [];
   const mappedLabel = (v) => (MAPPED_OPTIONS.find((o) => o.value === v) || {}).label || v;
 
+  // This page has no column picker (unlike Students/Applications/Programmes)
+  // so the export always mirrors the one, fixed table exactly.
+  const exportEnrolments = async () => {
+    const res = await api.enrolments({ ...list.params, page: 1, perPage: 200 });
+    const columns = [
+      { label: t('enrolments.table.reference'), value: (e) => e.reference || e.externalReference || e.id },
+      { label: t('enrolments.table.student'), value: (e) => (e.student ? (e.studentName || e.student.name) : '') },
+      { label: t('enrolments.table.programme'), value: (e) => (e.programme ? e.programme.name : '') },
+      { label: t('enrolments.table.intake'), value: (e) => (e.intake ? e.intake.name : '') },
+      { label: t('enrolments.table.status'), value: (e) => e.status || '' },
+      { label: t('enrolments.table.enrolled'), value: (e) => fmtDate(e.enrolmentDate) },
+      { label: t('enrolments.table.progress'), value: (e) => (e.lms.progressPercentage === null ? '' : `${e.lms.progressPercentage}%`) },
+      { label: t('enrolments.table.lmsSync'), value: (e) => e.lms.syncStatus || '' }
+    ];
+    downloadCsv('enrolments.csv', toCsv(res.data || [], columns));
+  };
+
   return (
     <>
       <div className="page-head">
@@ -42,6 +60,7 @@ export default function Enrolments() {
         action={(
           <div className="head-actions">
             <SourceBadge source="crm" />
+            <ExportCsvButton onExport={exportEnrolments} />
             {can('enrolment:write') && (
               <Link className="btn primary" to="/enrolments/new">{t('enrolments.newEnrolment')}</Link>
             )}

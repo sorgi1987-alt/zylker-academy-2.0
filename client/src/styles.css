@@ -242,6 +242,15 @@ a{color:var(--brand-2)}
    white card. */
 .kpi-grid-item .react-resizable-handle{opacity:.35}
 .kpi-grid-item:hover .react-resizable-handle{opacity:.7}
+/* Below react-grid-layout's effective column-collapse width, KpiGrid.jsx
+   renders this plain stack instead of the grid — no fixed columns to
+   overflow, and no drag/resize affordances that don't apply to one column. */
+.kpi-grid-mobile{display:flex;flex-direction:column;gap:16px;margin-bottom:16px}
+.kpi-grid-mobile-item{position:relative}
+.kpi-grid-mobile-item .card.kpi{width:100%;box-sizing:border-box}
+/* Hover-to-reveal has no equivalent on touch, so the hide control is just
+   shown outright here instead of gated behind :hover like the grid version. */
+.kpi-grid-mobile-item .kpi-hide-btn{opacity:1}
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 .card-h{padding:14px 18px;border-bottom:1px solid var(--line-soft);display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -342,7 +351,16 @@ input[type=search]{flex:1;min-width:220px}
 .dl dd{margin:0;font-weight:550}
 .note{background:var(--warn-soft);border:1px solid #f0dcb4;color:var(--warn);
   padding:10px 13px;border-radius:8px;font-size:13px}
+.note.stop{background:var(--stop-soft);border-color:#f3c6c6;color:var(--stop)}
 .muted{color:var(--ink-3)}
+/* Integration Status's "read-model sync health" card — the one number the
+   whole PoC exists to prove, so it gets KPI-tile-sized treatment rather
+   than sitting in a dl row like everything else on this page. */
+.read-model-headline{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+.read-model-headline-value{font-size:40px;font-weight:700;line-height:1;color:var(--ink)}
+.read-model-headline-label{font-size:13px;color:var(--ink-3);max-width:220px}
+.card-subhead{font-size:13px;font-weight:650;color:var(--ink-2);margin:20px 0 10px;text-transform:uppercase;letter-spacing:.03em}
+.card-subhead:first-child{margin-top:0}
 .mono{font-variant-numeric:tabular-nums}
 .conn{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0}
 .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}

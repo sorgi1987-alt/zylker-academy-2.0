@@ -5,11 +5,12 @@ import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SourceBadge, Modal, ConfirmDialog, useToast, fmtMoney
+  Async, Card, Pill, Pagination, SourceBadge, Modal, ConfirmDialog, ExportCsvButton, useToast, fmtMoney
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError } from '../components/Form.jsx';
 import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { PROGRAMME_FIELDS } from '../viewFields.js';
+import { toCsv, downloadCsv } from '../csv.js';
 
 const LEVELS = ['Foundation', 'Certificate', 'Diploma', 'Undergraduate', 'Postgraduate', 'Professional', 'Other'];
 const STATUSES = ['Draft', 'Open for Applications', 'Running', 'Suspended', 'Archived'];
@@ -19,6 +20,23 @@ const STATUSES = ['Draft', 'Open for Applications', 'Running', 'Suspended', 'Arc
 // toggle system — it stays a fixed trailing column, like the primary name
 // column is a fixed leading one.
 const DEFAULT_COLUMNS = ['code', 'academicLevel', 'status', 'tuitionFee', 'intakeCount', 'enrolmentCount'];
+
+// Export mirrors the table exactly — one entry per optional column, plus
+// the primary (programme) column added separately since it's never optional.
+// "LMS course" is left out, same reasoning as it being a fixed trailing
+// column rather than part of the picker: it's a link to another record, not
+// a data field this page owns.
+const EXPORT_COLUMNS = {
+  code: { labelKey: 'programmes.table.code', value: (p) => p.code || '' },
+  academicLevel: { labelKey: 'programmes.table.level', value: (p) => p.academicLevel || '' },
+  status: { labelKey: 'programmes.table.status', value: (p) => p.status || '' },
+  active: { labelKey: 'views.fields.programme.active', value: (p, t) => (p.active ? t('views.booleanTrue') : t('views.booleanFalse')) },
+  department: { labelKey: 'views.fields.programme.department', value: (p) => p.department || '' },
+  tuitionFee: { labelKey: 'programmes.table.fee', value: (p) => fmtMoney(p.tuitionFee) },
+  intakeCount: { labelKey: 'programmes.table.intakes', value: (p) => p.counts.intakes },
+  enrolmentCount: { labelKey: 'programmes.table.enrolments', value: (p) => p.counts.enrolments },
+  applicationCount: { labelKey: 'views.fields.programme.applicationCount', value: (p) => p.counts.applications }
+};
 
 function NewProgrammeDialog({ onClose, onDone }) {
   const t = useT();
@@ -127,6 +145,17 @@ export default function Programmes() {
 
   const has = (key) => draft.columns.includes(key);
 
+  const exportProgrammes = async () => {
+    const res = await api.programmes({ ...list.params, page: 1, perPage: 200 });
+    const columns = [
+      { label: t('programmes.table.programme'), value: (p) => p.name },
+      ...draft.columns
+        .filter((k) => EXPORT_COLUMNS[k])
+        .map((k) => ({ label: t(EXPORT_COLUMNS[k].labelKey), value: (p) => EXPORT_COLUMNS[k].value(p, t) }))
+    ];
+    downloadCsv('programmes.csv', toCsv(res.data || [], columns));
+  };
+
   /*
    * The global Create menu links here with ?new=1 rather than to a separate
    * route, so the one working programme form is reused instead of duplicated.
@@ -161,6 +190,7 @@ export default function Programmes() {
             </div>
             <div className="head-actions">
               <SourceBadge source="crm" />
+              <ExportCsvButton onExport={exportProgrammes} />
               {can('programme:write') && (
                 <button type="button" className="btn primary" onClick={() => setCreating(true)}>
                   {t('programmes.newProgramme')}

@@ -5,16 +5,30 @@ import { api } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, FilterChips, SourceBadge, ConfirmDialog, fmtDate, fmtMoney
+  Async, Card, Pill, Pagination, FilterChips, SourceBadge, ConfirmDialog, ExportCsvButton, fmtDate, fmtMoney
 } from '../components/Ui.jsx';
 import ApplicationBoard from '../components/ApplicationBoard.jsx';
 import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
 import { APPLICATION_FIELDS } from '../viewFields.js';
+import { toCsv, downloadCsv } from '../csv.js';
 
 // Matches the table this page has always rendered — expectedDecisionDate is
 // a real, registered field (so a saved view can add it) but was never a
 // default column.
 const DEFAULT_COLUMNS = ['applicantName', 'applicantEmail', 'stage', 'programme', 'intake', 'applicationDate', 'tuitionFee'];
+
+// Export mirrors the table exactly — one entry per optional column, plus
+// the primary (application) column added separately since it's never optional.
+const EXPORT_COLUMNS = {
+  applicantName: { labelKey: 'views.fields.application.applicantName', value: (a) => a.applicantName || '' },
+  applicantEmail: { labelKey: 'views.fields.application.applicantEmail', value: (a) => a.applicantEmail || '' },
+  stage: { labelKey: 'applications.table.stage', value: (a) => a.stage || '' },
+  programme: { labelKey: 'applications.table.programme', value: (a) => (a.programme ? a.programme.name : '') },
+  intake: { labelKey: 'applications.table.intake', value: (a) => (a.intake ? a.intake.name : '') },
+  applicationDate: { labelKey: 'applications.table.applied', value: (a) => fmtDate(a.applicationDate) },
+  expectedDecisionDate: { labelKey: 'views.fields.application.expectedDecisionDate', value: (a) => fmtDate(a.expectedDecisionDate) },
+  tuitionFee: { labelKey: 'applications.table.fee', value: (a) => fmtMoney(a.tuitionFee) }
+};
 
 const VIEW_STORAGE_KEY = 'zylker.applications.view';
 // Reading/writing localStorage can throw (private browsing, storage disabled) —
@@ -91,6 +105,20 @@ export default function Applications() {
     [view, boardParams]
   );
 
+  // Same row ceiling as the board fetch above and every other "all matching
+  // records" read in this app — an export beyond it is the known limit
+  // meta.capped already surfaces on the table, not a new one.
+  const exportApplications = async () => {
+    const res = await api.applications({ ...list.params, page: 1, perPage: 200 });
+    const columns = [
+      { label: t('applications.table.application'), value: (a) => a.name || a.applicationId || a.id },
+      ...draft.columns
+        .filter((k) => EXPORT_COLUMNS[k])
+        .map((k) => ({ label: t(EXPORT_COLUMNS[k].labelKey), value: EXPORT_COLUMNS[k].value }))
+    ];
+    downloadCsv('applications.csv', toCsv(res.data || [], columns));
+  };
+
   return (
     <>
       {/* The active nav item already names this page; a repeated visible
@@ -120,6 +148,7 @@ export default function Applications() {
                 </button>
               </div>
               <SourceBadge source="crm" />
+              <ExportCsvButton onExport={exportApplications} />
               {can('application:write') && (
                 <Link className="btn primary" to="/applications/new">{t('applications.newApplicationLink')}</Link>
               )}
