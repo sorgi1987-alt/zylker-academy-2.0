@@ -189,6 +189,13 @@ a{color:var(--brand-2)}
 .page-head-row h1{margin:0}
 .page-head-row .btn{margin-top:0}
 
+/* --- dashboard refresh --- */
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0}
+.icon-btn:disabled{opacity:.6;cursor:default}
+.icon-btn.spinning .ic{animation:spin .8s linear infinite}
+.dash-updated{white-space:nowrap}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 /* --- attention trigger button --- */
 .attn-trigger{display:inline-flex;align-items:center;gap:8px}
 .attn-trigger.stop{border-color:var(--stop)}
@@ -594,9 +601,16 @@ input[type=search]{flex:1;min-width:220px}
 .view-select-field select{min-width:200px}
 
 /* Two-column body: a persistent filter panel beside the record table,
-   matching the reference layout instead of a toggled overlay. */
+   matching the reference layout instead of a toggled overlay.
+   Resizable (native CSS resize, dragged from the bottom-right corner) rather
+   than a fixed width, with the chosen width remembered per device — see
+   PANEL_WIDTH_KEY in ViewManager.jsx. `overflow:auto` is required for the
+   resize handle to render at all; since the panel's height is intrinsic
+   (never fixed), that never actually produces a vertical scrollbar. */
 .view-layout{display:flex;gap:22px;align-items:flex-start}
-.view-panel{flex:0 0 260px;width:260px;border-right:1px solid var(--line-soft);padding-right:18px}
+.view-panel{flex:0 0 auto;width:195px;min-width:150px;max-width:420px;
+  border-right:1px solid var(--line-soft);padding-right:18px;
+  resize:horizontal;overflow:auto}
 .view-panel-section{margin-bottom:18px}
 .view-panel-section:last-child{margin-bottom:0}
 .view-panel h3{font-size:12px;margin:0 0 10px;color:var(--ink-3);text-transform:uppercase;
@@ -610,7 +624,7 @@ input[type=search]{flex:1;min-width:220px}
   padding:9px;margin-bottom:8px;background:var(--bg);border:1px solid var(--line-soft);
   border-radius:var(--radius-sm);position:relative}
 .view-condition-row select,.view-condition-row input{width:100%;padding:7px 9px;border:1px solid var(--line);
-  border-radius:8px;font:inherit;background:var(--surface);color:var(--ink)}
+  border-radius:8px;font-size:14px;background:var(--surface);color:var(--ink)}
 .view-condition-remove{position:absolute;top:5px;right:5px;margin-top:0;padding:2px 8px;
   line-height:1.4;color:var(--ink-3);border-radius:8px}
 .view-condition-remove:hover{color:var(--stop);background:var(--stop-soft)}
@@ -618,7 +632,7 @@ input[type=search]{flex:1;min-width:220px}
 .view-col-check{display:flex;align-items:center;gap:7px;font-size:13px}
 .view-sort-row{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
 .view-sort-row select{padding:7px 9px;border:1px solid var(--line);border-radius:8px;
-  font:inherit;background:var(--surface);color:var(--ink)}
+  font-size:14px;background:var(--surface);color:var(--ink)}
 
 @media (max-width: 860px){
   .view-layout{flex-direction:column}

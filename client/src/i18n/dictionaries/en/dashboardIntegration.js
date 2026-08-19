@@ -2,6 +2,17 @@ export default {
   dashboard: {
     pageTitle: 'Dashboard',
     noDataYet: 'No data yet',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing…',
+    // Figures sit behind a short server-side cache (a couple of minutes for
+    // Books/Desk, a few for the CRM rollup) rather than being fetched fresh
+    // on every load — this says how old what's on screen actually is, and
+    // Refresh forces a new request rather than waiting for the cache to age
+    // out on its own.
+    updatedJustNow: 'Updated just now',
+    updatedSecondsAgo: 'Updated {seconds}s ago',
+    updatedMinutesAgo: 'Updated {minutes}m ago',
+    updatedHoursAgo: 'Updated {hours}h ago',
     customize: 'Customize',
     customizeTitle: 'Customize dashboard',
     customizeIntro: 'Choose which KPI tiles show on your dashboard, or drag and resize a tile directly on the page. Remembered on this device only.',

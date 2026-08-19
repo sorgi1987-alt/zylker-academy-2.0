@@ -29,6 +29,20 @@ const writeStore = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* best-effort */ }
 };
 
+// The panel's drag-resized width, remembered per device — shared across
+// Students/Applications/Programmes (one preference, not three) since it's a
+// display preference about the panel itself, not about any one page's data.
+const PANEL_WIDTH_KEY = 'zylker.views.panelWidth';
+const readPanelWidth = () => {
+  try {
+    const v = Number(localStorage.getItem(PANEL_WIDTH_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch { return null; }
+};
+const writePanelWidth = (px) => {
+  try { localStorage.setItem(PANEL_WIDTH_KEY, String(px)); } catch { /* best-effort */ }
+};
+
 let uidCounter = 0;
 const newViewId = () => `v${Date.now()}_${(uidCounter += 1)}`;
 
@@ -243,6 +257,31 @@ export function ViewFilterPanel({ fields, defaultViewId, draft, onDraftChange, o
   const [touched, setTouched] = useState(false);
   const nameError = !draft.name.trim() ? t('views.nameRequired') : null;
 
+  // The panel is natively resizable (CSS `resize: horizontal`, dragged from
+  // its own bottom-right corner) — this just remembers whatever width the
+  // browser set from that drag, restoring it on the next visit. A
+  // ResizeObserver (not the drag events themselves) is what's available:
+  // native CSS resize does not fire its own start/stop events.
+  const panelRef = useRef(null);
+  useEffect(() => {
+    const stored = readPanelWidth();
+    if (stored && panelRef.current) panelRef.current.style.width = `${stored}px`;
+  }, []);
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    let timeout;
+    const observer = new ResizeObserver(() => {
+      clearTimeout(timeout);
+      // Debounced, same reasoning as KpiGrid's drag/resize persistence —
+      // this fires on every intermediate frame while the handle is being
+      // dragged, and only the settled value is worth a write.
+      timeout = setTimeout(() => writePanelWidth(Math.round(el.getBoundingClientRect().width)), 300);
+    });
+    observer.observe(el);
+    return () => { clearTimeout(timeout); observer.disconnect(); };
+  }, []);
+
   const updateCondition = (i, next) => onDraftChange({ ...draft, conditions: draft.conditions.map((c, idx) => (idx === i ? next : c)) });
   const removeCondition = (i) => onDraftChange({ ...draft, conditions: draft.conditions.filter((_, idx) => idx !== i) });
   const addCondition = () => onDraftChange({ ...draft, conditions: [...draft.conditions, emptyCondition(fields)] });
@@ -261,7 +300,7 @@ export function ViewFilterPanel({ fields, defaultViewId, draft, onDraftChange, o
   };
 
   return (
-    <form className="view-panel" onSubmit={submit} noValidate>
+    <form className="view-panel" onSubmit={submit} noValidate ref={panelRef}>
       <div className="view-panel-section">
         <h3>{t('views.filtersHeading')}</h3>
         {draft.conditions.length === 0 && <p className="muted small">{t('views.noConditions')}</p>}

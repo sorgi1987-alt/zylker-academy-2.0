@@ -2,6 +2,12 @@ export default {
   dashboard: {
     pageTitle: 'Panel',
     noDataYet: 'Todavía no hay datos',
+    refresh: 'Actualizar',
+    refreshing: 'Actualizando…',
+    updatedJustNow: 'Actualizado justo ahora',
+    updatedSecondsAgo: 'Actualizado hace {seconds} s',
+    updatedMinutesAgo: 'Actualizado hace {minutes} min',
+    updatedHoursAgo: 'Actualizado hace {hours} h',
     customize: 'Personalizar',
     customizeTitle: 'Personalizar el panel',
     customizeIntro: 'Elige qué indicadores se muestran en tu panel, o arrastra y cambia el tamaño de uno directamente en la página. Se recuerda solo en este dispositivo.',

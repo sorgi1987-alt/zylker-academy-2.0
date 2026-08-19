@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useState } from 'react';
+import React, { memo, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../useApi.js';
 import { api } from '../api.js';
@@ -11,6 +11,30 @@ import AttentionPanel from '../components/Attention.jsx';
 import KpiGrid, { KPI_DEFS, readHiddenKpis, writeHiddenKpis, resetKpiLayout } from '../components/KpiGrid.jsx';
 
 const SECTIONS = ['admissions', 'delivery', 'learning', 'finance', 'support'];
+
+/**
+ * The dashboard's numbers are cache-backed rather than fetched fresh on
+ * every load (functions/zylker_api/cache.js — a few minutes for the CRM
+ * rollup, ~2 for Books/Desk), so "how old is this" is a real, answerable
+ * question rather than always "just now" — this renders that answer.
+ */
+function timeAgo(date, t) {
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 10) return t('dashboard.updatedJustNow');
+  if (seconds < 60) return t('dashboard.updatedSecondsAgo', { seconds });
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return t('dashboard.updatedMinutesAgo', { minutes });
+  const hours = Math.floor(minutes / 60);
+  return t('dashboard.updatedHoursAgo', { hours });
+}
+
+const IconRefresh = () => (
+  <svg className="ic" viewBox="0 0 24 24" width="16" height="16" fill="none"
+    stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 12a9 9 0 1 0 3-6.7" />
+    <path d="M3 4v5h5" />
+  </svg>
+);
 
 /**
  * Everything below the KPI grid — funnel, bar lists, tables, connection
@@ -211,6 +235,23 @@ export default function Dashboard() {
   // through to a component whose whole point is owning that state itself.
   const [layoutVersion, setLayoutVersion] = useState(0);
 
+  // Stamped whenever a fetch (initial load or a manual Refresh) resolves —
+  // this is when the browser last heard from the server, not when the
+  // server's own cache entry was computed, but it's what "Refresh" can
+  // actually promise: a new request, not a guarantee the cache happened to
+  // be stale.
+  const [lastUpdated, setLastUpdated] = useState(null);
+  useEffect(() => {
+    if (state.status === 'ready') setLastUpdated(new Date());
+  }, [state.status, state.data]);
+  // Re-renders the "Xm ago" text as time passes, without which it would only
+  // ever update on some unrelated interaction re-rendering the page.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => forceTick((n) => n + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
+
   // Stable identity: passed to KpiGrid as `onHide`, and KpiGrid is memoized
   // specifically so that opening Customize or anything else on this page
   // doesn't re-render its 23 tiles — a new function reference here on every
@@ -232,6 +273,17 @@ export default function Dashboard() {
       <div className="page-head page-head-row">
         <h1>{t('dashboard.pageTitle')}</h1>
         <div className="head-actions">
+          <button
+            type="button"
+            className={`btn icon-btn${state.status === 'loading' ? ' spinning' : ''}`}
+            onClick={state.reload}
+            disabled={state.status === 'loading'}
+            title={state.status === 'loading' ? t('dashboard.refreshing') : t('dashboard.refresh')}
+            aria-label={state.status === 'loading' ? t('dashboard.refreshing') : t('dashboard.refresh')}
+          >
+            <IconRefresh />
+          </button>
+          {lastUpdated && <span className="muted small dash-updated">{timeAgo(lastUpdated, t)}</span>}
           <button type="button" className="btn" onClick={() => setCustomizing(true)}>
             {t('dashboard.customize')}
           </button>
