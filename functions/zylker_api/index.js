@@ -640,9 +640,13 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
   // CRM-only half is a shared cache entry (dashboard:aggregate, ~4 min TTL —
   // one institutional rollup serves every session, not one per teacher) on
   // top of the Datastore projections (already 0 Zoho calls as of phase 4).
-  // Books/Desk/LMS are fetched live every request regardless, per the
-  // kickoff prompt's explicit "stay on today's live per-request read path
-  // unchanged" for those two services.
+  // Books/Desk stay on a live-underneath read per kickoff-prompt.md §1 (no
+  // projection/Signals pipeline for those two) — but the live calls
+  // themselves sit behind the same short-TTL cache.readThrough used above
+  // (cache.TTL.EXTERNAL_TOTALS_MS, ~2 min), since they were measured to be
+  // the dominant cost of a dashboard load (~3-4s each) and this endpoint,
+  // /api/attention and /api/integration-status all ask for the same two
+  // numbers — a cache hit here is a cache hit for all three.
   const [crmAggregate, [lmsStatus, booksTotals, booksHealth, deskTotals, deskHealth]] = await Promise.all([
     cache.readThrough(req, cache.KEYS.DASHBOARD_AGGREGATE, cache.TTL.DASHBOARD_AGGREGATE_MS, async () => {
       const [S, A, P, I, E] = await Promise.all([
@@ -652,17 +656,22 @@ R('/api/dashboard', perms.P.DASHBOARD_READ, async (req, res) => {
     }),
     // The LMS connector, Books and Desk are settled independently and never
     // rejected, so a failure in any one degrades one card instead of the
-    // whole dashboard.
+    // whole dashboard. A cache miss/expiry still propagates a real failure
+    // here rather than caching it — see cache.readThrough's contract.
     Promise.all([
       lms.status(req),
       cfg.books.organizationId
-        ? books.invoiceTotals(z, req).catch((err) => ({ error: z.safeError(err, 'books') }))
+        ? cache.readThrough(req, cache.KEYS.BOOKS_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => books.invoiceTotals(z, req))
+          .catch((err) => ({ error: z.safeError(err, 'books') }))
         : Promise.resolve(null),
-      books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
+      cache.readThrough(req, cache.KEYS.BOOKS_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => books.health(z, req))
+        .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
       cfg.desk.organizationId
-        ? desk.ticketTotals(z, req).catch((err) => ({ error: z.safeError(err, 'desk') }))
+        ? cache.readThrough(req, cache.KEYS.DESK_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.ticketTotals(z, req))
+          .catch((err) => ({ error: z.safeError(err, 'desk') }))
         : Promise.resolve(null),
-      desk.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+      cache.readThrough(req, cache.KEYS.DESK_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.health(z, req))
+        .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
     ])
   ]);
 
@@ -803,14 +812,21 @@ R('/api/attention', perms.P.DASHBOARD_READ, async (req, res) => {
     return acc;
   }, {});
 
+  // Same cache.readThrough + keys as /api/dashboard (cache.js's
+  // EXTERNAL_TOTALS_MS) — this endpoint asks for the identical Books/Desk
+  // totals, so whichever of the two loads first pays the live Zoho latency
+  // and the other gets a cache hit, instead of both paying it independently
+  // on every page load (this was half of the ~3-4s each was measured at).
   const [lmsStatus, lmsEnrolments, booksTotals, deskTotals] = await Promise.all([
     lms.status(req).catch(() => null),
     lms.listEnrolments(req).catch(() => null),
     cfg.books.organizationId
-      ? books.invoiceTotals(z, req).catch(() => null)
+      ? cache.readThrough(req, cache.KEYS.BOOKS_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => books.invoiceTotals(z, req))
+        .catch(() => null)
       : Promise.resolve(null),
     cfg.desk.organizationId
-      ? desk.ticketTotals(z, req).catch(() => null)
+      ? cache.readThrough(req, cache.KEYS.DESK_TOTALS, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.ticketTotals(z, req))
+        .catch(() => null)
       : Promise.resolve(null)
   ]);
 
@@ -1644,10 +1660,15 @@ R('/api/integration-status', perms.P.INTEGRATION_READ, async (req, res) => {
     crmStatus = { status: 'unavailable', detail: z.safeError(err, 'crm').detail };
   }
 
+  // Same cache.readThrough + keys as /api/dashboard — a health check this
+  // page shares with the dashboard, so at most one of them pays the live
+  // Zoho round trip per cache window.
   const [lmsStatus, booksHealth, deskHealth] = await Promise.all([
     lms.status(req),
-    books.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
-    desk.health(z, req).catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
+    cache.readThrough(req, cache.KEYS.BOOKS_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => books.health(z, req))
+      .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null })),
+    cache.readThrough(req, cache.KEYS.DESK_HEALTH, cache.TTL.EXTERNAL_TOTALS_MS, () => desk.health(z, req))
+      .catch(() => ({ status: 'unavailable', label: 'Unavailable', detail: null }))
   ]);
 
   let students = [];

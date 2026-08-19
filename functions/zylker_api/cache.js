@@ -97,7 +97,20 @@ async function readThrough(req, key, ttlMs, loadFn, segment = null) {
 
 const TTL = {
   DASHBOARD_AGGREGATE_MS: 4 * 60 * 1000, // ~3-5 minutes, kickoff-prompt.md §2 "Cache"
-  REFERENCE_DATA_MS: 20 * 60 * 1000 // ~15-30 minutes
+  REFERENCE_DATA_MS: 20 * 60 * 1000, // ~15-30 minutes
+  /*
+   * Books/Desk totals and health are deliberately NOT a read-model/projection
+   * (kickoff-prompt.md §1 explicitly excludes both from that migration) — this
+   * is the same lightweight response cache used above, just applied to two
+   * live external calls that turned out to dominate dashboard/attention load
+   * time (measured ~3-4s each). A short TTL keeps the numbers close to live
+   * while turning "every page load pays full Zoho Books/Desk latency" into
+   * "one load per window does, the rest are instant" — and since
+   * /api/dashboard, /api/attention and /api/integration-status all read the
+   * same two keys, one live call now serves all three instead of each paying
+   * its own.
+   */
+  EXTERNAL_TOTALS_MS: 2 * 60 * 1000 // ~2 minutes
 };
 
 /** Cache keys this PoC uses. Centralised so write-through invalidation and reads never drift apart on the key string. */
@@ -105,6 +118,10 @@ const KEYS = {
   DASHBOARD_AGGREGATE: 'dashboard:aggregate',
   CATALOGUE_PROGRAMMES: 'catalogue:programmes',
   CATALOGUE_INTAKES: 'catalogue:intakes',
+  BOOKS_TOTALS: 'books:totals',
+  BOOKS_HEALTH: 'books:health',
+  DESK_TOTALS: 'desk:totals',
+  DESK_HEALTH: 'desk:health',
   programme: (id) => `programme:${id}`,
   intake: (id) => `intake:${id}`
 };
