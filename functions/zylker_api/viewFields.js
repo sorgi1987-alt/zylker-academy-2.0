@@ -48,4 +48,32 @@ const PROGRAMME_FIELDS = {
   applicationCount: { path: 'counts.applications', type: 'number' }
 };
 
-module.exports = { STUDENT_FIELDS, APPLICATION_FIELDS, PROGRAMME_FIELDS };
+const INTAKE_FIELDS = {
+  name: { path: 'name', type: 'text' },
+  programme: { path: 'programme.name', type: 'text' },
+  status: { path: 'status', type: 'text' },
+  academicYear: { path: 'academicYear', type: 'text' },
+  startDate: { path: 'startDate', type: 'date' },
+  endDate: { path: 'endDate', type: 'date' },
+  applicationOpenDate: { path: 'applicationOpenDate', type: 'date' },
+  applicationDeadline: { path: 'applicationDeadline', type: 'date' },
+  capacity: { path: 'capacity', type: 'number' },
+  deliveryMode: { path: 'deliveryMode', type: 'text' },
+  location: { path: 'location', type: 'text' },
+  applicationCount: { path: 'counts.applications', type: 'number' },
+  enrolmentCount: { path: 'counts.enrolments', type: 'number' }
+};
+
+const ENROLMENT_FIELDS = {
+  reference: { path: 'reference', type: 'text' },
+  studentName: { path: 'studentName', type: 'text' },
+  programme: { path: 'programme.name', type: 'text' },
+  intake: { path: 'intake.name', type: 'text' },
+  status: { path: 'status', type: 'text' },
+  enrolmentDate: { path: 'enrolmentDate', type: 'date' },
+  progress: { path: 'lms.progressPercentage', type: 'number' },
+  lmsSyncStatus: { path: 'lms.syncStatus', type: 'text' },
+  externalReference: { path: 'externalReference', type: 'text' }
+};
+
+module.exports = { STUDENT_FIELDS, APPLICATION_FIELDS, PROGRAMME_FIELDS, INTAKE_FIELDS, ENROLMENT_FIELDS };

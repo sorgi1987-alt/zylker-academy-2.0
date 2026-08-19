@@ -20,6 +20,8 @@ export const STUDENT_STATUSES = ['Applicant', 'Active', 'Withdrawn', 'Alumni'];
 export const ENROLMENT_STATUSES = ['Active', 'Completed', 'Withdrawn', 'Cancelled'];
 export const PROGRAMME_LEVELS = ['Foundation', 'Certificate', 'Diploma', 'Undergraduate', 'Postgraduate', 'Professional', 'Other'];
 export const PROGRAMME_STATUSES = ['Draft', 'Open for Applications', 'Running', 'Suspended', 'Archived'];
+export const INTAKE_STATUSES = ['Planning', 'Open', 'Full', 'In Progress', 'Completed', 'Cancelled'];
+export const DELIVERY_MODES = ['On Campus', 'Online', 'Hybrid'];
 
 // The first entry in each list is the page's primary/anchor column (the
 // linked name) — always shown, never offered in the column picker, but still
@@ -59,4 +61,34 @@ export const PROGRAMME_FIELDS = [
   { key: 'intakeCount', labelKey: 'views.fields.programme.intakeCount', type: 'number' },
   { key: 'enrolmentCount', labelKey: 'views.fields.programme.enrolmentCount', type: 'number' },
   { key: 'applicationCount', labelKey: 'views.fields.programme.applicationCount', type: 'number' }
+];
+
+export const INTAKE_FIELDS = [
+  { key: 'name', labelKey: 'views.fields.intake.name', type: 'text', primary: true },
+  { key: 'programme', labelKey: 'views.fields.intake.programme', type: 'text' },
+  { key: 'status', labelKey: 'views.fields.intake.status', type: 'enum', options: INTAKE_STATUSES },
+  { key: 'academicYear', labelKey: 'views.fields.intake.academicYear', type: 'text' },
+  { key: 'startDate', labelKey: 'views.fields.intake.startDate', type: 'date' },
+  { key: 'endDate', labelKey: 'views.fields.intake.endDate', type: 'date' },
+  { key: 'applicationOpenDate', labelKey: 'views.fields.intake.applicationOpenDate', type: 'date' },
+  { key: 'applicationDeadline', labelKey: 'views.fields.intake.applicationDeadline', type: 'date' },
+  { key: 'capacity', labelKey: 'views.fields.intake.capacity', type: 'number' },
+  { key: 'deliveryMode', labelKey: 'views.fields.intake.deliveryMode', type: 'enum', options: DELIVERY_MODES },
+  { key: 'location', labelKey: 'views.fields.intake.location', type: 'text' },
+  { key: 'applicationCount', labelKey: 'views.fields.intake.applicationCount', type: 'number' },
+  { key: 'enrolmentCount', labelKey: 'views.fields.intake.enrolmentCount', type: 'number' }
+];
+
+export const ENROLMENT_FIELDS = [
+  { key: 'reference', labelKey: 'views.fields.enrolment.reference', type: 'text', primary: true },
+  { key: 'studentName', labelKey: 'views.fields.enrolment.student', type: 'text' },
+  { key: 'programme', labelKey: 'views.fields.enrolment.programme', type: 'text' },
+  { key: 'intake', labelKey: 'views.fields.enrolment.intake', type: 'text' },
+  // options overridden at the call site with the live status list, same as
+  // Applications does for `stage`.
+  { key: 'status', labelKey: 'views.fields.enrolment.status', type: 'enum', options: [] },
+  { key: 'enrolmentDate', labelKey: 'views.fields.enrolment.enrolled', type: 'date' },
+  { key: 'progress', labelKey: 'views.fields.enrolment.progress', type: 'number' },
+  { key: 'lmsSyncStatus', labelKey: 'views.fields.enrolment.lmsSync', type: 'text' },
+  { key: 'externalReference', labelKey: 'views.fields.enrolment.externalReference', type: 'text' }
 ];

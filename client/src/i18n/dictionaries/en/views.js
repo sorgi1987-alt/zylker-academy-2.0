@@ -81,6 +81,32 @@ export default {
         intakeCount: 'Intakes',
         enrolmentCount: 'Enrolments',
         applicationCount: 'Applications'
+      },
+      intake: {
+        name: 'Intake',
+        programme: 'Programme',
+        status: 'Status',
+        academicYear: 'Academic year',
+        startDate: 'Starts',
+        endDate: 'Ends',
+        applicationOpenDate: 'Applications open',
+        applicationDeadline: 'Application deadline',
+        capacity: 'Capacity',
+        deliveryMode: 'Delivery mode',
+        location: 'Location',
+        applicationCount: 'Applications',
+        enrolmentCount: 'Enrolments'
+      },
+      enrolment: {
+        reference: 'Enrolment',
+        student: 'Student',
+        programme: 'Programme',
+        intake: 'Intake',
+        status: 'Status',
+        enrolled: 'Enrolled',
+        progress: 'Progress',
+        lmsSync: 'LMS sync status',
+        externalReference: 'External reference'
       }
     }
   }

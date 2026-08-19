@@ -1,17 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { usePagedList, useApi, useAction } from '../useApi.js';
+import { usePagedList, useApi, useAction, useDebounced } from '../useApi.js';
 import { api, newIdempotencyKey } from '../api.js';
 import { useCan } from '../AuthContext.jsx';
 import { useT } from '../i18n/I18nContext.jsx';
 import {
-  Async, Card, Pill, Pagination, SearchBox, FilterSelect, FilterChips, SourceBadge, Modal, ExportCsvButton, useToast, fmtDate
+  Async, Card, Pill, Pagination, FilterChips, SourceBadge, Modal, ConfirmDialog, ExportCsvButton, useToast, fmtDate
 } from '../components/Ui.jsx';
 import { Field, FormActions, FormError, friendlyError, DATE_MIN, DATE_MAX } from '../components/Form.jsx';
+import { useViews, useViewDraft, ViewSelect, ViewFilterPanel, liveConditions } from '../components/ViewManager.jsx';
+import { INTAKE_FIELDS } from '../viewFields.js';
 import { toCsv, downloadCsv } from '../csv.js';
 
 const STATUSES = ['Planning', 'Open', 'Full', 'In Progress', 'Completed', 'Cancelled'];
 const DELIVERY = ['On Campus', 'Online', 'Hybrid'];
+
+// Matches the table this page has always rendered.
+const DEFAULT_COLUMNS = ['programme', 'status', 'startDate', 'capacity', 'applicationCount', 'enrolmentCount', 'deliveryMode'];
+
+// Export mirrors the table exactly — one entry per optional column, plus the
+// primary (intake) column added separately since it's never optional.
+const EXPORT_COLUMNS = {
+  programme: { labelKey: 'intakes.table.programme', value: (i) => (i.programme ? i.programme.name : '') },
+  status: { labelKey: 'intakes.table.status', value: (i) => i.status || '' },
+  academicYear: { labelKey: 'views.fields.intake.academicYear', value: (i) => i.academicYear || '' },
+  startDate: { labelKey: 'intakes.table.starts', value: (i) => fmtDate(i.startDate) },
+  endDate: { labelKey: 'views.fields.intake.endDate', value: (i) => fmtDate(i.endDate) },
+  applicationOpenDate: { labelKey: 'views.fields.intake.applicationOpenDate', value: (i) => fmtDate(i.applicationOpenDate) },
+  applicationDeadline: { labelKey: 'views.fields.intake.applicationDeadline', value: (i) => fmtDate(i.applicationDeadline) },
+  capacity: { labelKey: 'intakes.table.capacity', value: (i) => (i.capacity === null ? '' : `${i.counts.activeEnrolments} / ${i.capacity}`) },
+  deliveryMode: { labelKey: 'intakes.table.delivery', value: (i) => i.deliveryMode || '' },
+  location: { labelKey: 'views.fields.intake.location', value: (i) => i.location || '' },
+  applicationCount: { labelKey: 'intakes.table.applications', value: (i) => i.counts.applications },
+  enrolmentCount: { labelKey: 'intakes.table.enrolments', value: (i) => i.counts.enrolments }
+};
 
 function NewIntakeDialog({ onClose, onDone }) {
   const t = useT();
@@ -118,16 +140,46 @@ export default function Intakes() {
       capacity: params.get('capacity') || undefined
     }
   });
+  const views = useViews('zylker.views.intakes');
+  const [draft, setDraft] = useViewDraft(views.activeView, DEFAULT_COLUMNS);
+  const [deletingViewId, setDeletingViewId] = useState(null);
+
+  const debouncedConditions = useDebounced(draft.conditions, 350);
+  useEffect(() => {
+    const c = liveConditions(debouncedConditions);
+    list.setFilter('conditions', c.length ? JSON.stringify(c) : undefined);
+    list.setFilter('sortBy', draft.sort ? draft.sort.field : undefined);
+    list.setFilter('sortDir', draft.sort ? draft.sort.direction : undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedConditions, draft.sort]);
+
+  const has = (key) => draft.columns.includes(key);
 
   /*
-   * Capacity filters. Intakes with no capacity recorded are not limited and are
-   * excluded from both, rather than being treated as a limit of zero.
+   * Capacity filters, dashboard-linked (?capacity=at-risk / full) — a
+   * computed threshold on enrolments vs capacity, not a plain field, so it
+   * stays a URL-driven filter alongside the general view/condition system
+   * rather than becoming a condition itself. Intakes with no capacity
+   * recorded are not limited and are excluded from both, rather than being
+   * treated as a limit of zero. Same coexistence pattern as Applications'
+   * `awaitingAction`.
    */
   const CAPACITY_OPTIONS = [
     { value: 'at-risk', label: t('intakes.capacityAtRisk') },
     { value: 'full', label: t('intakes.capacityFull') }
   ];
   const capacityLabel = (v) => (CAPACITY_OPTIONS.find((o) => o.value === v) || {}).label || v;
+
+  const exportIntakes = async () => {
+    const res = await api.intakes({ ...list.params, page: 1, perPage: 200 });
+    const columns = [
+      { label: t('intakes.table.intake'), value: (i) => i.name },
+      ...draft.columns
+        .filter((k) => EXPORT_COLUMNS[k])
+        .map((k) => ({ label: t(EXPORT_COLUMNS[k].labelKey), value: EXPORT_COLUMNS[k].value }))
+    ];
+    downloadCsv('intakes.csv', toCsv(res.data || [], columns));
+  };
 
   // Opened by the global Create menu via ?new=1; the flag is cleared once used
   // so Back and refresh do not reopen the dialog. See Programmes for the same
@@ -141,67 +193,34 @@ export default function Intakes() {
     setParams(next, { replace: true });
   }, [wantsNew, can, params, setParams]);
 
-  // This page has no column picker (unlike Students/Applications/Programmes)
-  // so the export always mirrors the one, fixed table exactly.
-  const exportIntakes = async () => {
-    const res = await api.intakes({ ...list.params, page: 1, perPage: 200 });
-    const columns = [
-      { label: t('intakes.table.intake'), value: (i) => i.name },
-      { label: t('intakes.table.programme'), value: (i) => (i.programme ? i.programme.name : '') },
-      { label: t('intakes.table.status'), value: (i) => i.status || '' },
-      { label: t('intakes.table.starts'), value: (i) => fmtDate(i.startDate) },
-      { label: t('intakes.table.capacity'), value: (i) => (i.capacity === null ? '' : `${i.counts.activeEnrolments} / ${i.capacity}`) },
-      { label: t('intakes.table.applications'), value: (i) => i.counts.applications },
-      { label: t('intakes.table.enrolments'), value: (i) => i.counts.enrolments },
-      { label: t('intakes.table.delivery'), value: (i) => i.deliveryMode || '' }
-    ];
-    downloadCsv('intakes.csv', toCsv(res.data || [], columns));
-  };
-
   return (
     <>
-      <div className="page-head">
-        <h1>{t('intakes.pageTitle')}</h1>
-      </div>
+      {/* The active nav item already names this page; a repeated visible
+          heading was pure redundancy. The h1 stays for screen readers. */}
+      <h1 className="sr-only">{t('intakes.pageTitle')}</h1>
 
       <Card
-        title={t('intakes.allIntakes')}
-        action={(
-          <div className="head-actions">
-            <SourceBadge source="crm" />
-            <ExportCsvButton onExport={exportIntakes} />
-            {can('intake:write') && (
-              <button type="button" className="btn primary" onClick={() => setCreating(true)}>{t('intakes.newIntake')}</button>
-            )}
-          </div>
+        header={(
+          <>
+            <div className="view-header-left">
+              <ViewSelect
+                views={views.views}
+                activeViewId={views.activeViewId}
+                defaultViewId={views.defaultViewId}
+                onSelect={views.selectView}
+              />
+            </div>
+            <div className="head-actions">
+              <SourceBadge source="crm" />
+              <ExportCsvButton onExport={exportIntakes} />
+              {can('intake:write') && (
+                <button type="button" className="btn primary" onClick={() => setCreating(true)}>{t('intakes.newIntake')}</button>
+              )}
+            </div>
+          </>
         )}
+        headerClassName="view-header"
       >
-        <div className="toolbar">
-          <SearchBox
-            id="intake-search"
-            label={t('common.search')}
-            value={list.search}
-            onChange={list.setSearch}
-            placeholder={t('intakes.searchPlaceholder')}
-          />
-          <FilterSelect
-            id="intake-status"
-            label={t('intakes.statusLabel')}
-            value={list.filters.status || ''}
-            onChange={(v) => list.setFilter('status', v)}
-            options={STATUSES}
-            allLabel={t('intakes.allStatuses')}
-          />
-          <FilterSelect
-            id="intake-capacity"
-            label={t('intakes.capacityLabel')}
-            value={list.filters.capacity || ''}
-            onChange={(v) => list.setFilter('capacity', v)}
-            options={CAPACITY_OPTIONS}
-            allLabel={t('intakes.anyLabel')}
-          />
-        </div>
-
         <FilterChips
           chips={[
             list.filters.status && {
@@ -211,82 +230,118 @@ export default function Intakes() {
             list.filters.capacity && {
               key: 'capacity', label: t('intakes.capacityLabel'), value: capacityLabel(list.filters.capacity),
               onClear: () => list.setFilter('capacity', '')
-            },
-            list.search && {
-              key: 'search', label: t('common.search'), value: list.search,
-              onClear: () => list.setSearch('')
             }
           ]}
           onClearAll={list.clearFilters}
         />
 
-        <Async state={list} empty={{ title: t('intakes.noMatch') }}>
-          {(rows, meta) => (
-            <>
-              <div className="t-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('intakes.table.intake')}</th>
-                      <th scope="col">{t('intakes.table.programme')}</th>
-                      <th scope="col">{t('intakes.table.status')}</th>
-                      <th scope="col">{t('intakes.table.starts')}</th>
-                      <th scope="col">{t('intakes.table.capacity')}</th>
-                      <th scope="col">{t('intakes.table.applications')}</th>
-                      <th scope="col">{t('intakes.table.enrolments')}</th>
-                      <th scope="col">{t('intakes.table.delivery')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((i) => (
-                      <tr key={i.id}>
-                        <td><Link to={`/intakes/${i.id}`}>{i.name}</Link></td>
-                        <td>
-                          {i.programme
-                            ? <Link to={`/programmes/${i.programme.id}`}>{i.programme.name}</Link>
-                            : <span className="muted">—</span>}
-                        </td>
-                        <td>
-                          <Pill value={i.status} />
-                          {i.full && <span className="pill stop">{t('intakes.fullBadge')}</span>}
-                        </td>
-                        <td>{fmtDate(i.startDate)}</td>
-                        <td className="mono">
-                          {/* "Not limited" and a capacity of zero are different
-                              things and must not look the same. */}
-                          {i.capacity === null
-                            ? <span className="muted">{t('intakes.notLimited')}</span>
-                            : `${i.counts.activeEnrolments} / ${i.capacity}`}
-                        </td>
-                        <td className="mono">{i.counts.applications}</td>
-                        <td className="mono">{i.counts.enrolments}</td>
-                        <td>{i.deliveryMode || <span className="muted">—</span>}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        <div className="view-layout">
+          <ViewFilterPanel
+            fields={INTAKE_FIELDS}
+            defaultViewId={views.defaultViewId}
+            draft={draft}
+            onDraftChange={setDraft}
+            onSave={views.saveView}
+            onDelete={(id) => setDeletingViewId(id)}
+            onToggleDefault={views.toggleDefaultView}
+          />
 
-              {meta.capped && (
-                <p className="note">
-                  {t('intakes.showingRecent', { total: meta.total })}
-                </p>
+          <div className="view-content">
+            <Async state={list} empty={{ title: t('intakes.noMatch') }}>
+              {(rows, meta) => (
+                <>
+                  <div className="t-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th scope="col">{t('intakes.table.intake')}</th>
+                          {has('programme') && <th scope="col">{t('intakes.table.programme')}</th>}
+                          {has('status') && <th scope="col">{t('intakes.table.status')}</th>}
+                          {has('academicYear') && <th scope="col">{t('views.fields.intake.academicYear')}</th>}
+                          {has('startDate') && <th scope="col">{t('intakes.table.starts')}</th>}
+                          {has('endDate') && <th scope="col">{t('views.fields.intake.endDate')}</th>}
+                          {has('applicationOpenDate') && <th scope="col">{t('views.fields.intake.applicationOpenDate')}</th>}
+                          {has('applicationDeadline') && <th scope="col">{t('views.fields.intake.applicationDeadline')}</th>}
+                          {has('capacity') && <th scope="col">{t('intakes.table.capacity')}</th>}
+                          {has('deliveryMode') && <th scope="col">{t('intakes.table.delivery')}</th>}
+                          {has('location') && <th scope="col">{t('views.fields.intake.location')}</th>}
+                          {has('applicationCount') && <th scope="col">{t('intakes.table.applications')}</th>}
+                          {has('enrolmentCount') && <th scope="col">{t('intakes.table.enrolments')}</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map((i) => (
+                          <tr key={i.id}>
+                            <td><Link to={`/intakes/${i.id}`}>{i.name}</Link></td>
+                            {has('programme') && (
+                              <td>
+                                {i.programme
+                                  ? <Link to={`/programmes/${i.programme.id}`}>{i.programme.name}</Link>
+                                  : <span className="muted">—</span>}
+                              </td>
+                            )}
+                            {has('status') && (
+                              <td>
+                                <Pill value={i.status} />
+                                {i.full && <span className="pill stop">{t('intakes.fullBadge')}</span>}
+                              </td>
+                            )}
+                            {has('academicYear') && <td>{i.academicYear || <span className="muted">—</span>}</td>}
+                            {has('startDate') && <td>{fmtDate(i.startDate)}</td>}
+                            {has('endDate') && <td>{fmtDate(i.endDate)}</td>}
+                            {has('applicationOpenDate') && <td>{fmtDate(i.applicationOpenDate)}</td>}
+                            {has('applicationDeadline') && <td>{fmtDate(i.applicationDeadline)}</td>}
+                            {has('capacity') && (
+                              <td className="mono">
+                                {/* "Not limited" and a capacity of zero are different
+                                    things and must not look the same. */}
+                                {i.capacity === null
+                                  ? <span className="muted">{t('intakes.notLimited')}</span>
+                                  : `${i.counts.activeEnrolments} / ${i.capacity}`}
+                              </td>
+                            )}
+                            {has('deliveryMode') && <td>{i.deliveryMode || <span className="muted">—</span>}</td>}
+                            {has('location') && <td>{i.location || <span className="muted">—</span>}</td>}
+                            {has('applicationCount') && <td className="mono">{i.counts.applications}</td>}
+                            {has('enrolmentCount') && <td className="mono">{i.counts.enrolments}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {meta.capped && (
+                    <p className="note">
+                      {t('intakes.showingRecent', { total: meta.total })}
+                    </p>
+                  )}
+
+                  <Pagination
+                    page={meta.page}
+                    totalPages={meta.totalPages}
+                    total={meta.total}
+                    onPage={list.setPage}
+                    busy={list.status === 'loading'}
+                  />
+                </>
               )}
-
-              <Pagination
-                page={meta.page}
-                totalPages={meta.totalPages}
-                total={meta.total}
-                onPage={list.setPage}
-                busy={list.status === 'loading'}
-              />
-            </>
-          )}
-        </Async>
+            </Async>
+          </div>
+        </div>
       </Card>
 
       {creating && (
         <NewIntakeDialog onClose={() => setCreating(false)} onDone={async () => { await list.reload(); }} />
+      )}
+
+      {deletingViewId && (
+        <ConfirmDialog
+          title={t('views.deleteConfirmTitle')}
+          message={t('views.deleteConfirmMessage')}
+          confirmLabel={t('views.deleteView')}
+          onConfirm={() => { views.deleteView(deletingViewId); setDeletingViewId(null); }}
+          onCancel={() => setDeletingViewId(null)}
+        />
       )}
     </>
   );

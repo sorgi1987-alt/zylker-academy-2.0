@@ -1208,6 +1208,7 @@ R('/api/intakes', perms.P.INTAKE_READ, async (req, res) => {
       && (i.counts.activeEnrolments / i.capacity) >= threshold);
   }
   data = data.filter((i) => matches(i, req.query.search, ['name', 'intakeId', 'academicYear', 'location']));
+  data = applyView(data, req, viewFields.INTAKE_FIELDS);
 
   const { items, meta } = paginate(data, req, {
     byStatus: groupBy(data, (i) => i.status),
@@ -1268,6 +1269,7 @@ R('/api/enrolments', perms.P.ENROLMENT_READ, async (req, res) => {
   if (req.query.lmsMapped === 'yes') data = data.filter((e) => Boolean(e.lms && e.lms.enrolmentId));
   if (req.query.syncStatus) data = data.filter((e) => (e.lms && e.lms.syncStatus) === req.query.syncStatus);
   data = data.filter((e) => matches(e, req.query.search, ['reference', 'externalReference', 'studentName', 'studentEmail']));
+  data = applyView(data, req, viewFields.ENROLMENT_FIELDS);
 
   const { items, meta } = paginate(data, req, {
     byStatus, statuses: Object.values(writes.ENROLMENT_STATUS), source: 'crm'

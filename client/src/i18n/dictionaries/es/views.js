@@ -81,6 +81,32 @@ export default {
         intakeCount: 'Convocatorias',
         enrolmentCount: 'Matrículas',
         applicationCount: 'Solicitudes'
+      },
+      intake: {
+        name: 'Convocatoria',
+        programme: 'Programa',
+        status: 'Estado',
+        academicYear: 'Año académico',
+        startDate: 'Inicio',
+        endDate: 'Fin',
+        applicationOpenDate: 'Apertura de solicitudes',
+        applicationDeadline: 'Fecha límite de solicitud',
+        capacity: 'Capacidad',
+        deliveryMode: 'Modalidad de impartición',
+        location: 'Ubicación',
+        applicationCount: 'Solicitudes',
+        enrolmentCount: 'Matrículas'
+      },
+      enrolment: {
+        reference: 'Matrícula',
+        student: 'Estudiante',
+        programme: 'Programa',
+        intake: 'Convocatoria',
+        status: 'Estado',
+        enrolled: 'Matriculado',
+        progress: 'Progreso',
+        lmsSync: 'Estado de sincronización con el LMS',
+        externalReference: 'Referencia externa'
       }
     }
   }
