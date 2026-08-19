@@ -901,8 +901,7 @@ R('/api/students', perms.P.STUDENT_READ, async (req, res) => {
 
   const { items, meta } = paginate(students, req, {
     byStatus: groupBy(students, (s) => s.status),
-    source: 'crm',
-    capped: false
+    source: 'crm'
   });
   ok(res, items, meta);
 });
@@ -998,7 +997,7 @@ R('/api/applications', perms.P.APPLICATION_READ, async (req, res) => {
   data = data.filter((a) => matches(a, req.query.search, ['name', 'applicationId', 'applicantName', 'applicantEmail', 'externalReference']));
   data = applyView(data, req, viewFields.APPLICATION_FIELDS);
 
-  const { items, meta } = paginate(data, req, { byStage, stages: [...writes.ALL_STAGES], source: 'crm', capped: false });
+  const { items, meta } = paginate(data, req, { byStage, stages: [...writes.ALL_STAGES], source: 'crm' });
   ok(res, items, meta);
 });
 
@@ -1138,7 +1137,7 @@ R('/api/programmes', perms.P.PROGRAMME_READ, async (req, res) => {
   data = data.filter((p) => matches(p, req.query.search, ['name', 'code', 'department', 'academicLevel']));
   data = applyView(data, req, viewFields.PROGRAMME_FIELDS);
 
-  const { items, meta } = paginate(data, req, { source: 'crm', lmsDemonstrationDataset: true, capped: false });
+  const { items, meta } = paginate(data, req, { source: 'crm', lmsDemonstrationDataset: true });
   ok(res, items, meta);
 });
 
@@ -1213,8 +1212,7 @@ R('/api/intakes', perms.P.INTAKE_READ, async (req, res) => {
   const { items, meta } = paginate(data, req, {
     byStatus: groupBy(data, (i) => i.status),
     statuses: writes.INTAKE_STATUS,
-    source: 'crm',
-    capped: false
+    source: 'crm'
   });
   ok(res, items, meta);
 });
@@ -1272,7 +1270,7 @@ R('/api/enrolments', perms.P.ENROLMENT_READ, async (req, res) => {
   data = data.filter((e) => matches(e, req.query.search, ['reference', 'externalReference', 'studentName', 'studentEmail']));
 
   const { items, meta } = paginate(data, req, {
-    byStatus, statuses: Object.values(writes.ENROLMENT_STATUS), source: 'crm', capped: false
+    byStatus, statuses: Object.values(writes.ENROLMENT_STATUS), source: 'crm'
   });
   ok(res, items, meta);
 });

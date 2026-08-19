@@ -60,13 +60,14 @@ export default function NewEnrolment() {
     intakeId: !form.intakeId ? t('newEnrolment.errors.chooseIntake') : null
   };
   const hasErrors = Object.values(errors).some(Boolean);
+  const blockedByCapacity = Boolean(chosenIntake && chosenIntake.full && !(canOverride && override));
 
   const action = useAction();
 
   const onSubmit = async (e) => {
     e.preventDefault();
     setTouched(true);
-    if (hasErrors) return;
+    if (hasErrors || blockedByCapacity) return;
     const r = await action.run(() => api.createEnrolment({
       studentId: form.studentId,
       programmeId: form.programmeId,
@@ -166,6 +167,7 @@ export default function NewEnrolment() {
           <FormError error={action.error ? friendlyError(action.error) : null} />
           <FormActions
             busy={action.busy}
+            disabled={blockedByCapacity}
             submitLabel={t('newEnrolment.createEnrolment')}
             onCancel={() => navigate('/enrolments')}
           />

@@ -15,6 +15,7 @@ export default {
     allStatuses: 'All statuses',
     lastSync: 'Last sync',
     noMatch: 'No enrolments match',
+    showingRecent: 'Showing the most recent {total} records. Narrow the search to see older ones.',
     table: {
       reference: 'Reference',
       student: 'Student',

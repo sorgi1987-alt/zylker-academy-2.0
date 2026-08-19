@@ -36,7 +36,7 @@ function MapDialog({ course, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('learningCourseDetail.mapDialog.title')} onClose={onClose}>
+    <Modal title={t('learningCourseDetail.mapDialog.title')} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <Field
           id="programmeId"

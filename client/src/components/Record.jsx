@@ -110,21 +110,26 @@ export function NoteDialog({ entityType, recordId, onClose, onDone }) {
   const t = useT();
   const toast = useToast();
   const [note, setNote] = useState('');
+  const [touched, setTouched] = useState(false);
   const action = useAction(async () => { await onDone(); onClose(); });
+  const noteError = !note.trim() ? t('common.record.note.required') : null;
 
   const submit = async (e) => {
     e.preventDefault();
+    setTouched(true);
+    if (noteError) return;
     const r = await action.run(() => api.createNote({ entityType, recordId, note }));
     if (r) toast(t('common.record.note.recorded'));
   };
 
   return (
-    <Modal title={t('common.record.note.title')} onClose={onClose}>
+    <Modal title={t('common.record.note.title')} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <Field
           id="note"
           label={t('common.record.note.label')}
           required
+          error={touched ? noteError : null}
           hint={t('common.record.note.hint')}
         >
           <textarea rows={4} value={note} onChange={(e2) => setNote(e2.target.value)} maxLength={1000} />
@@ -133,7 +138,6 @@ export function NoteDialog({ entityType, recordId, onClose, onDone }) {
         <FormError error={action.error ? friendlyError(action.error) : null} />
         <FormActions
           busy={action.busy}
-          disabled={!note.trim()}
           submitLabel={t('common.record.note.submit')}
           onCancel={onClose}
         />

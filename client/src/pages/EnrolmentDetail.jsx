@@ -36,7 +36,7 @@ function EditDialog({ enrolment, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('enrolmentDetail.editDialog.title')} onClose={onClose}>
+    <Modal title={t('enrolmentDetail.editDialog.title')} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
           <Field id="financeStatus" label={t('enrolmentDetail.editDialog.financeStatus')}>

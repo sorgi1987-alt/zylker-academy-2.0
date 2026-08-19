@@ -199,6 +199,10 @@ export default function Applications() {
                       </table>
                     </div>
 
+                    {meta.capped && (
+                      <p className="note">{t('applications.showingRecent', { total: meta.total })}</p>
+                    )}
+
                     <Pagination
                       page={meta.page}
                       totalPages={meta.totalPages}
@@ -215,13 +219,18 @@ export default function Applications() {
                 empty={{ title: t('applications.empty.title'), message: t('applications.empty.message') }}
                 emptyWhen={() => false}
               >
-                {(rows) => (
-                  <ApplicationBoard
-                    rows={rows}
-                    stages={stages}
-                    canDrag={can('application:transition')}
-                    onReload={() => { board.reload(); list.reload(); }}
-                  />
+                {(rows, boardMeta) => (
+                  <>
+                    {boardMeta.capped && (
+                      <p className="note">{t('applications.showingRecent', { total: boardMeta.total })}</p>
+                    )}
+                    <ApplicationBoard
+                      rows={rows}
+                      stages={stages}
+                      canDrag={can('application:transition')}
+                      onReload={() => { board.reload(); list.reload(); }}
+                    />
+                  </>
                 )}
               </Async>
             )}

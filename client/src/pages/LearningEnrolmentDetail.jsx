@@ -47,7 +47,7 @@ function MapStudentDialog({ record, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('learningEnrolmentDetail.mapStudentDialog.title')} onClose={onClose}>
+    <Modal title={t('learningEnrolmentDetail.mapStudentDialog.title')} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <Field
           id="crmStudentId"
@@ -118,7 +118,7 @@ function LinkEnrolmentDialog({ record, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('learningEnrolmentDetail.linkEnrolmentDialog.title')} onClose={onClose}>
+    <Modal title={t('learningEnrolmentDetail.linkEnrolmentDialog.title')} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <Field
           id="crmEnrolmentId"
@@ -187,7 +187,7 @@ function CreateCrmEnrolmentDialog({ record, course, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('learningEnrolmentDetail.createEnrolmentDialog.title')} onClose={onClose}>
+    <Modal title={t('learningEnrolmentDetail.createEnrolmentDialog.title')} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <dl className="dl">
           <dt>{t('learningEnrolmentDetail.createEnrolmentDialog.studentLabel')}</dt>

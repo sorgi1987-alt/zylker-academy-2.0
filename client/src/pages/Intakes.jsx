@@ -54,7 +54,7 @@ function NewIntakeDialog({ onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('intakes.newDialog.title')} onClose={onClose} wide>
+    <Modal title={t('intakes.newDialog.title')} onClose={onClose} wide busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
           <Field id="name" label={t('intakes.newDialog.nameLabel')} required error={touched ? errors.name : null}>
@@ -247,6 +247,12 @@ export default function Intakes() {
                   </tbody>
                 </table>
               </div>
+
+              {meta.capped && (
+                <p className="note">
+                  {t('intakes.showingRecent', { total: meta.total })}
+                </p>
+              )}
 
               <Pagination
                 page={meta.page}

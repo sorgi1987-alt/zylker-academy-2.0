@@ -150,6 +150,7 @@ export default {
         title: 'Añadir una nota interna',
         label: 'Nota',
         hint: 'Se registra en el historial de actividad de este registro, atribuida a ti y con fecha y hora. No se escribe en el registro de Zoho CRM: este módulo no tiene un campo de notas.',
+        required: 'Se requiere una nota.',
         charCount: '{count} de 1000 caracteres.',
         submit: 'Registrar nota',
         recorded: 'Nota registrada en el historial de actividad.'

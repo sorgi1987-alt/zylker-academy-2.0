@@ -9,6 +9,7 @@ export default {
     inactiveOption: 'Inactivo',
     inactiveBadge: 'Inactivo',
     noMatch: 'Ningún programa coincide',
+    showingRecent: 'Mostrando los {total} registros más recientes. Acota la búsqueda para ver los anteriores.',
     table: {
       programme: 'Programa',
       code: 'Código',
@@ -101,6 +102,7 @@ export default {
     editDialog: {
       title: 'Editar programa',
       nameLabel: 'Nombre del programa',
+      nameRequired: 'El nombre del programa es obligatorio.',
       statusLabel: 'Estado',
       notSet: 'No establecido',
       academicLevelLabel: 'Nivel académico',
@@ -127,6 +129,7 @@ export default {
     capacityAtRisk: 'Al 90% o más de su capacidad',
     capacityFull: 'Al límite o por encima de su capacidad',
     noMatch: 'Ninguna convocatoria coincide',
+    showingRecent: 'Mostrando los {total} registros más recientes. Acota la búsqueda para ver los anteriores.',
     table: {
       intake: 'Convocatoria',
       programme: 'Programa',

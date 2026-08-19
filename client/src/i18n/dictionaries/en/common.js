@@ -165,6 +165,7 @@ export default {
         title: 'Add an internal note',
         label: 'Note',
         hint: "Recorded in this record's activity history, attributed to you and timestamped. It is not written onto the record in Zoho CRM — this module has no notes field.",
+        required: 'A note is required.',
         charCount: '{count} of 1000 characters.',
         submit: 'Record note',
         recorded: 'Note recorded in the activity trail.'

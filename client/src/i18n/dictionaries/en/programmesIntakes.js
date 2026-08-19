@@ -9,6 +9,7 @@ export default {
     inactiveOption: 'Inactive',
     inactiveBadge: 'Inactive',
     noMatch: 'No programmes match',
+    showingRecent: 'Showing the most recent {total} records. Narrow the search to see older ones.',
     table: {
       programme: 'Programme',
       code: 'Code',
@@ -101,6 +102,7 @@ export default {
     editDialog: {
       title: 'Edit programme',
       nameLabel: 'Programme name',
+      nameRequired: 'A programme name is required.',
       statusLabel: 'Status',
       notSet: 'Not set',
       academicLevelLabel: 'Academic level',
@@ -127,6 +129,7 @@ export default {
     capacityAtRisk: 'At 90% or more of capacity',
     capacityFull: 'At or over capacity',
     noMatch: 'No intakes match',
+    showingRecent: 'Showing the most recent {total} records. Narrow the search to see older ones.',
     table: {
       intake: 'Intake',
       programme: 'Programme',

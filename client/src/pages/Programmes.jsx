@@ -54,7 +54,7 @@ function NewProgrammeDialog({ onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('programmes.newDialog.title')} onClose={onClose} wide>
+    <Modal title={t('programmes.newDialog.title')} onClose={onClose} wide busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
           <Field id="name" label={t('programmes.newDialog.nameLabel')} required error={touched ? nameError : null}>
@@ -235,6 +235,11 @@ export default function Programmes() {
                   {meta.lmsDemonstrationDataset && (
                     <p className="note">
                       {t('programmes.lmsNote')}
+                    </p>
+                  )}
+                  {meta.capped && (
+                    <p className="note">
+                      {t('programmes.showingRecent', { total: meta.total })}
                     </p>
                   )}
 

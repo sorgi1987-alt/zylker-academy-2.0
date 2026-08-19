@@ -139,6 +139,11 @@ export default function Enrolments() {
               <p className="note">
                 {t('enrolments.syncNote')}
               </p>
+              {meta.capped && (
+                <p className="note">
+                  {t('enrolments.showingRecent', { total: meta.total })}
+                </p>
+              )}
 
               <Pagination
                 page={meta.page}

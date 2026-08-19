@@ -100,7 +100,7 @@ export default function ApplicationBoard({ rows, stages, canDrag, onReload }) {
                 key={a.id}
                 to={`/applications/${a.id}`}
                 className={`kanban-card${pendingId === a.id ? ' pending' : ''}`}
-                draggable={canDrag}
+                draggable={canDrag && pendingId !== a.id}
                 onDragStart={(e) => {
                   e.dataTransfer.setData('text/plain', String(a.id));
                   e.dataTransfer.effectAllowed = 'move';

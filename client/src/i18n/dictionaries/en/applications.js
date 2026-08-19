@@ -15,6 +15,7 @@ export default {
       title: 'No applications match',
       message: 'Try a different search term or clear the stage filter.'
     },
+    showingRecent: 'Showing the most recent {total} records. Narrow the search to see older ones.',
     table: {
       application: 'Application',
       applicant: 'Applicant',

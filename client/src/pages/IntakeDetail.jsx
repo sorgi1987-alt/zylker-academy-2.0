@@ -54,7 +54,7 @@ function EditDialog({ intake, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('intakeDetail.editDialog.title')} onClose={onClose} wide>
+    <Modal title={t('intakeDetail.editDialog.title')} onClose={onClose} wide busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
           <Field id="name" label={t('intakeDetail.editDialog.nameLabel')} required error={touched ? errors.name : null}>

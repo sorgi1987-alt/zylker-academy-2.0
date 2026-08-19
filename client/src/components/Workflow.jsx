@@ -104,7 +104,7 @@ function TransitionDialog({ application, target, workflow, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('common.workflow.moveTo', { target })} onClose={onClose}>
+    <Modal title={t('common.workflow.moveTo', { target })} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <p style={{ marginTop: 0 }}>
           {t('common.workflow.stageWillChange', { target })}

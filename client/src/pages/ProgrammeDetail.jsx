@@ -27,13 +27,22 @@ function EditDialog({ programme, onClose, onDone }) {
     lmsCourseId: programme.lms.courseId || '',
     lmsCourseUrl: programme.lms.courseUrl || ''
   });
+  const [touched, setTouched] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const action = useAction(async () => { await onDone(); onClose(); });
 
+  const errors = {
+    name: !form.name.trim() ? t('programmeDetail.editDialog.nameRequired') : null
+  };
+  const hasErrors = Object.values(errors).some(Boolean);
+
   const submit = async (e) => {
     e.preventDefault();
+    setTouched(true);
+    if (hasErrors) return;
     const r = await action.run(() => api.updateProgramme(programme.id, {
       ...form,
+      name: form.name.trim(),
       durationValue: form.durationValue === '' ? undefined : Number(form.durationValue),
       tuitionFee: form.tuitionFee === '' ? undefined : Number(form.tuitionFee),
       expectedModifiedTime: programme.modifiedTime
@@ -42,10 +51,10 @@ function EditDialog({ programme, onClose, onDone }) {
   };
 
   return (
-    <Modal title={t('programmeDetail.editDialog.title')} onClose={onClose} wide>
+    <Modal title={t('programmeDetail.editDialog.title')} onClose={onClose} wide busy={action.busy}>
       <form onSubmit={submit} noValidate>
         <div className="form-grid">
-          <Field id="name" label={t('programmeDetail.editDialog.nameLabel')} required>
+          <Field id="name" label={t('programmeDetail.editDialog.nameLabel')} required error={touched ? errors.name : null}>
             <input value={form.name} onChange={set('name')} />
           </Field>
           <Field id="status" label={t('programmeDetail.editDialog.statusLabel')}>

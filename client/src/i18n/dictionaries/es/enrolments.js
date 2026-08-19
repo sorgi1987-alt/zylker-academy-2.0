@@ -15,6 +15,7 @@ export default {
     allStatuses: 'Todos los estados',
     lastSync: 'Última sincronización',
     noMatch: 'Ninguna matrícula coincide',
+    showingRecent: 'Mostrando los {total} registros más recientes. Acota la búsqueda para ver los anteriores.',
     table: {
       reference: 'Referencia',
       student: 'Estudiante',

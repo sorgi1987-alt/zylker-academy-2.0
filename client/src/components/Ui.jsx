@@ -36,23 +36,32 @@ export function ToastProvider({ children }) {
 
 /* ------------------------------- dialogs ------------------------------- */
 
-/** Accessible modal: focus moves in, Escape closes, background is inert. */
-export function Modal({ title, onClose, children, wide = false }) {
+/**
+ * Accessible modal: focus moves in, Escape closes, background is inert.
+ *
+ * `busy` blocks every dismiss path (Escape, backdrop click, the header Close
+ * button) while a save is in flight — without it, dismissing mid-save orphans
+ * the request: a later failure has nowhere to show itself, and the user walks
+ * away believing it succeeded.
+ */
+export function Modal({ title, onClose, children, wide = false, busy = false }) {
   const t = useT();
   const ref = useRef(null);
+  const close = () => { if (!busy) onClose(); };
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
     document.addEventListener('keydown', onKey);
     const first = ref.current && ref.current.querySelector('input,select,textarea,button');
     if (first) first.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, busy]);
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <div className="modal-h">
           <h2>{title}</h2>
-          <button type="button" className="btn" onClick={onClose} aria-label={t('common.closeDialog')}>
+          <button type="button" className="btn" onClick={close} disabled={busy} aria-label={t('common.closeDialog')}>
             {t('common.close')}
           </button>
         </div>
@@ -66,7 +75,7 @@ export function Modal({ title, onClose, children, wide = false }) {
 export function ConfirmDialog({ title, message, confirmLabel, danger = true, busy, onConfirm, onCancel }) {
   const t = useT();
   return (
-    <Modal title={title} onClose={busy ? () => {} : onCancel}>
+    <Modal title={title} onClose={onCancel} busy={busy}>
       <p style={{ marginTop: 0 }}>{message}</p>
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
         <button className={`btn${danger ? ' danger' : ' primary'}`} onClick={onConfirm} disabled={busy}>

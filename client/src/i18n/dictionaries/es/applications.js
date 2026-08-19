@@ -15,6 +15,7 @@ export default {
       title: 'Ninguna solicitud coincide',
       message: 'Prueba con otro término de búsqueda o borra el filtro de etapa.'
     },
+    showingRecent: 'Mostrando los {total} registros más recientes. Acota la búsqueda para ver los anteriores.',
     table: {
       application: 'Solicitud',
       applicant: 'Solicitante',
